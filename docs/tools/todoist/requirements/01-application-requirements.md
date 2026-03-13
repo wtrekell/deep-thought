@@ -89,23 +89,80 @@ data/todoist/
         └── <section-name>.md
 ```
 
+## Configuration
+
+Configuration is stored in `configuration/todoist_configuration.yaml`. All values below are required unless marked optional.
+
+```yaml
+# Todoist API
+todoist:
+  api_token_env: "TODOIST_API_TOKEN" # Name of env var holding the API token
+
+# Projects to sync (opt-in list)
+projects:
+  - name: "Project Name"
+  - name: "Another Project"
+
+# Meta class filter rules for pull and push
+# These map to the Meta model attributes: assignee, deadline, due, labels, project, section
+filters:
+  pull:
+    labels:
+      include: [] # Only pull tasks with these labels (empty = all)
+      exclude: [] # Exclude tasks with these labels
+    projects:
+      include: [] # Redundant with projects list above, but allows pull-specific overrides
+    sections:
+      include: [] # Only pull tasks in these sections (empty = all)
+      exclude: []
+    due:
+      has_due_date: null # true = only tasks with due dates, false = only without, null = all
+  push:
+    labels:
+      include: []
+      exclude: []
+    require_confirmation: true # Prompt user before pushing changes
+  comments:
+    sync: true # Pull and push comments on synced tasks
+    include_attachments: false # Include attachment metadata in comment sync (optional)
+
+# Claude involvement markers
+claude:
+  label: "claude-code" # Label applied to tasks involving Claude
+  role:
+    repo: "" # Repository name (required when label is present)
+    branch: "main" # Branch name (defaults to main if not provided)
+```
+
 ## Data Format
+
+All exported data is consumed exclusively by Claude via CLI. Formats are optimized for machine parsing, not human readability.
 
 ### Markdown Export
 
-Each project produces a directory. Each section produces a file. Tasks are rendered as checkbox lists with metadata in a consistent format:
+Each project produces a directory. Each section produces a file. Tasks use a structured, parseable format:
 
 ```markdown
 # Project Name
 
 ## Section Name
 
-- [ ] Task content `p1` `@label1` `@label2`
-  - **Due:** 2026-03-15 (every week)
-  - **Deadline:** 2026-03-20
-  - **Assignee:** collaborator-name
-  - **Description:** Task description text
-  - [ ] Subtask content `p2`
+- [ ] Task content
+  - id: 1234567890
+  - priority: 1
+  - labels: label1, label2
+  - due: 2026-03-15
+  - recurring: every week
+  - deadline: 2026-03-20
+  - assignee: collaborator-name
+  - claude: repo=deep-thought, branch=main
+  - description: Task description text
+  - comments:
+    - [2026-03-10 poster-name] First comment text
+    - [2026-03-11 poster-name] Second comment text
+  - [ ] Subtask content
+    - id: 1234567891
+    - priority: 2
 ```
 
 ### JSON Snapshot
@@ -120,7 +177,9 @@ Tables mirror the Todoist entities listed in the requirements: `projects`, `sect
 
 1. Is it possible to create non-human collaborators?
    1. Example: Collaborator name: Claude
+   2. **Answer:** No. The Todoist API ties collaborators to real user accounts via email. There is no endpoint to create a synthetic or non-human collaborator. The label-based approach in your answer to question 6 is the right workaround.
 2. Is there a reason for /src to have a deep thought layer?
+   1. **Answer:** Yes — `src/deep_thought/` exists because `pyproject.toml` names the package `deep-thought`, and hatchling (the build backend) expects a matching `src/deep_thought/` directory. This is the standard Python `src` layout: `src/<package_name>/`. The todoist tool would live at `src/deep_thought/todoist/`, making it importable as `deep_thought.todoist`. If you'd prefer a flatter structure (e.g., `src/todoist_tool/`), we'd need to rename the package — but since this repo may eventually hold multiple tools, nesting under `deep_thought` keeps things organized.
 
 ## Claude Questions
 
@@ -138,8 +197,8 @@ Tables mirror the Todoist entities listed in the requirements: `projects`, `sect
 
 ## Pre-Build Tasks
 
-1. Update data format section to reflect that data is only consumed by Claude.
-2. Add a configuration section to the requirements.
-   1. Add the configuration values indicated by the Todoist API class indicated in the requirements.
-   2. Add the values that identify claude's involvement on a task or project.
-   3. Ensure it is clear that the branch value is main by default if none is provided.
+1. ~~Update data format section to reflect that data is only consumed by Claude.~~ Done — data format updated to note Claude-only consumption, markdown switched to key-value metadata for machine parsing.
+2. ~~Add a configuration section to the requirements.~~ Done — Configuration section added above.
+   1. ~~Add the configuration values indicated by the Todoist API class indicated in the requirements.~~ Done — Meta class filters (assignee, deadline, due, labels, project, section) mapped to pull/push filter rules.
+   2. ~~Add the values that identify claude's involvement on a task or project.~~ Done — `claude.label`, `claude.role.repo`, `claude.role.branch` added.
+   3. ~~Ensure it is clear that the branch value is main by default if none is provided.~~ Done — `branch: "main"` with comment noting the default.
