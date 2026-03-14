@@ -38,6 +38,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# Data
+data/
+
 # Claude
 CLAUDE.md
 .claude/*

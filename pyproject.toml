@@ -6,7 +6,14 @@ authors = [
     {name = "William Trekell", email = "wtrekell@gmail.com"}
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "todoist-api-python>=3.0.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+todoist = "deep_thought.todoist.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -14,6 +21,7 @@ dev = [
     "pytest-cov>=4.1.0",
     "ruff>=0.1.0",
     "mypy>=1.8.0",
+    "types-pyyaml>=6.0.12.20250915",
 ]
 
 [build-system]
@@ -76,3 +84,4 @@ markers = [
     "integration: marks tests as integration tests",
     "error_handling: marks tests for error handling scenarios",
 ]
+

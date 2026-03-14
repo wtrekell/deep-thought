@@ -1,0 +1,43 @@
+todoist:
+  api_token_env: TEST_TODOIST_API_TOKEN
+
+projects:
+  - name: Work
+  - name: Personal
+
+filters:
+  pull:
+    labels:
+      include:
+        - urgent
+      exclude:
+        - personal
+    projects:
+      include: []
+    sections:
+      include: []
+      exclude: []
+    assignee:
+      include: []
+    due:
+      has_due_date: null
+
+  push:
+    labels:
+      include:
+        - claude-code
+      exclude: []
+    assignee:
+      include: []
+    conflict_resolution: remote_wins
+    require_confirmation: false
+
+comments:
+  sync: true
+  include_attachments: false
+
+claude:
+  label: claude-code
+  role:
+    repo: deep-thought
+    branch: main

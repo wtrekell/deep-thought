@@ -6,10 +6,10 @@
 
 ## Sync Modes
 
-1. **CLI Command** - `todoist`
-2. **Pull** — Pull tasks and projects from Todoist API, filter by rules documented in a YAML configuration file. (`--pull`)
-3. **Push** — Push tasks and projects with changes back to Todoist. (`--push`)
-4. **Bidirectional sync** — Run **pull then push** (`--full-sync`)
+1. **CLI Command** — `todoist` (entry point with subcommands)
+2. **Pull** — Pull tasks and projects from Todoist API, filter by rules documented in a YAML configuration file. (`todoist pull`)
+3. **Push** — Push tasks and projects with changes back to Todoist. (`todoist push`)
+4. **Bidirectional sync** — Run **pull then push** sequentially. (`todoist sync`)
 
 ## Requirements
 
@@ -18,7 +18,7 @@
 3. Use SQLite for local **data storage**.
 4. [Meta class](https://doist.github.io/todoist-api-python/models/#todoist_api_python.models.Meta) filtering rules for **push** and **pull** are user defined and stored in `configuration/todoist_configuration.yaml`.
 5. All secrets are stored in `.env` file in the root directory or GitHub Secrets.
-6. A changelog is maintained in the `/tool/todoist/CHANGELOG.md` file.
+6. A changelog is maintained in the `docs/tools/todoist/CHANGELOG.md` file.
 
 ## Data Storage
 
@@ -26,27 +26,29 @@
 
 1. Design tables around **Todoist entities**:
    - `projects`, `sections`, `tasks`, `labels`, `task_labels` (many‑to‑many), `comments`.
-   - Include Todoist IDs and timestamps so you can map remote objects and reason about changes.
-   - Keep a `sync_state` or `metadata` table that stores:
-     - Last sync token from the SDK.
-     - Versioning info in case you change your schema.
+   - Each entity table uses the Todoist-issued string ID as primary key (`id TEXT NOT NULL PRIMARY KEY`).
+   - Include timestamps (`created_at`, `updated_at` from API; `synced_at` set locally on write) for change tracking.
+   - Keep a `sync_state` key-value table that stores:
+     - Last sync time.
+     - Schema version (migration number) for forward-only migration tracking.
 
 2. Persist the raw SDK state:
    - Store a **JSON blob** of the full Todoist state per sync as a flat file as a debugging/backup mechanism, but treat the relational schema as canonical for queries.
 
 ## Command List
 
-| Command          | Flag          | Description                                              |
-| ---------------- | ------------- | -------------------------------------------------------- |
-| `todoist`        |               | Show help and available commands                         |
-| `todoist pull`   | `--pull`      | Pull tasks and projects from Todoist, apply filter rules |
-| `todoist push`   | `--push`      | Push local changes back to Todoist                       |
-| `todoist sync`   | `--full-sync` | Run pull then push sequentially                          |
-| `todoist status` |               | Show sync state: last sync time, pending local changes   |
-| `todoist diff`   |               | Show differences between local DB and last pull          |
-| `todoist export` |               | Export current DB state to markdown files                |
-| `todoist config` |               | Validate and display current YAML configuration          |
-| `todoist init`   |               | Create DB, config file, and directory structure          |
+All operations use subcommands (not flags). Running `todoist` with no subcommand shows help.
+
+| Subcommand       | Description                                              |
+| ---------------- | -------------------------------------------------------- |
+| `todoist pull`   | Pull tasks and projects from Todoist, apply filter rules |
+| `todoist push`   | Push local changes back to Todoist                       |
+| `todoist sync`   | Run pull then push sequentially                          |
+| `todoist status` | Show sync state: last sync time, pending local changes   |
+| `todoist diff`   | Show differences between local DB and last pull          |
+| `todoist export` | Export current DB state to markdown files                |
+| `todoist config` | Validate and display current YAML configuration          |
+| `todoist init`   | Create DB, config file, and directory structure          |
 
 | Global Flag        | Description                                             |
 | ------------------ | ------------------------------------------------------- |
@@ -59,10 +61,9 @@
 
 ```
 docs/tools/todoist/
+├── 260313-requirements.md           # This document
 ├── api-model.md                     # SDK model reference
 ├── api-model-html.md                # Raw HTML source
-├── requirements/
-│   └── 01-application-requirements.md
 ├── CHANGELOG.md                     # Release history
 └── configuration/
     └── todoist_configuration.yaml   # Filter rules and sync settings
@@ -72,13 +73,18 @@ src/deep_thought/todoist/
 ├── cli.py                           # CLI entry point and argument parsing
 ├── client.py                        # Todoist SDK wrapper
 ├── config.py                        # YAML config loader and validation
-├── database.py                      # SQLite schema, queries, migrations
 ├── models.py                        # Local dataclasses mirroring SDK models
 ├── pull.py                          # Pull logic: API → DB → markdown
 ├── push.py                          # Push logic: DB diff → API
 ├── sync.py                          # Orchestrates pull + push
 ├── export.py                        # DB → markdown file generation
-└── filters.py                       # Meta-based filter rule engine
+├── filters.py                       # Meta-based filter rule engine
+└── db/
+    ├── __init__.py
+    ├── schema.py                    # Schema definitions and table creation
+    ├── queries.py                   # Query functions consumed by app code
+    └── migrations/                  # Forward-only migration SQL files
+        └── 001_init_schema.sql
 
 data/todoist/
 ├── todoist.db                       # SQLite database
@@ -113,18 +119,25 @@ filters:
     projects:
       include: [] # Redundant with projects list above, but allows pull-specific overrides
     sections:
-      include: [] # Only pull tasks in these sections (empty = all)
+      include: [] # Only pull tasks in these sections by Todoist section ID (empty = all)
       exclude: []
+    assignee:
+      include: [] # Only pull tasks assigned to these Todoist user IDs (empty = all)
     due:
       has_due_date: null # true = only tasks with due dates, false = only without, null = all
   push:
     labels:
       include: []
       exclude: []
+    assignee:
+      include: [] # Only push tasks assigned to these Todoist user IDs (empty = all)
+    conflict_resolution: "prompt" # How to handle conflicts: "prompt", "remote_wins", "local_wins"
     require_confirmation: true # Prompt user before pushing changes
-  comments:
-    sync: true # Pull and push comments on synced tasks
-    include_attachments: false # Include attachment metadata in comment sync (optional)
+
+# Comment sync settings (pull-only in v0.1; push not yet implemented)
+comments:
+  sync: true # Pull comments on synced tasks
+  include_attachments: false # Include attachment metadata in comment sync (optional)
 
 # Claude involvement markers
 claude:
@@ -165,13 +178,19 @@ Each project produces a directory. Each section produces a file. Tasks use a str
     - priority: 2
 ```
 
+**Implementation notes:**
+
+- Only one level of subtask nesting is rendered (grandchild tasks are not exported).
+- The `assignee` and comment `poster-name` fields display Todoist user IDs (no local collaborator table exists).
+- Only fields with non-null, non-empty values are included in the metadata list.
+
 ### JSON Snapshot
 
 Full API response stored as-is per sync, named by ISO timestamp.
 
 ### SQLite Schema
 
-Tables mirror the Todoist entities listed in the requirements: `projects`, `sections`, `tasks`, `labels`, `task_labels`, `comments`, and `sync_state`. All tables include `todoist_id`, `created_at`, `updated_at`, and `synced_at` columns for change tracking.
+Tables mirror the Todoist entities listed in the requirements: `projects`, `sections`, `tasks`, `labels`, `task_labels`, `comments`, and `sync_state`. Each entity table uses `id` (the Todoist-issued string ID) as the primary key. Entity tables include `synced_at` for tracking when the local database last received each record. `projects` and `tasks` additionally include `created_at` and `updated_at` from the API. The `tasks` table flattens nested SDK objects (`Due`, `Deadline`, `Duration`) into scalar columns (e.g., `due_date`, `due_string`, `deadline_date`). The SQL reserved word `order` is stored as `order_index` throughout.
 
 ## User Questions
 

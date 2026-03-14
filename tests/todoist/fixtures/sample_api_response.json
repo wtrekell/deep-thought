@@ -1,0 +1,119 @@
+{
+  "timestamp": "2026-03-13T10:00:00+00:00",
+  "projects": [
+    {
+      "id": "proj-1",
+      "name": "Work",
+      "description": "",
+      "color": "blue",
+      "is_archived": false,
+      "is_favorite": false,
+      "is_inbox_project": false,
+      "is_shared": false,
+      "is_collapsed": false,
+      "order_index": 1,
+      "parent_id": null,
+      "folder_id": null,
+      "view_style": "list",
+      "url": "https://todoist.com/project/proj-1",
+      "workspace_id": null,
+      "can_assign_tasks": true,
+      "created_at": "2026-01-01T00:00:00",
+      "updated_at": "2026-01-01T00:00:00"
+    }
+  ],
+  "sections": [
+    {
+      "id": "sec-1",
+      "name": "Backlog",
+      "project_id": "proj-1",
+      "order_index": 1,
+      "is_collapsed": false
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task-1",
+      "content": "Write comprehensive tests",
+      "description": "Cover all modules with unit and integration tests",
+      "project_id": "proj-1",
+      "section_id": "sec-1",
+      "parent_id": null,
+      "order_index": 1,
+      "priority": 2,
+      "due_date": "2026-03-15",
+      "due_string": "Mar 15",
+      "due_is_recurring": false,
+      "due_lang": "en",
+      "due_timezone": null,
+      "deadline_date": null,
+      "deadline_lang": null,
+      "duration_amount": null,
+      "duration_unit": null,
+      "assignee_id": null,
+      "assigner_id": null,
+      "creator_id": "user-1",
+      "is_completed": false,
+      "completed_at": null,
+      "labels": ["urgent"],
+      "url": "https://todoist.com/task/task-1",
+      "created_at": "2026-01-01T00:00:00",
+      "updated_at": "2026-03-10T00:00:00"
+    },
+    {
+      "id": "task-2",
+      "content": "Review pull request",
+      "description": "",
+      "project_id": "proj-1",
+      "section_id": null,
+      "parent_id": null,
+      "order_index": 2,
+      "priority": 1,
+      "due_date": null,
+      "due_string": null,
+      "due_is_recurring": false,
+      "due_lang": null,
+      "due_timezone": null,
+      "deadline_date": null,
+      "deadline_lang": null,
+      "duration_amount": null,
+      "duration_unit": null,
+      "assignee_id": null,
+      "assigner_id": null,
+      "creator_id": "user-1",
+      "is_completed": false,
+      "completed_at": null,
+      "labels": [],
+      "url": "https://todoist.com/task/task-2",
+      "created_at": "2026-02-01T00:00:00",
+      "updated_at": "2026-03-01T00:00:00"
+    }
+  ],
+  "labels": [
+    {
+      "id": "label-1",
+      "name": "urgent",
+      "color": "red",
+      "order_index": 1,
+      "is_favorite": false
+    },
+    {
+      "id": "label-2",
+      "name": "claude-code",
+      "color": "green",
+      "order_index": 2,
+      "is_favorite": false
+    }
+  ],
+  "comments": [
+    {
+      "id": "comment-1",
+      "task_id": "task-1",
+      "project_id": null,
+      "content": "This needs to be done before the release",
+      "posted_at": "2026-03-10T09:00:00",
+      "poster_id": "user-1",
+      "attachment_json": null
+    }
+  ]
+}

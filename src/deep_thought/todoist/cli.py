@@ -1,0 +1,551 @@
+"""CLI entry point for the Todoist Tool.
+
+Provides the `todoist` command with subcommands for syncing, inspecting,
+exporting, and configuring the tool.
+
+Usage:
+    todoist [--dry-run] [--verbose] [--config PATH] [--project NAME] <subcommand>
+
+Subcommands:
+    init    — Create DB, config file, and directory structure
+    config  — Validate and display current YAML configuration
+    pull    — Pull tasks and projects from Todoist API
+    push    — Push local changes back to Todoist
+    sync    — Run pull then push sequentially
+    status  — Show last sync time and pending local changes
+    diff    — Show locally modified tasks
+    export  — Export current DB state to markdown files
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import sys
+from pathlib import Path
+
+from deep_thought.todoist.client import TodoistClient
+from deep_thought.todoist.config import (
+    TodoistConfig,
+    get_api_token,
+    get_default_config_path,
+    load_config,
+    validate_config,
+)
+from deep_thought.todoist.db.queries import get_all_projects, get_modified_tasks, get_sync_value
+from deep_thought.todoist.db.schema import get_database_path, initialize_database
+from deep_thought.todoist.export import ExportResult, export_to_markdown
+from deep_thought.todoist.pull import PullResult, pull
+from deep_thought.todoist.push import PushResult, push
+from deep_thought.todoist.sync import SyncResult, sync
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Helpers shared across command handlers
+# ---------------------------------------------------------------------------
+
+
+def _setup_logging(verbose: bool) -> None:
+    """Configure the root logger based on the verbosity flag.
+
+    Uses basicConfig to attach a handler if none exists, then sets the level
+    directly on the root logger so the level is always applied even when pytest
+    or another framework has already installed a handler.
+
+    Args:
+        verbose: If True, set log level to DEBUG; otherwise INFO.
+    """
+    log_level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(format="%(levelname)s: %(message)s")
+    logging.getLogger().setLevel(log_level)
+
+
+def _load_config_from_args(args: argparse.Namespace) -> TodoistConfig:
+    """Load and return config, honouring any --config override in args.
+
+    Args:
+        args: Parsed argparse namespace which may contain a 'config' attribute.
+
+    Returns:
+        A fully parsed TodoistConfig.
+
+    Raises:
+        FileNotFoundError: If the config file does not exist at the resolved path.
+    """
+    config_path: Path | None = Path(args.config) if args.config else None
+    return load_config(config_path)
+
+
+def _make_client_from_config(config: TodoistConfig) -> TodoistClient:
+    """Instantiate a TodoistClient using the API token from the environment.
+
+    Args:
+        config: A loaded TodoistConfig containing the env-var name for the token.
+
+    Returns:
+        A fully initialised TodoistClient.
+
+    Raises:
+        OSError: If the API token environment variable is not set.
+    """
+    api_token = get_api_token(config)
+    return TodoistClient(api_token)
+
+
+# ---------------------------------------------------------------------------
+# Command handlers
+# ---------------------------------------------------------------------------
+
+
+def cmd_init(args: argparse.Namespace) -> None:
+    """Create the database, required directories, and print setup instructions.
+
+    Creates:
+    - The SQLite database at data/todoist/todoist.db
+    - data/todoist/snapshots/ for raw JSON backups per sync
+    - data/todoist/export/ for generated markdown files
+
+    Args:
+        args: Parsed argparse namespace (no subcommand-specific flags).
+    """
+    database_path = get_database_path()
+    connection = initialize_database(database_path)
+    connection.close()
+    logger.debug("Database initialised at: %s", database_path)
+
+    snapshots_directory = database_path.parent / "snapshots"
+    export_directory = database_path.parent / "export"
+
+    snapshots_directory.mkdir(parents=True, exist_ok=True)
+    export_directory.mkdir(parents=True, exist_ok=True)
+
+    default_config_path = get_default_config_path()
+
+    print("Todoist Tool initialised successfully.")
+    print()
+    print(f"  Database:  {database_path}")
+    print(f"  Snapshots: {snapshots_directory}")
+    print(f"  Export:    {export_directory}")
+    print()
+    print("Next steps:")
+    print(f"  1. Edit the configuration file:  {default_config_path}")
+    print("  2. Add your Todoist API token to a .env file at the project root:")
+    print("       TODOIST_API_TOKEN=your_token_here")
+    print("  3. Run `todoist pull` to fetch your tasks.")
+
+
+def cmd_config(args: argparse.Namespace) -> None:
+    """Load the configuration file, validate it, and print all settings.
+
+    Any validation issues are listed before the config values so they are
+    immediately visible.
+
+    Args:
+        args: Parsed argparse namespace, may contain 'config' path override.
+    """
+    config = _load_config_from_args(args)
+
+    validation_issues = validate_config(config)
+    if validation_issues:
+        print(f"Configuration issues ({len(validation_issues)} found):")
+        for issue in validation_issues:
+            print(f"  WARNING: {issue}")
+        print()
+    else:
+        print("Configuration is valid.")
+        print()
+
+    print("Loaded configuration:")
+    print(f"  api_token_env:          {config.api_token_env}")
+    print(f"  projects:               {config.projects or '(none configured)'}")
+    print()
+    print("  pull_filters:")
+    print(f"    labels.include:       {config.pull_filters.labels.include or '(any)'}")
+    print(f"    labels.exclude:       {config.pull_filters.labels.exclude or '(none)'}")
+    print(f"    sections.include:     {config.pull_filters.sections.include or '(any)'}")
+    print(f"    sections.exclude:     {config.pull_filters.sections.exclude or '(none)'}")
+    print(f"    assignee.include:     {config.pull_filters.assignee.include or '(any)'}")
+    print(f"    has_due_date:         {config.pull_filters.has_due_date!r}")
+    print()
+    print("  push_filters:")
+    print(f"    labels.include:       {config.push_filters.labels.include or '(any)'}")
+    print(f"    labels.exclude:       {config.push_filters.labels.exclude or '(none)'}")
+    print(f"    assignee.include:     {config.push_filters.assignee.include or '(any)'}")
+    print(f"    conflict_resolution:  {config.push_filters.conflict_resolution}")
+    print(f"    require_confirmation: {config.push_filters.require_confirmation}")
+    print()
+    print("  comments:")
+    print(f"    sync:                 {config.comments.sync}")
+    print(f"    include_attachments:  {config.comments.include_attachments}")
+    print()
+    print("  claude:")
+    print(f"    label:                {config.claude.label or '(not set)'}")
+    print(f"    repo:                 {config.claude.repo or '(not set)'}")
+    print(f"    branch:               {config.claude.branch}")
+
+
+def cmd_pull(args: argparse.Namespace) -> None:
+    """Pull projects and tasks from the Todoist API and store them locally.
+
+    Applies pull filter rules from the configuration, writes to the SQLite
+    database, and saves a JSON snapshot for debugging.
+
+    Args:
+        args: Parsed argparse namespace with global flags (dry_run, verbose,
+              config, project).
+    """
+    config = _load_config_from_args(args)
+    todoist_client = _make_client_from_config(config)
+
+    connection = initialize_database()
+    try:
+        pull_result: PullResult = pull(
+            todoist_client,
+            config,
+            connection,
+            dry_run=args.dry_run,
+            verbose=args.verbose,
+            project_filter=args.project,
+        )
+    finally:
+        connection.close()
+
+    dry_run_prefix = "[dry-run] " if args.dry_run else ""
+    print(f"{dry_run_prefix}Pull complete:")
+    print(f"  Projects:  {pull_result.projects_synced}")
+    print(f"  Sections:  {pull_result.sections_synced}")
+    print(f"  Tasks:     {pull_result.tasks_synced} synced, {pull_result.tasks_filtered_out} filtered")
+    print(f"  Comments:  {pull_result.comments_synced}")
+    print(f"  Labels:    {pull_result.labels_synced}")
+    if pull_result.snapshot_path:
+        print(f"  Snapshot:  {pull_result.snapshot_path}")
+    if pull_result.errors:
+        print(f"  Errors ({len(pull_result.errors)}):")
+        for error_message in pull_result.errors:
+            print(f"    - {error_message}")
+
+
+def cmd_push(args: argparse.Namespace) -> None:
+    """Push locally modified tasks back to the Todoist API.
+
+    Finds tasks where local updated_at is newer than synced_at, applies push
+    filter rules, optionally prompts for confirmation, then calls the API.
+
+    Args:
+        args: Parsed argparse namespace with global flags (dry_run, verbose,
+              config, project).
+    """
+    config = _load_config_from_args(args)
+    todoist_client = _make_client_from_config(config)
+
+    connection = initialize_database()
+    try:
+        push_result: PushResult = push(
+            todoist_client,
+            config,
+            connection,
+            dry_run=args.dry_run,
+            verbose=args.verbose,
+            project_filter=args.project,
+        )
+    finally:
+        connection.close()
+
+    dry_run_prefix = "[dry-run] " if args.dry_run else ""
+    print(f"{dry_run_prefix}Push complete:")
+    print(f"  Pushed:   {push_result.tasks_pushed}")
+    print(f"  Filtered: {push_result.tasks_filtered_out}")
+    print(f"  Failed:   {push_result.tasks_failed}")
+    if push_result.errors:
+        print(f"  Errors ({len(push_result.errors)}):")
+        for error_message in push_result.errors:
+            print(f"    - {error_message}")
+
+
+def cmd_sync(args: argparse.Namespace) -> None:
+    """Run a full bidirectional sync: pull from Todoist, then push local changes.
+
+    Args:
+        args: Parsed argparse namespace with global flags (dry_run, verbose,
+              config, project).
+    """
+    config = _load_config_from_args(args)
+    todoist_client = _make_client_from_config(config)
+
+    connection = initialize_database()
+    try:
+        sync_result: SyncResult = sync(
+            todoist_client,
+            config,
+            connection,
+            dry_run=args.dry_run,
+            verbose=args.verbose,
+            project_filter=args.project,
+        )
+    finally:
+        connection.close()
+
+    dry_run_prefix = "[dry-run] " if args.dry_run else ""
+    pull_result = sync_result.pull_result
+    push_result = sync_result.push_result
+
+    print(f"{dry_run_prefix}Sync complete:")
+    print("  Pull:")
+    print(f"    Projects:  {pull_result.projects_synced}")
+    print(f"    Sections:  {pull_result.sections_synced}")
+    print(f"    Tasks:     {pull_result.tasks_synced} synced, {pull_result.tasks_filtered_out} filtered")
+    print(f"    Comments:  {pull_result.comments_synced}")
+    print(f"    Labels:    {pull_result.labels_synced}")
+    if pull_result.snapshot_path:
+        print(f"    Snapshot:  {pull_result.snapshot_path}")
+    print("  Push:")
+    print(f"    Pushed:    {push_result.tasks_pushed}")
+    print(f"    Filtered:  {push_result.tasks_filtered_out}")
+    print(f"    Failed:    {push_result.tasks_failed}")
+
+    all_errors = pull_result.errors + push_result.errors
+    if all_errors:
+        print(f"  Errors ({len(all_errors)}):")
+        for error_message in all_errors:
+            print(f"    - {error_message}")
+
+
+def cmd_status(args: argparse.Namespace) -> None:
+    """Display the current sync state: last sync time, modified tasks, projects.
+
+    Reads from the local database only — no API calls are made.
+
+    Args:
+        args: Parsed argparse namespace (no subcommand-specific flags).
+    """
+    connection = initialize_database()
+    try:
+        last_sync_time = get_sync_value(connection, "last_sync_time")
+        schema_version = get_sync_value(connection, "schema_version")
+        modified_tasks = get_modified_tasks(connection)
+        all_projects = get_all_projects(connection)
+    finally:
+        connection.close()
+
+    print("Todoist Tool — Status")
+    print()
+    print(f"  Schema version:    {schema_version or 'unknown'}")
+    print(f"  Last sync:         {last_sync_time or 'never'}")
+    print(f"  Projects in DB:    {len(all_projects)}")
+    print(f"  Modified tasks:    {len(modified_tasks)}")
+
+    if modified_tasks:
+        print()
+        print("  Tasks with local changes:")
+        for task_row in modified_tasks:
+            task_id: str = task_row.get("id") or ""
+            task_content: str = task_row.get("content") or "(no content)"
+            print(f"    - [{task_id}] {task_content}")
+
+
+def cmd_diff(args: argparse.Namespace) -> None:
+    """Show tasks that have been locally modified since the last sync.
+
+    Compares updated_at against synced_at in the database. No API calls
+    are made.
+
+    Args:
+        args: Parsed argparse namespace (no subcommand-specific flags).
+    """
+    connection = initialize_database()
+    try:
+        modified_tasks = get_modified_tasks(connection)
+    finally:
+        connection.close()
+
+    if not modified_tasks:
+        print("No local changes.")
+        return
+
+    print(f"Locally modified tasks ({len(modified_tasks)}):")
+    print()
+
+    for task_row in modified_tasks:
+        task_id: str = task_row.get("id") or ""
+        task_content: str = task_row.get("content") or "(no content)"
+        updated_at: str = task_row.get("updated_at") or "unknown"
+        synced_at: str = task_row.get("synced_at") or "never"
+        priority: int = task_row.get("priority") or 1
+        due_date: str | None = task_row.get("due_date")
+
+        print(f"  [{task_id}] {task_content}")
+        print(f"    updated_at: {updated_at}")
+        print(f"    synced_at:  {synced_at}")
+        print(f"    priority:   {priority}")
+        if due_date:
+            print(f"    due:        {due_date}")
+        print()
+
+
+def cmd_export(args: argparse.Namespace) -> None:
+    """Export the current database state to structured markdown files.
+
+    Writes one file per section per project under data/todoist/export/.
+
+    Args:
+        args: Parsed argparse namespace with global flags (config, verbose,
+              project).
+    """
+    config = _load_config_from_args(args)
+
+    connection = initialize_database()
+    try:
+        export_result: ExportResult = export_to_markdown(
+            connection,
+            config,
+            project_filter=args.project,
+            verbose=args.verbose,
+        )
+    finally:
+        connection.close()
+
+    print("Export complete:")
+    print(f"  Projects: {export_result.projects_exported}")
+    print(f"  Files:    {export_result.files_written}")
+    print(f"  Tasks:    {export_result.tasks_exported}")
+
+
+# ---------------------------------------------------------------------------
+# Argument parser
+# ---------------------------------------------------------------------------
+
+
+def _build_argument_parser() -> argparse.ArgumentParser:
+    """Construct and return the top-level argument parser with all subcommands.
+
+    Returns:
+        A fully configured argparse.ArgumentParser instance.
+    """
+    root_parser = argparse.ArgumentParser(
+        prog="todoist",
+        description="Bidirectional sync between Todoist and local SQLite/markdown.",
+    )
+
+    # Global flags — available on every subcommand
+    root_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Show what would change without writing to Todoist or the local database.",
+    )
+    root_parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        default=False,
+        help="Increase log output.",
+    )
+    root_parser.add_argument(
+        "--config",
+        metavar="PATH",
+        default=None,
+        help="Override the default configuration file path.",
+    )
+    root_parser.add_argument(
+        "--project",
+        metavar="NAME",
+        default=None,
+        help="Limit the operation to a single project by name.",
+    )
+
+    subparsers = root_parser.add_subparsers(dest="subcommand", metavar="<command>")
+
+    subparsers.add_parser(
+        "init",
+        help="Create the database, config file, and directory structure.",
+    )
+    subparsers.add_parser(
+        "config",
+        help="Validate and display the current YAML configuration.",
+    )
+    subparsers.add_parser(
+        "pull",
+        help="Pull tasks and projects from Todoist, applying filter rules.",
+    )
+    subparsers.add_parser(
+        "push",
+        help="Push local changes back to Todoist.",
+    )
+    subparsers.add_parser(
+        "sync",
+        help="Run pull then push sequentially (full bidirectional sync).",
+    )
+    subparsers.add_parser(
+        "status",
+        help="Show sync state: last sync time, pending local changes.",
+    )
+    subparsers.add_parser(
+        "diff",
+        help="Show differences between the local database and the last pull.",
+    )
+    subparsers.add_parser(
+        "export",
+        help="Export current database state to structured markdown files.",
+    )
+
+    return root_parser
+
+
+# ---------------------------------------------------------------------------
+# Command dispatch table
+# ---------------------------------------------------------------------------
+
+_COMMAND_HANDLERS = {
+    "init": cmd_init,
+    "config": cmd_config,
+    "pull": cmd_pull,
+    "push": cmd_push,
+    "sync": cmd_sync,
+    "status": cmd_status,
+    "diff": cmd_diff,
+    "export": cmd_export,
+}
+
+
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
+
+
+def main() -> None:
+    """Parse arguments and dispatch to the appropriate command handler.
+
+    Wraps each handler in consistent error handling so that all user-facing
+    failures exit with code 1 and a clear message.
+    """
+    argument_parser = _build_argument_parser()
+    args = argument_parser.parse_args()
+
+    _setup_logging(args.verbose)
+
+    if args.subcommand is None:
+        argument_parser.print_help()
+        sys.exit(0)
+
+    handler = _COMMAND_HANDLERS.get(args.subcommand)
+    if handler is None:
+        # Should not be reachable because argparse validates subcommand choices,
+        # but guard defensively.
+        argument_parser.print_help()
+        sys.exit(1)
+
+    try:
+        handler(args)
+    except FileNotFoundError as missing_file_error:
+        print(f"ERROR: File not found — {missing_file_error}", file=sys.stderr)
+        sys.exit(1)
+    except OSError as os_error:
+        # Covers EnvironmentError / API token missing
+        print(f"ERROR: {os_error}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as unexpected_error:
+        print(f"ERROR: An unexpected error occurred — {unexpected_error}", file=sys.stderr)
+        logger.debug("Full traceback:", exc_info=True)
+        sys.exit(1)
