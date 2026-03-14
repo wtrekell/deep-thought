@@ -1,0 +1,244 @@
+"""YAML configuration loader with .env integration for the Todoist Tool."""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import yaml
+from dotenv import load_dotenv
+
+# ---------------------------------------------------------------------------
+# Dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class FilterConfig:
+    include: list[str]
+    exclude: list[str]
+
+
+@dataclass
+class PullFilters:
+    labels: FilterConfig
+    projects: FilterConfig
+    sections: FilterConfig
+    assignee: FilterConfig
+    has_due_date: bool | None  # None = all, True = only with due date, False = only without
+
+
+@dataclass
+class PushFilters:
+    labels: FilterConfig
+    assignee: FilterConfig
+    conflict_resolution: str  # "prompt", "remote_wins", "local_wins"
+    require_confirmation: bool
+
+
+@dataclass
+class CommentConfig:
+    sync: bool
+    include_attachments: bool
+
+
+@dataclass
+class ClaudeConfig:
+    label: str
+    repo: str
+    branch: str
+
+
+@dataclass
+class TodoistConfig:
+    api_token_env: str
+    projects: list[str]  # project names
+    pull_filters: PullFilters
+    push_filters: PushFilters
+    comments: CommentConfig
+    claude: ClaudeConfig
+
+
+# ---------------------------------------------------------------------------
+# Path helpers
+# ---------------------------------------------------------------------------
+
+_PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+_DEFAULT_CONFIG_RELATIVE_PATH = Path("docs") / "tools" / "todoist" / "configuration" / "todoist_configuration.yaml"
+
+
+def get_default_config_path() -> Path:
+    """Return the absolute path to the default YAML configuration file."""
+    return _PROJECT_ROOT / _DEFAULT_CONFIG_RELATIVE_PATH
+
+
+# ---------------------------------------------------------------------------
+# Parsing helpers
+# ---------------------------------------------------------------------------
+
+
+def _parse_filter_config(raw_filter: dict[str, Any], *, require_exclude: bool = True) -> FilterConfig:
+    """Parse a filter block that contains include/exclude lists."""
+    include: list[str] = raw_filter.get("include") or []
+    exclude: list[str] = []
+    if require_exclude:
+        exclude = raw_filter.get("exclude") or []
+    return FilterConfig(include=include, exclude=exclude)
+
+
+def _parse_pull_filters(raw_filters: dict[str, Any]) -> PullFilters:
+    """Parse the pull filters section of the YAML configuration."""
+    raw_pull: dict[str, Any] = raw_filters.get("pull", {})
+
+    labels = _parse_filter_config(raw_pull.get("labels", {}))
+    projects = _parse_filter_config(raw_pull.get("projects", {}), require_exclude=False)
+    sections = _parse_filter_config(raw_pull.get("sections", {}))
+    assignee = _parse_filter_config(raw_pull.get("assignee", {}), require_exclude=False)
+
+    raw_due: dict[str, Any] = raw_pull.get("due", {})
+    has_due_date: bool | None = raw_due.get("has_due_date")
+
+    return PullFilters(
+        labels=labels,
+        projects=projects,
+        sections=sections,
+        assignee=assignee,
+        has_due_date=has_due_date,
+    )
+
+
+def _parse_push_filters(raw_filters: dict[str, Any]) -> PushFilters:
+    """Parse the push filters section of the YAML configuration."""
+    raw_push: dict[str, Any] = raw_filters.get("push", {})
+
+    labels = _parse_filter_config(raw_push.get("labels", {}))
+    assignee = _parse_filter_config(raw_push.get("assignee", {}), require_exclude=False)
+    conflict_resolution: str = raw_push.get("conflict_resolution", "prompt")
+    require_confirmation: bool = raw_push.get("require_confirmation", True)
+
+    return PushFilters(
+        labels=labels,
+        assignee=assignee,
+        conflict_resolution=conflict_resolution,
+        require_confirmation=require_confirmation,
+    )
+
+
+def _parse_comment_config(raw_comments: dict[str, Any]) -> CommentConfig:
+    """Parse the comments section of the YAML configuration."""
+    return CommentConfig(
+        sync=raw_comments.get("sync", True),
+        include_attachments=raw_comments.get("include_attachments", False),
+    )
+
+
+def _parse_claude_config(raw_claude: dict[str, Any]) -> ClaudeConfig:
+    """Parse the claude section of the YAML configuration."""
+    raw_role: dict[str, Any] = raw_claude.get("role", {})
+    return ClaudeConfig(
+        label=raw_claude.get("label", "claude-code"),
+        repo=raw_role.get("repo", ""),
+        branch=raw_role.get("branch", "main"),
+    )
+
+
+def _parse_projects(raw_projects: list[dict[str, Any]]) -> list[str]:
+    """Extract project names from the projects list."""
+    return [entry["name"] for entry in raw_projects if "name" in entry]
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def load_config(config_path: Path | None = None) -> TodoistConfig:
+    """Load the YAML configuration, integrate .env variables, and return a typed config.
+
+    If config_path is None the default path is used (configuration/todoist_configuration.yaml
+    relative to the project root).
+    """
+    load_dotenv()
+
+    resolved_path = config_path if config_path is not None else get_default_config_path()
+
+    if not resolved_path.exists():
+        raise FileNotFoundError(f"Configuration file not found: {resolved_path}")
+
+    with resolved_path.open("r", encoding="utf-8") as config_file:
+        raw: dict[str, Any] = yaml.safe_load(config_file)
+
+    if not isinstance(raw, dict):
+        raise ValueError(f"Configuration file must contain a YAML mapping, got: {type(raw).__name__}")
+
+    raw_todoist: dict[str, Any] = raw.get("todoist", {})
+    api_token_env: str = raw_todoist.get("api_token_env", "TODOIST_API_TOKEN")
+
+    raw_projects: list[dict[str, Any]] = raw.get("projects", [])
+    project_names = _parse_projects(raw_projects)
+
+    raw_filters: dict[str, Any] = raw.get("filters", {})
+    pull_filters = _parse_pull_filters(raw_filters)
+    push_filters = _parse_push_filters(raw_filters)
+
+    raw_comments: dict[str, Any] = raw.get("comments", {})
+    comment_config = _parse_comment_config(raw_comments)
+
+    raw_claude: dict[str, Any] = raw.get("claude", {})
+    claude_config = _parse_claude_config(raw_claude)
+
+    return TodoistConfig(
+        api_token_env=api_token_env,
+        projects=project_names,
+        pull_filters=pull_filters,
+        push_filters=push_filters,
+        comments=comment_config,
+        claude=claude_config,
+    )
+
+
+def get_api_token(config: TodoistConfig) -> str:
+    """Read the API token from the environment variable named in config.api_token_env.
+
+    Raises EnvironmentError if the variable is not set or is empty.
+    """
+    token = os.environ.get(config.api_token_env)
+    if not token:
+        raise OSError(
+            f"Todoist API token not found. Set the '{config.api_token_env}' environment variable "
+            f"(either in your shell or in a .env file at the project root)."
+        )
+    return token
+
+
+_VALID_CONFLICT_RESOLUTION_VALUES = {"prompt", "remote_wins", "local_wins"}
+
+
+def validate_config(config: TodoistConfig) -> list[str]:
+    """Validate the loaded configuration and return a list of warning/error messages.
+
+    An empty list means the configuration is valid.
+    """
+    issues: list[str] = []
+
+    if not config.api_token_env:
+        issues.append("todoist.api_token_env is empty — cannot determine which env var holds the API token.")
+
+    if not config.projects:
+        issues.append("No projects configured — nothing will be synced. Add at least one project under 'projects'.")
+
+    if config.push_filters.conflict_resolution not in _VALID_CONFLICT_RESOLUTION_VALUES:
+        issues.append(
+            f"push.conflict_resolution '{config.push_filters.conflict_resolution}' is not valid. "
+            f"Must be one of: {sorted(_VALID_CONFLICT_RESOLUTION_VALUES)}."
+        )
+
+    if config.claude.label and not config.claude.repo:
+        issues.append(
+            "claude.label is set but claude.role.repo is empty. "
+            "Tasks marked with the Claude label will lack a repository reference."
+        )
+
+    return issues
