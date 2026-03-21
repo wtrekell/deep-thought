@@ -16,7 +16,7 @@
 1. Python 3.12 using `uv` as the package manager.
 2. Use the official [Todoist SDK for Python](https://doist.github.io/todoist-api-python/).
 3. Use SQLite for local **data storage**.
-4. [Meta class](https://doist.github.io/todoist-api-python/models/#todoist_api_python.models.Meta) filtering rules for **push** and **pull** are user defined and stored in `configuration/todoist_configuration.yaml`.
+4. [Meta class](https://doist.github.io/todoist-api-python/models/#todoist_api_python.models.Meta) filtering rules for **push** and **pull** are user defined and stored in `src/config/todoist_configuration.yaml`.
 5. All secrets are stored in `.env` file in the root directory or GitHub Secrets.
 6. A changelog is maintained in the `docs/tools/todoist/CHANGELOG.md` file.
 
@@ -64,9 +64,10 @@ docs/tools/todoist/
 ├── 260313-requirements.md           # This document
 ├── api-model.md                     # SDK model reference
 ├── api-model-html.md                # Raw HTML source
-├── CHANGELOG.md                     # Release history
-└── configuration/
-    └── todoist_configuration.yaml   # Filter rules and sync settings
+└── CHANGELOG.md                     # Release history
+
+src/config/
+└── todoist_configuration.yaml       # Filter rules and sync settings
 
 src/deep_thought/todoist/
 ├── __init__.py
@@ -79,6 +80,7 @@ src/deep_thought/todoist/
 ├── sync.py                          # Orchestrates pull + push
 ├── export.py                        # DB → markdown file generation
 ├── filters.py                       # Meta-based filter rule engine
+├── create.py                        # Create task via API and write to DB
 └── db/
     ├── __init__.py
     ├── schema.py                    # Schema definitions and table creation
@@ -86,7 +88,7 @@ src/deep_thought/todoist/
     └── migrations/                  # Forward-only migration SQL files
         └── 001_init_schema.sql
 
-data/todoist/
+data/todoist/                        # Default root; override with DEEP_THOUGHT_DATA_DIR
 ├── todoist.db                       # SQLite database
 ├── snapshots/                       # Raw JSON blobs per sync
 │   └── YYYY-MM-DDTHHMMSS.json
@@ -97,7 +99,7 @@ data/todoist/
 
 ## Configuration
 
-Configuration is stored in `configuration/todoist_configuration.yaml`. All values below are required unless marked optional.
+Configuration is stored in `src/config/todoist_configuration.yaml`. All values below are required unless marked optional.
 
 ```yaml
 # Todoist API

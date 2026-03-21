@@ -24,6 +24,8 @@ import logging
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from deep_thought.todoist.client import TodoistClient
 from deep_thought.todoist.config import (
     TodoistConfig,
@@ -32,6 +34,7 @@ from deep_thought.todoist.config import (
     load_config,
     validate_config,
 )
+from deep_thought.todoist.create import CreateResult, create_task
 from deep_thought.todoist.db.queries import get_all_projects, get_modified_tasks, get_sync_value
 from deep_thought.todoist.db.schema import get_database_path, initialize_database
 from deep_thought.todoist.export import ExportResult, export_to_markdown
@@ -103,9 +106,12 @@ def cmd_init(args: argparse.Namespace) -> None:
     """Create the database, required directories, and print setup instructions.
 
     Creates:
-    - The SQLite database at data/todoist/todoist.db
-    - data/todoist/snapshots/ for raw JSON backups per sync
-    - data/todoist/export/ for generated markdown files
+    - The SQLite database at <data_dir>/todoist.db
+    - <data_dir>/snapshots/ for raw JSON backups per sync
+    - <data_dir>/export/ for generated markdown files
+
+    <data_dir> defaults to data/todoist/ at the project root but can be
+    overridden by setting the DEEP_THOUGHT_DATA_DIR environment variable.
 
     Args:
         args: Parsed argparse namespace (no subcommand-specific flags).
@@ -387,7 +393,8 @@ def cmd_diff(args: argparse.Namespace) -> None:
 def cmd_export(args: argparse.Namespace) -> None:
     """Export the current database state to structured markdown files.
 
-    Writes one file per section per project under data/todoist/export/.
+    Writes one file per section per project under <data_dir>/export/
+    (see DEEP_THOUGHT_DATA_DIR for override).
 
     Args:
         args: Parsed argparse namespace with global flags (config, verbose,
@@ -410,6 +417,47 @@ def cmd_export(args: argparse.Namespace) -> None:
     print(f"  Projects: {export_result.projects_exported}")
     print(f"  Files:    {export_result.files_written}")
     print(f"  Tasks:    {export_result.tasks_exported}")
+
+
+def cmd_create(args: argparse.Namespace) -> None:
+    """Create a new task in Todoist and write it to the local database immediately.
+
+    Resolves the project (and optionally section and labels) against the local
+    database before calling the API. Use --dry-run to verify names resolve
+    without making any changes.
+
+    Args:
+        args: Parsed argparse namespace with the content positional argument
+              and optional task attribute flags.
+    """
+    if args.project is None:
+        print("ERROR: --project is required for the create subcommand.", file=sys.stderr)
+        sys.exit(1)
+
+    config = _load_config_from_args(args)
+    todoist_client = _make_client_from_config(config)
+
+    connection = initialize_database()
+    try:
+        create_result: CreateResult = create_task(
+            todoist_client,
+            connection,
+            args.content,
+            args.project,
+            description=args.description,
+            due_string=args.due,
+            priority=args.priority,
+            label_names=args.label or [],
+            section_name=args.section,
+            dry_run=args.dry_run,
+        )
+    finally:
+        connection.close()
+
+    if create_result.dry_run:
+        print(f"[dry-run] Would create task in '{args.project}': {create_result.task_content}")
+    else:
+        print(f"Created task [{create_result.task_id}]: {create_result.task_content}")
 
 
 # ---------------------------------------------------------------------------
@@ -490,6 +538,47 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         help="Export current database state to structured markdown files.",
     )
 
+    create_parser = subparsers.add_parser(
+        "create",
+        help="Create a new task in Todoist and store it locally.",
+    )
+    create_parser.add_argument(
+        "content",
+        help="Task content text.",
+    )
+    create_parser.add_argument(
+        "--description",
+        default=None,
+        help="Optional longer description for the task.",
+    )
+    create_parser.add_argument(
+        "--due",
+        metavar="DATE_STRING",
+        default=None,
+        help="Natural language due date, e.g. 'tomorrow'.",
+    )
+    create_parser.add_argument(
+        "--priority",
+        type=int,
+        choices=[1, 2, 3, 4],
+        default=None,
+        help="1=normal, 4=urgent.",
+    )
+    create_parser.add_argument(
+        "--label",
+        action="append",
+        metavar="LABEL_NAME",
+        dest="label",
+        default=None,
+        help="Repeat for multiple labels.",
+    )
+    create_parser.add_argument(
+        "--section",
+        metavar="SECTION_NAME",
+        default=None,
+        help="Section within the project to place the task in.",
+    )
+
     return root_parser
 
 
@@ -506,6 +595,7 @@ _COMMAND_HANDLERS = {
     "status": cmd_status,
     "diff": cmd_diff,
     "export": cmd_export,
+    "create": cmd_create,
 }
 
 
@@ -520,6 +610,8 @@ def main() -> None:
     Wraps each handler in consistent error handling so that all user-facing
     failures exit with code 1 and a clear message.
     """
+    load_dotenv()
+
     argument_parser = _build_argument_parser()
     args = argument_parser.parse_args()
 
@@ -544,6 +636,9 @@ def main() -> None:
     except OSError as os_error:
         # Covers EnvironmentError / API token missing
         print(f"ERROR: {os_error}", file=sys.stderr)
+        sys.exit(1)
+    except ValueError as value_error:
+        print(f"ERROR: {value_error}", file=sys.stderr)
         sys.exit(1)
     except Exception as unexpected_error:
         print(f"ERROR: An unexpected error occurred — {unexpected_error}", file=sys.stderr)

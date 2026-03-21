@@ -14,4 +14,6 @@ All notable changes to the Todoist Tool will be documented in this file.
 - Pull, push, and sync operations
 - Meta-based filter engine
 - Markdown export for LLM consumption
-- CLI with subcommands: pull, push, sync, status, diff, export, config, init
+- CLI with subcommands: pull, push, sync, status, diff, export, config, init, create
+- `create` subcommand — create a new task via the Todoist API and write it to the local database immediately
+- `DEEP_THOUGHT_DATA_DIR` environment variable — redirects all data storage (database, snapshots, export) to a specified path; defaults to `data/todoist/` at the project root

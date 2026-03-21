@@ -16,9 +16,13 @@ via the data dict unchanged.
 
 from __future__ import annotations
 
+import json
 import sqlite3  # noqa: TC003 — sqlite3.Row is used at runtime in _row_to_dict/_rows_to_dicts
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from deep_thought.todoist.models import TaskLocal
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -367,6 +371,31 @@ def set_task_labels(conn: sqlite3.Connection, task_id: str, label_ids: list[str]
         "INSERT INTO task_labels (task_id, label_id, synced_at) VALUES (?, ?, ?);",
         [(task_id, label_id, synced_at) for label_id in label_ids],
     )
+
+
+def upsert_task_with_labels(
+    conn: sqlite3.Connection,
+    task: TaskLocal,
+    label_name_to_id: dict[str, str],
+) -> None:
+    """Write a task to the DB and update the task_labels join table.
+
+    The labels field on TaskLocal is a list[str] of label names. The tasks
+    table stores them as a JSON string. The task_labels join table stores
+    label IDs, so we look each name up in the name→ID map.
+
+    Args:
+        conn: An open SQLite connection.
+        task: A fully populated TaskLocal object.
+        label_name_to_id: Map from label name to Todoist label ID.
+    """
+    task_dict = task.to_dict()
+    # DB column expects JSON string, not a Python list
+    task_dict["labels"] = json.dumps(task_dict["labels"])
+    upsert_task(conn, task_dict)
+
+    label_ids = [label_name_to_id[name] for name in task.labels if name in label_name_to_id]
+    set_task_labels(conn, task.id, label_ids)
 
 
 def get_labels_for_task(conn: sqlite3.Connection, task_id: str) -> list[dict[str, Any]]:

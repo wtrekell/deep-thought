@@ -44,3 +44,9 @@ data/
 # Claude
 CLAUDE.md
 .claude/*
+
+# Noise
+00-*
+
+# Secrets / credentials
+files/tools/google/

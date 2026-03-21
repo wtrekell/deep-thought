@@ -174,6 +174,27 @@ class TestFilterApiProjectsToConfigured:
         result = _filter_api_projects_to_configured([], ["Work"], None)
         assert result == []
 
+    def test_empty_configured_names_returns_all_api_projects(self) -> None:
+        """Empty configured list means no opt-in restriction — all API projects are used."""
+        work = _mock_project("p1", "Work")
+        personal = _mock_project("p2", "Personal")
+        result = _filter_api_projects_to_configured([work, personal], [], None)
+        assert len(result) == 2
+
+    def test_empty_configured_names_with_project_filter_returns_match(self) -> None:
+        """project_filter still restricts when configured list is empty."""
+        work = _mock_project("p1", "Work")
+        personal = _mock_project("p2", "Personal")
+        result = _filter_api_projects_to_configured([work, personal], [], "Work")
+        assert len(result) == 1
+        assert result[0].name == "Work"
+
+    def test_empty_configured_names_with_nonexistent_project_filter_returns_empty(self) -> None:
+        """project_filter for a name absent from API projects returns nothing, even with empty configured list."""
+        work = _mock_project("p1", "Work")
+        result = _filter_api_projects_to_configured([work], [], "Personal")
+        assert result == []
+
 
 # ---------------------------------------------------------------------------
 # pull() function
