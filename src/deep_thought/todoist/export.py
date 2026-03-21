@@ -5,7 +5,8 @@ Tasks without a section go into _unsectioned.md. The format is optimised for
 machine parsing by Claude, using a key-value metadata list under each task.
 
 Output structure:
-    data/todoist/export/<project-name>/<section-name>.md
+    <data_dir>/export/<project-name>/<section-name>.md
+    (<data_dir> defaults to data/todoist/ or DEEP_THOUGHT_DATA_DIR if set)
 
 Markdown format (from requirements):
     # Project Name
@@ -30,7 +31,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from deep_thought.todoist.db.queries import (
@@ -39,9 +39,11 @@ from deep_thought.todoist.db.queries import (
     get_sections_by_project,
     get_tasks_by_project,
 )
+from deep_thought.todoist.db.schema import get_data_dir
 
 if TYPE_CHECKING:
     import sqlite3
+    from pathlib import Path
 
     from deep_thought.todoist.config import TodoistConfig
 
@@ -65,18 +67,9 @@ class ExportResult:
 # ---------------------------------------------------------------------------
 
 
-def _project_root() -> Path:
-    """Return the repository root by locating pyproject.toml."""
-    current = Path(__file__).resolve()
-    for parent in current.parents:
-        if (parent / "pyproject.toml").exists():
-            return parent
-    return current.parents[4]
-
-
 def _default_export_dir() -> Path:
     """Return the canonical export directory path."""
-    return _project_root() / "data" / "todoist" / "export"
+    return get_data_dir() / "export"
 
 
 def _safe_directory_name(name: str) -> str:
@@ -332,7 +325,7 @@ def export_to_markdown(
         conn: An open SQLite connection with row_factory = sqlite3.Row.
         config: The loaded TodoistConfig.
         output_dir: Directory to write export files into. Defaults to
-                    data/todoist/export/ at the project root.
+                    <data_dir>/export/ (see DEEP_THOUGHT_DATA_DIR).
         project_filter: If provided, only export this project name.
         verbose: If True, print progress messages to stdout.
 

@@ -171,14 +171,28 @@ class TestValidateConfig:
         issues = validate_config(config)
         assert any("api_token_env" in issue for issue in issues)
 
-    def test_no_projects_is_flagged(self, tmp_path: Path) -> None:
-        """An empty projects list must appear in the issues list."""
+    def test_no_projects_and_no_labels_is_flagged(self, tmp_path: Path) -> None:
+        """Empty projects list with no label filters must appear in the issues list."""
         yaml_content = "todoist:\n  api_token_env: TOKEN\nprojects: []\n"
         yaml_file = tmp_path / "config.yaml"
         yaml_file.write_text(yaml_content, encoding="utf-8")
         config = load_config(yaml_file)
         issues = validate_config(config)
-        assert any("project" in issue.lower() for issue in issues)
+        assert any("project" in issue.lower() or "label" in issue.lower() for issue in issues)
+
+    def test_no_projects_with_label_filter_is_valid(self, tmp_path: Path) -> None:
+        """Empty projects list is allowed when labels.include is set."""
+        yaml_content = (
+            "todoist:\n  api_token_env: TOKEN\n"
+            "projects: []\n"
+            "filters:\n  pull:\n    labels:\n      include:\n        - my-label\n"
+            "claude:\n  label: ''\n"
+        )
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text(yaml_content, encoding="utf-8")
+        config = load_config(yaml_file)
+        issues = validate_config(config)
+        assert issues == []
 
     def test_invalid_conflict_resolution_is_flagged(self, tmp_path: Path) -> None:
         """An unrecognized conflict_resolution value must appear in the issues list."""

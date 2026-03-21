@@ -10,6 +10,7 @@ Responsibilities:
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from pathlib import Path
 
@@ -24,7 +25,7 @@ def _project_root() -> Path:
     Determined by walking up from this file until we find pyproject.toml,
     which is a reliable anchor for the monorepo root.
     """
-    current = Path(__file__).resolve()
+    current = Path(__file__)
     for parent in current.parents:
         if (parent / "pyproject.toml").exists():
             return parent
@@ -32,13 +33,25 @@ def _project_root() -> Path:
     return current.parents[4]
 
 
+def get_data_dir() -> Path:
+    """Return the base data directory for Todoist tool storage.
+
+    Checks DEEP_THOUGHT_DATA_DIR env var first; falls back to
+    <project_root>/data/todoist.
+    """
+    env_override = os.environ.get("DEEP_THOUGHT_DATA_DIR")
+    if env_override:
+        return Path(env_override)
+    return _project_root() / "data" / "todoist"
+
+
 def get_database_path() -> Path:
     """Return the canonical path to the SQLite database file.
 
-    Path: <project_root>/data/todoist/todoist.db
+    Path: <data_dir>/todoist.db
     The parent directory is created if it does not already exist.
     """
-    database_path = _project_root() / "data" / "todoist" / "todoist.db"
+    database_path = get_data_dir() / "todoist.db"
     database_path.parent.mkdir(parents=True, exist_ok=True)
     return database_path
 

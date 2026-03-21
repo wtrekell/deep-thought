@@ -21,7 +21,7 @@ Expanded document to standardize future tool builds in deep-thought.
 - Follow src layout with hatchling build backend
 - Separate database layer into `db/` subpackage
 - Place migrations in `db/migrations/` with numeric prefixes
-- Store configuration YAML in `configuration/`
+- Store configuration YAML in `src/config/`
 - Store data artifacts in `data/<tool>/`
 - Place documentation in `docs/tools/<tool>/`
 - Add test directory mirroring source structure

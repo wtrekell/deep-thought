@@ -10,19 +10,18 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from deep_thought.todoist.db.queries import (
     get_all_labels,
     set_sync_value,
-    set_task_labels,
     upsert_comment,
     upsert_label,
     upsert_project,
     upsert_section,
-    upsert_task,
+    upsert_task_with_labels,
 )
+from deep_thought.todoist.db.schema import get_data_dir
 from deep_thought.todoist.filters import apply_pull_filters
 from deep_thought.todoist.models import (
     CommentLocal,
@@ -34,6 +33,7 @@ from deep_thought.todoist.models import (
 
 if TYPE_CHECKING:
     import sqlite3
+    from pathlib import Path
 
     from todoist_api_python.models import Project
 
@@ -65,18 +65,9 @@ class PullResult:
 # ---------------------------------------------------------------------------
 
 
-def _project_root() -> Path:
-    """Return the repository root by locating pyproject.toml."""
-    current = Path(__file__).resolve()
-    for parent in current.parents:
-        if (parent / "pyproject.toml").exists():
-            return parent
-    return current.parents[4]
-
-
 def _snapshots_dir() -> Path:
     """Return the path to the JSON snapshots directory, creating it if needed."""
-    snapshots_directory = _project_root() / "data" / "todoist" / "snapshots"
+    snapshots_directory = get_data_dir() / "snapshots"
     snapshots_directory.mkdir(parents=True, exist_ok=True)
     return snapshots_directory
 
@@ -93,6 +84,8 @@ def _filter_api_projects_to_configured(
 ) -> list[Project]:
     """Return only the API projects that appear in the configured opt-in list.
 
+    If configured_project_names is empty, no opt-in restriction applies and all API
+    projects are used as candidates (label filters then limit what gets stored).
     If project_name_filter is provided, further limits to a single project name.
 
     Args:
@@ -103,6 +96,12 @@ def _filter_api_projects_to_configured(
     Returns:
         Filtered list of SDK Project objects.
     """
+    # Empty configured list = no opt-in restriction; collect from all projects
+    if not configured_project_names:
+        if project_name_filter is not None:
+            return [project for project in api_projects if project.name == project_name_filter]
+        return list(api_projects)
+
     allowed_names = set(configured_project_names)
     if project_name_filter is not None:
         allowed_names = {project_name_filter} & allowed_names
@@ -121,31 +120,6 @@ def _build_label_name_to_id_map(conn: sqlite3.Connection) -> dict[str, str]:
     """
     all_label_rows = get_all_labels(conn)
     return {row["name"]: row["id"] for row in all_label_rows}
-
-
-def _upsert_task_with_labels(
-    conn: sqlite3.Connection,
-    task: TaskLocal,
-    label_name_to_id: dict[str, str],
-) -> None:
-    """Write a task to the DB and update the task_labels join table.
-
-    The labels field on TaskLocal is a list[str] of label names. The tasks
-    table stores them as a JSON string. The task_labels join table stores
-    label IDs, so we look each name up in the name→ID map.
-
-    Args:
-        conn: An open SQLite connection.
-        task: A fully populated TaskLocal object.
-        label_name_to_id: Map from label name to Todoist label ID.
-    """
-    task_dict = task.to_dict()
-    # DB column expects JSON string, not a Python list
-    task_dict["labels"] = json.dumps(task_dict["labels"])
-    upsert_task(conn, task_dict)
-
-    label_ids = [label_name_to_id[name] for name in task.labels if name in label_name_to_id]
-    set_task_labels(conn, task.id, label_ids)
 
 
 # ---------------------------------------------------------------------------
@@ -171,7 +145,7 @@ def pull(
     4. Convert SDK objects to local models.
     5. Apply pull filters to tasks.
     6. If not dry_run: upsert all data to the DB.
-    7. Save a JSON snapshot to data/todoist/snapshots/.
+    7. Save a JSON snapshot to <data_dir>/snapshots/.
     8. Return a summary of what was pulled.
 
     Args:
@@ -268,13 +242,13 @@ def pull(
 
         for task in local_tasks:
             # Note: task.to_dict() includes labels as a Python list here.
-            # The DB stores labels as a JSON string (see _upsert_task_with_labels).
+            # The DB stores labels as a JSON string (see upsert_task_with_labels in db/queries.py).
             # This difference is intentional — the snapshot is for debugging/backup,
             # not for DB import, so the native list form is more readable.
             snapshot_data["tasks"].append(task.to_dict())
         if not dry_run:
             for task in filtered_tasks:
-                _upsert_task_with_labels(conn, task, label_name_to_id)
+                upsert_task_with_labels(conn, task, label_name_to_id)
 
         result.tasks_synced += len(filtered_tasks)
 

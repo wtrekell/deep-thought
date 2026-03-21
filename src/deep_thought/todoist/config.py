@@ -66,7 +66,7 @@ class TodoistConfig:
 # ---------------------------------------------------------------------------
 
 _PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-_DEFAULT_CONFIG_RELATIVE_PATH = Path("docs") / "tools" / "todoist" / "configuration" / "todoist_configuration.yaml"
+_DEFAULT_CONFIG_RELATIVE_PATH = Path("src") / "config" / "todoist_configuration.yaml"
 
 
 def get_default_config_path() -> Path:
@@ -226,8 +226,11 @@ def validate_config(config: TodoistConfig) -> list[str]:
     if not config.api_token_env:
         issues.append("todoist.api_token_env is empty — cannot determine which env var holds the API token.")
 
-    if not config.projects:
-        issues.append("No projects configured — nothing will be synced. Add at least one project under 'projects'.")
+    if not config.projects and not config.pull_filters.labels.include:
+        issues.append(
+            "No projects configured and no pull label filters set — nothing will be synced. "
+            "Add at least one project under 'projects', or set filters.pull.labels.include."
+        )
 
     if config.push_filters.conflict_resolution not in _VALID_CONFLICT_RESOLUTION_VALUES:
         issues.append(

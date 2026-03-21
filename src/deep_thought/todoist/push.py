@@ -133,6 +133,8 @@ def _print_task_changes(task: TaskLocal) -> None:
         task: The TaskLocal with pending changes.
     """
     print(f"  Task: {task.id} — {task.content}")
+    if task.is_completed:
+        print("    status: completed")
     print(f"    priority: {task.priority}")
     if task.labels:
         print(f"    labels: {', '.join(task.labels)}")
@@ -242,8 +244,11 @@ def push(
                 continue
 
         try:
-            update_kwargs = _build_update_kwargs(task)
-            client.update_task(task.id, **update_kwargs)
+            if task.is_completed:
+                client.close_task(task.id)
+            else:
+                update_kwargs = _build_update_kwargs(task)
+                client.update_task(task.id, **update_kwargs)
             mark_task_synced(conn, task.id)
             result.tasks_pushed += 1
 

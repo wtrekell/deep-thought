@@ -22,7 +22,7 @@ Todoist API → Local Models → Filters → SQLite DB → Markdown Export
    TODOIST_API_TOKEN=your_token_here
    ```
 
-2. Configure which projects to sync in `docs/tools/todoist/configuration/todoist_configuration.yaml`.
+2. Configure which projects to sync in `src/config/todoist_configuration.yaml`.
 
 3. Initialize the database:
 
@@ -38,7 +38,7 @@ Todoist API → Local Models → Filters → SQLite DB → Markdown Export
 
 ## Configuration
 
-Configuration lives at `docs/tools/todoist/configuration/todoist_configuration.yaml`. Key settings:
+Configuration lives at `src/config/todoist_configuration.yaml`. Key settings:
 
 - **projects** — Opt-in list of Todoist project names to sync
 - **filters.pull** — Rules for which tasks to include/exclude during pull (by label, section, assignee, due date)
@@ -59,10 +59,13 @@ Configuration lives at `docs/tools/todoist/configuration/todoist_configuration.y
 | `push.py` | DB diff → push filters → API calls → mark synced |
 | `sync.py` | Orchestrator: pull then push |
 | `export.py` | DB → structured markdown files |
+| `create.py` | Create a new task via API and write it to DB immediately |
 | `db/` | SQLite schema, migrations, and query functions |
 
 ## Data Storage
 
-- **SQLite database** — `data/todoist/todoist.db` (canonical store)
-- **JSON snapshots** — `data/todoist/snapshots/` (one per sync, for debugging/backup)
-- **Markdown export** — `data/todoist/export/<project>/<section>.md`
+All paths are rooted at `data/todoist/` by default. Set `DEEP_THOUGHT_DATA_DIR` to redirect everything to a different location (useful for isolated test environments or running outside the repo).
+
+- **SQLite database** — `<data_dir>/todoist.db` (canonical store)
+- **JSON snapshots** — `<data_dir>/snapshots/` (one per sync, for debugging/backup)
+- **Markdown export** — `<data_dir>/export/<project>/<section>.md`
