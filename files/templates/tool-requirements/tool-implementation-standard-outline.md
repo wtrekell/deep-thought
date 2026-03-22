@@ -17,13 +17,14 @@ Expanded document to standardize future tool builds in deep-thought.
 
 ## 2. Project Structure
 
-- Create subpackage under `src/deep_thought/<tool>/`
+- Tool names use hyphens (e.g., `file-txt`); Python package and module names translate hyphens to underscores as required (e.g., `file_txt`); all other names — directories, config filenames, CLI entry points — follow the tool name using hyphens
+- Create subpackage under `src/deep_thought/<tool>/` (underscored)
 - Follow src layout with hatchling build backend
 - Separate database layer into `db/` subpackage
 - Place migrations in `db/migrations/` with numeric prefixes
-- Store configuration YAML in `src/config/`
-- Store data artifacts in `data/<tool>/`
-- Place documentation in `docs/tools/<tool>/`
+- Store configuration YAML in `src/config/` named `<tool>-configuration.yaml`
+- Store data artifacts in `data/<tool>/`; support `DEEP_THOUGHT_DATA_DIR` env var to redirect the data root at runtime
+- Place documentation in `files/tools/<tool>/`
 - Add test directory mirroring source structure
 
 ## 3. Configuration
@@ -58,7 +59,7 @@ Expanded document to standardize future tool builds in deep-thought.
 - Use cascading deletes for referential integrity
 - Track schema version in a key-value table
 - Apply migrations sequentially by numeric prefix
-- Locate database at `data/<tool>/<tool>.db`
+- Locate database at `data/<tool>/<tool>.db` (underscored path, consistent with `DEEP_THOUGHT_DATA_DIR` override)
 
 ## 6. API Client
 
@@ -141,4 +142,4 @@ Expanded document to standardize future tool builds in deep-thought.
 - Document API model reference for SDK entities
 - Maintain changelog with unreleased section
 - Keep CLAUDE.md updated with tool-specific commands
-- Store all docs in `docs/tools/<tool>/`
+- Store all docs in `files/tools/<tool>/`
