@@ -1,0 +1,23 @@
+# Marker (PDF)
+force_ocr: false
+torch_device: "mps" # 'mps', 'cuda', or 'cpu'
+
+# Output
+output_dir: "output/"
+include_page_numbers: false
+extract_images: true
+
+# Limits
+max_file_size_mb: 200
+
+# File filter
+allowed_extensions:
+  - ".pdf"
+  - ".docx"
+  - ".pptx"
+  - ".xlsx"
+  - ".html"
+  - ".htm"
+exclude_patterns:
+  - "~$*"
+  - ".*"

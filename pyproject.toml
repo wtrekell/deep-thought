@@ -10,10 +10,13 @@ dependencies = [
     "todoist-api-python>=3.0.0",
     "pyyaml>=6.0",
     "python-dotenv>=1.0.0",
+    "marker-pdf>=1.0.0",
+    "markitdown>=0.1.0",
 ]
 
 [project.scripts]
 todoist = "deep_thought.todoist.cli:main"
+file-txt = "deep_thought.file_txt.cli:main"
 
 [project.optional-dependencies]
 dev = [
