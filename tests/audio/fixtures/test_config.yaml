@@ -1,0 +1,29 @@
+engine: 'mlx'
+model: 'small'
+language: 'en'
+
+output_mode: 'paragraph'
+pause_threshold: 1.5
+
+diarize: false
+hf_token_env: 'HF_TOKEN'
+
+remove_fillers: false
+
+output_dir: 'data/audio/export/'
+generate_llms_files: true
+
+max_file_size_mb: 100
+chunk_duration_minutes: 5
+
+hallucination_detection:
+  repetition_threshold: 3
+  compression_ratio_threshold: 2.4
+  confidence_floor: -1.0
+  no_speech_prob_threshold: 0.6
+  duration_chars_per_sec_max: 25
+  duration_chars_per_sec_min: 2
+  use_vad: true
+  blocklist_enabled: true
+  score_threshold: 2
+  action: 'remove'

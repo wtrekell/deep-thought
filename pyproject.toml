@@ -12,11 +12,18 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "marker-pdf>=1.0.0",
     "markitdown>=0.1.0",
+    "playwright>=1.40.0",
+    "html2text>=2020.1.16",
+    "mlx-whisper>=0.4.0",
+    "praw>=7.7.1",
 ]
 
 [project.scripts]
 todoist = "deep_thought.todoist.cli:main"
 file-txt = "deep_thought.file_txt.cli:main"
+web = "deep_thought.web.cli:main"
+audio = "deep_thought.audio.cli:main"
+reddit = "deep_thought.reddit.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -25,6 +32,12 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.8.0",
     "types-pyyaml>=6.0.12.20250915",
+]
+whisper = [
+    "openai-whisper",
+]
+diarize = [
+    "pyannote.audio>=3.0",
 ]
 
 [build-system]

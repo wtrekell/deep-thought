@@ -23,8 +23,11 @@ Expanded document to standardize future tool builds in deep-thought.
 - Separate database layer into `db/` subpackage
 - Place migrations in `db/migrations/` with numeric prefixes
 - Store configuration YAML in `src/config/` named `<tool>-configuration.yaml`
+- Store tool-specific additional configs (alternative rule sets, batch configs, credentials) in `src/config/<tool>/`
 - Store data artifacts in `data/<tool>/`; support `DEEP_THOUGHT_DATA_DIR` env var to redirect the data root at runtime
+- Tools that accept local file input default to `data/<tool>/input/` so the input path benefits from `DEEP_THOUGHT_DATA_DIR` redirection; note that this convention places user-provided files alongside tool-generated artifacts — revisit per tool if the distinction matters
 - Place documentation in `files/tools/<tool>/`
+- Include `models.py` for local dataclasses when the tool defines data models
 - Add test directory mirroring source structure
 
 ## 3. Configuration
@@ -41,7 +44,7 @@ Expanded document to standardize future tool builds in deep-thought.
 ## 4. Data Models
 
 - Create local dataclasses mirroring API entities
-- Add `from_sdk()` classmethod for API conversion
+- Add `from_sdk()` classmethod for API conversion (API tools only; omit for local processing tools)
 - Add `to_dict()` method for database insertion
 - Unpack nested API objects into scalar fields
 - Rename API reserved words consistently (e.g., `order`)
@@ -52,9 +55,9 @@ Expanded document to standardize future tool builds in deep-thought.
 
 - Use SQLite with WAL mode and foreign keys
 - Store all IDs as TEXT (API string IDs)
-- Include `created_at`, `updated_at`, `synced_at` on all tables
+- Include `created_at` and `updated_at` on all tables; add `synced_at` only for API sync tools
 - Use `INSERT OR REPLACE` for upsert operations
-- Set `synced_at` locally; preserve API timestamps
+- Set `synced_at` locally on API sync; preserve API timestamps
 - Add indexes on all foreign key columns
 - Use cascading deletes for referential integrity
 - Track schema version in a key-value table
@@ -97,16 +100,16 @@ Expanded document to standardize future tool builds in deep-thought.
 - Sanitize directory and file names for filesystem safety
 - Use consistent key-value syntax in output
 - Place exports in `data/<tool>/export/`
+- Generate `.llms.txt` / `.llms-full.txt` files controlled by a `generate_llms_files` config setting, defaulting to `false`
 
 ## 10. CLI
 
 - Use argparse with subparsers for commands
 - Define global flags: `--dry-run`, `--verbose`, `--config`
-- Prefer descriptive, self-documenting flag names that communicate intent without ambiguity. Exception: short, memorable slang is acceptable for frequently used flags (e.g., `--nuke` for deleting input files after processing).
 - Map subcommands to handler functions via dispatch dict
 - Print typed result objects to stdout
 - Catch specific exceptions with descriptive messages
-- Return proper exit codes (0 success, 1 error)
+- Return proper exit codes: `0` success, `1` fatal error, `2` partial failure (some items errored)
 
 ## 11. Error Handling
 
@@ -136,11 +139,13 @@ Expanded document to standardize future tool builds in deep-thought.
 - Write docstrings on every test method
 - Mark tests: `slow`, `integration`, `error_handling`
 - Create helper functions for building test objects
+- Include `conftest.py` for shared fixtures in each test directory
+- Store test data files in `tests/<tool>/fixtures/`
 
 ## 14. Documentation
 
 - Write requirements doc before implementation
-- Document API model reference for SDK entities
+- Document API model reference for SDK entities; link to official SDK documentation in requirements
 - Maintain changelog with unreleased section
 - Keep CLAUDE.md updated with tool-specific commands
 - Store all docs in `files/tools/<tool>/`

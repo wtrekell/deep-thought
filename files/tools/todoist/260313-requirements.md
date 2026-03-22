@@ -16,9 +16,9 @@
 1. Python 3.12 using `uv` as the package manager.
 2. Use the official [Todoist SDK for Python](https://doist.github.io/todoist-api-python/).
 3. Use SQLite for local **data storage**.
-4. [Meta class](https://doist.github.io/todoist-api-python/models/#todoist_api_python.models.Meta) filtering rules for **push** and **pull** are user defined and stored in `src/config/todoist_configuration.yaml`.
+4. [Meta class](https://doist.github.io/todoist-api-python/models/#todoist_api_python.models.Meta) filtering rules for **push** and **pull** are user defined and stored in `src/config/todoist-configuration.yaml`.
 5. All secrets are stored in `.env` file in the root directory or GitHub Secrets.
-6. A changelog is maintained in the `docs/tools/todoist/CHANGELOG.md` file.
+6. A changelog is maintained in `files/tools/todoist/CHANGELOG.md`.
 
 ## Data Storage
 
@@ -60,14 +60,14 @@ All operations use subcommands (not flags). Running `todoist` with no subcommand
 ## File & Output Map
 
 ```
-docs/tools/todoist/
+files/tools/todoist/
 ├── 260313-requirements.md           # This document
 ├── api-model.md                     # SDK model reference
 ├── api-model-html.md                # Raw HTML source
 └── CHANGELOG.md                     # Release history
 
 src/config/
-└── todoist_configuration.yaml       # Filter rules and sync settings
+└── todoist-configuration.yaml       # Filter rules and sync settings
 
 src/deep_thought/todoist/
 ├── __init__.py
@@ -99,7 +99,7 @@ data/todoist/                        # Default root; override with DEEP_THOUGHT_
 
 ## Configuration
 
-Configuration is stored in `src/config/todoist_configuration.yaml`. All values below are required unless marked optional.
+Configuration is stored in `src/config/todoist-configuration.yaml`. All values below are required unless marked optional.
 
 ```yaml
 # Todoist API

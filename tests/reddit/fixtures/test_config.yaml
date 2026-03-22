@@ -1,0 +1,24 @@
+client_id_env: "REDDIT_CLIENT_ID"
+client_secret_env: "REDDIT_CLIENT_SECRET"
+user_agent_env: "REDDIT_USER_AGENT"
+max_posts_per_run: 100
+output_dir: "data/reddit/export/"
+generate_llms_files: false
+
+rules:
+  - name: "test_rule"
+    subreddit: "python"
+    sort: "top"
+    time_filter: "week"
+    limit: 10
+    min_score: 10
+    min_comments: 2
+    max_age_days: 7
+    include_keywords: []
+    exclude_keywords: []
+    include_flair: []
+    exclude_flair: []
+    search_comments: false
+    max_comment_depth: 2
+    max_comments: 50
+    include_images: false
