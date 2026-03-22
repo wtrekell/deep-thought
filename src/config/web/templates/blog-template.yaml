@@ -1,0 +1,35 @@
+# Blog template — copy to src/config/web/{site-name}.yaml and customise.
+mode: "blog"
+input_url: "https://example.com/blog"
+
+# Index depth: how many layers of listing/navigation pages sit before article pages.
+#   1 = root URL is a listing page; links from it are articles (most common)
+#   2 = root → category pages → article pages
+index_depth: 1
+
+# Pages with fewer words than this are treated as index/navigation pages and skipped.
+min_article_words: 200
+
+max_pages: 100
+js_wait: 1.0
+browser_channel: null
+stealth: false
+
+# Restrict crawling to the blog section and skip common non-article pages.
+include_patterns: []
+  # - '.*/blog/[^/]+$'
+
+exclude_patterns:
+  - '.*\?.*'
+  - '.*/tag/.*'
+  - '.*/category/.*'
+  - '.*/page/\d+'
+  - '.*#.*'
+  - '.*login.*'
+  - '.*\.pdf$'
+
+retry_attempts: 2
+retry_delay: 5.0
+output_dir: "output/web/"
+extract_images: false
+generate_llms_files: true

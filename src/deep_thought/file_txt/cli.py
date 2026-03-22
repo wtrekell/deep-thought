@@ -238,7 +238,10 @@ def cmd_convert(args: argparse.Namespace) -> None:
     print(f"  Skipped:   {skipped_count}")
     print(f"  Errors:    {error_count}")
 
-    if error_count > 0:
+    # Exit codes: 0 = all ok, 1 = all errored, 2 = partial failure (some ok + some errored)
+    if error_count > 0 and converted_count > 0:
+        sys.exit(2)
+    elif error_count > 0:
         sys.exit(1)
 
 

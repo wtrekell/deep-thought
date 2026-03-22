@@ -1,0 +1,10 @@
+# Batch config: crawl a blog
+mode: "blog"
+input_url: "https://example.com/blog"
+max_pages: 50
+include_patterns:
+  - '.*/blog/.*'
+exclude_patterns:
+  - '.*\?.*'
+output_dir: "output/web/"
+generate_llms_files: true

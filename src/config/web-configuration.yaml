@@ -1,0 +1,32 @@
+# Web Tool Configuration
+# Mode: 'blog', 'documentation', or 'direct'
+mode: "blog"
+max_depth: 3
+max_pages: 100
+
+# Rendering
+js_wait: 1.0
+browser_channel: null
+
+# Stealth
+stealth: false
+
+# URL filtering
+include_patterns: []
+exclude_patterns:
+  - '.*\.pdf$'
+  - '.*login.*'
+
+# Retry
+retry_attempts: 2
+retry_delay: 5.0
+
+# Output
+output_dir: "output/web/"
+extract_images: false
+generate_llms_files: true
+
+# Content quality
+index_depth: 1          # levels of index/listing pages before article pages
+min_article_words: 200  # pages below this word count are skipped as index pages
+changelog_url: null     # documentation only: URL of changelog for incremental re-crawls
