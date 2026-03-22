@@ -3,14 +3,44 @@
 Wraps the marker-pdf library's PdfConverter to produce markdown from PDF
 files. The marker-pdf dependency is optional at import time — a clear error
 is raised if the library is not installed.
+
+Model loading is expensive. A module-level cache avoids reloading the model
+dict on repeated calls within the same process.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+_cached_model_dict: dict[str, Any] | None = None
+_cached_converter: Any | None = None
+_cached_converter_config: dict[str, object] | None = None
+
+
+def _get_converter(converter_config: dict[str, object]) -> Any:
+    """Return a cached PdfConverter, recreating it only when config changes.
+
+    The model dict (which holds the heavy neural network weights) is cached
+    separately and is never discarded — only the converter wrapper is replaced
+    when the config changes.
+    """
+    global _cached_model_dict, _cached_converter, _cached_converter_config
+
+    if _cached_converter is not None and _cached_converter_config == converter_config:
+        return _cached_converter
+
+    from marker.converters.pdf import PdfConverter  # type: ignore[import-untyped]
+    from marker.models import create_model_dict  # type: ignore[import-untyped]
+
+    if _cached_model_dict is None:
+        _cached_model_dict = create_model_dict()
+
+    _cached_converter = PdfConverter(config=converter_config, artifact_dict=_cached_model_dict)
+    _cached_converter_config = converter_config
+    return _cached_converter
 
 
 def convert_pdf(
@@ -39,8 +69,7 @@ def convert_pdf(
         OSError: If the file cannot be read.
     """
     try:
-        from marker.converters.pdf import PdfConverter  # type: ignore[import-not-found]
-        from marker.models import create_model_dict  # type: ignore[import-not-found]
+        import marker.converters.pdf  # type: ignore[import-untyped]  # noqa: F401
     except ImportError as import_error:
         raise ImportError(
             "The marker-pdf library is required for PDF conversion but is not installed. "
@@ -56,12 +85,7 @@ def convert_pdf(
         "paginate_output": include_page_numbers,
     }
 
-    model_dict = create_model_dict()
-    converter = PdfConverter(
-        config=converter_config,
-        artifact_dict=model_dict,
-    )
-
+    converter = _get_converter(converter_config)
     conversion_result = converter(str(source_path))
 
     if hasattr(conversion_result, "markdown"):

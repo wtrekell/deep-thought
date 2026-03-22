@@ -13,11 +13,7 @@ from pathlib import Path  # noqa: TC003
 
 # Matches markdown image tags that embed base64 data URIs.
 # Capture groups: (1) alt text, (2) mime type, (3) base64 data
-_BASE64_IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\(data:image/([a-zA-Z]+);base64,([A-Za-z0-9+/=]+)\)")
-
-# Matches markdown image tags referencing external or relative paths.
-# Capture groups: (1) alt text, (2) src path
-_EXTERNAL_IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\((?!data:)([^)]+)\)")
+_BASE64_IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\(data:image/([a-zA-Z0-9+]+);base64,([A-Za-z0-9+/=]+)\)")
 
 
 def extract_images(markdown_text: str, output_dir: Path) -> tuple[str, bool]:
@@ -58,7 +54,11 @@ def extract_images(markdown_text: str, output_dir: Path) -> tuple[str, bool]:
 
         image_path.parent.mkdir(parents=True, exist_ok=True)
 
-        image_bytes = base64.b64decode(base64_data)
+        try:
+            image_bytes = base64.b64decode(base64_data)
+        except Exception:
+            return match.group(0)  # Leave the original markdown unchanged
+
         image_path.write_bytes(image_bytes)
 
         extracted_count += 1

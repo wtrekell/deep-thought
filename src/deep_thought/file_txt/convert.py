@@ -7,7 +7,7 @@ extraction, writes output, and collects results into a typed ConvertResult.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from deep_thought.file_txt.filters import is_within_size_limit
 from deep_thought.file_txt.output import count_words, write_document
@@ -43,6 +43,7 @@ class ConvertResult:
 # ---------------------------------------------------------------------------
 
 _PDF_EXTENSION = ".pdf"
+_EMAIL_EXTENSIONS = {".eml", ".msg"}
 
 _EXTENSION_TO_TYPE: dict[str, str] = {
     ".pdf": "pdf",
@@ -51,6 +52,8 @@ _EXTENSION_TO_TYPE: dict[str, str] = {
     ".xlsx": "xlsx",
     ".html": "html",
     ".htm": "html",
+    ".eml": "eml",
+    ".msg": "msg",
 }
 
 
@@ -103,6 +106,39 @@ def _convert_via_markitdown(source_path: Path) -> tuple[str, None]:
     return markdown_text, None
 
 
+def _convert_via_email_engine(source_path: Path, config: FileTxtConfig) -> tuple[str, dict[str, Any]]:
+    """Delegate email conversion to the appropriate email engine.
+
+    Routes .eml files to the EML engine and .msg files to the MSG engine.
+
+    Args:
+        source_path: Path to the email file.
+        config: The loaded FileTxtConfig supplying email settings.
+
+    Returns:
+        (markdown_text, email_metadata) from the email engine.
+    """
+    extension = source_path.suffix.lower()
+    if extension == ".eml":
+        from deep_thought.file_txt.engines.eml_engine import convert_eml
+
+        return convert_eml(
+            source_path,
+            prefer_html=config.email.prefer_html,
+            full_headers=config.email.full_headers,
+            include_attachments=config.email.include_attachments,
+        )
+
+    from deep_thought.file_txt.engines.msg_engine import convert_msg
+
+    return convert_msg(
+        source_path,
+        prefer_html=config.email.prefer_html,
+        full_headers=config.email.full_headers,
+        include_attachments=config.email.include_attachments,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -119,6 +155,7 @@ def convert_file(
 
     Dispatch logic:
     - .pdf → Marker engine
+    - .eml, .msg → Email engines
     - all other allowed types → MarkItDown engine
 
     On dry-run, the conversion engines are not called; a ConvertResult with
@@ -170,10 +207,13 @@ def convert_file(
     errors: list[str] = []
     markdown_text: str = ""
     page_count: int | None = None
+    email_metadata: dict[str, Any] | None = None
 
     try:
         if source_path.suffix.lower() == _PDF_EXTENSION:
             markdown_text, page_count = _convert_via_marker(source_path, config)
+        elif source_path.suffix.lower() in _EMAIL_EXTENSIONS:
+            markdown_text, email_metadata = _convert_via_email_engine(source_path, config)
         else:
             markdown_text, page_count = _convert_via_markitdown(source_path)
     except Exception as conversion_error:
@@ -211,6 +251,7 @@ def convert_file(
             page_count=page_count,
             word_count=word_count,
             has_images=has_images,
+            email_metadata=email_metadata,
         )
     except Exception as write_error:
         errors.append(f"Failed to write output: {write_error}")

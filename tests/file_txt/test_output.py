@@ -94,6 +94,77 @@ class TestBuildFrontmatter:
 
 
 # ---------------------------------------------------------------------------
+# _build_frontmatter — email metadata
+# ---------------------------------------------------------------------------
+
+
+class TestBuildFrontmatterEmail:
+    def test_email_frontmatter_contains_email_fields(self) -> None:
+        """Email metadata fields must appear in the frontmatter when provided."""
+        email_metadata = {
+            "from_address": "sender@example.com",
+            "to_address": "recipient@example.com",
+            "subject": "Project Update",
+            "date": "2026-03-15T09:30:00Z",
+            "has_attachments": True,
+            "attachment_count": 2,
+        }
+        frontmatter = _build_frontmatter(
+            source_file="message.eml",
+            file_type="eml",
+            page_count=None,
+            word_count=150,
+            has_images=False,
+            processed_date="2026-03-21T00:00:00+00:00",
+            email_metadata=email_metadata,
+        )
+        assert 'from: "sender@example.com"' in frontmatter
+        assert 'to: "recipient@example.com"' in frontmatter
+        assert 'subject: "Project Update"' in frontmatter
+        assert 'date: "2026-03-15T09:30:00Z"' in frontmatter
+        assert "has_attachments: true" in frontmatter
+        assert "attachment_count: 2" in frontmatter
+
+    def test_email_frontmatter_omits_page_count(self) -> None:
+        """Email frontmatter must not include page_count when None."""
+        email_metadata = {
+            "from_address": "a@b.com",
+            "to_address": "c@d.com",
+            "subject": "Test",
+            "date": "2026-03-15T09:30:00Z",
+            "has_attachments": False,
+            "attachment_count": 0,
+        }
+        frontmatter = _build_frontmatter(
+            source_file="message.eml",
+            file_type="eml",
+            page_count=None,
+            word_count=50,
+            has_images=False,
+            processed_date="2026-03-21T00:00:00+00:00",
+            email_metadata=email_metadata,
+        )
+        assert "page_count" not in frontmatter
+
+    def test_non_email_frontmatter_omits_email_fields(self) -> None:
+        """When email_metadata is None, email fields must not appear."""
+        frontmatter = _build_frontmatter(
+            source_file="report.pdf",
+            file_type="pdf",
+            page_count=10,
+            word_count=2000,
+            has_images=False,
+            processed_date="2026-03-21T00:00:00+00:00",
+            email_metadata=None,
+        )
+        assert "from:" not in frontmatter
+        assert "to:" not in frontmatter
+        assert "subject:" not in frontmatter
+        assert "has_attachments:" not in frontmatter
+        assert "attachment_count:" not in frontmatter
+
+
+# ---------------------------------------------------------------------------
 # write_document
 # ---------------------------------------------------------------------------
 
@@ -194,6 +265,62 @@ class TestWriteDocument:
             has_images=False,
         )
         assert output_path.exists()
+
+    def test_collision_with_different_source_adds_extension_suffix(self, tmp_path: Path) -> None:
+        """When a same-stem directory exists for a different source file, append extension suffix."""
+        # First write: report.pdf -> report/report.md
+        pdf_source = Path("/input/report.pdf")
+        first_output = write_document(
+            "PDF content.",
+            pdf_source,
+            tmp_path,
+            file_type="pdf",
+            page_count=3,
+            word_count=2,
+            has_images=False,
+        )
+        assert first_output == tmp_path / "report" / "report.md"
+
+        # Second write: report.docx shares the stem "report" but is a different source
+        docx_source = Path("/input/report.docx")
+        second_output = write_document(
+            "DOCX content.",
+            docx_source,
+            tmp_path,
+            file_type="docx",
+            page_count=None,
+            word_count=2,
+            has_images=False,
+        )
+        # Must be disambiguated to report_docx/report_docx.md
+        assert second_output == tmp_path / "report_docx" / "report_docx.md"
+        assert second_output.exists()
+
+    def test_no_collision_when_same_source_rewrites(self, tmp_path: Path) -> None:
+        """Re-writing the same source file must overwrite in place without a suffix."""
+        source_path = Path("/input/report.pdf")
+        first_output = write_document(
+            "Original content.",
+            source_path,
+            tmp_path,
+            file_type="pdf",
+            page_count=3,
+            word_count=2,
+            has_images=False,
+        )
+        second_output = write_document(
+            "Updated content.",
+            source_path,
+            tmp_path,
+            file_type="pdf",
+            page_count=3,
+            word_count=2,
+            has_images=False,
+        )
+        # Both should resolve to the same path — no suffix appended
+        assert first_output == second_output
+        assert second_output == tmp_path / "report" / "report.md"
+        assert "Updated content." in second_output.read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------

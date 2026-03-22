@@ -31,7 +31,18 @@ from deep_thought.file_txt.llms import DocumentSummary, write_llms_full, write_l
 
 logger = logging.getLogger(__name__)
 
-_VERSION = "0.1.0"
+
+def _get_version() -> str:
+    """Return the package version from metadata, falling back to a default."""
+    try:
+        from importlib.metadata import version
+
+        return version("deep-thought")
+    except Exception:
+        return "0.1.0"
+
+
+_VERSION = _get_version()
 
 
 # ---------------------------------------------------------------------------
@@ -90,8 +101,8 @@ def _resolve_output_root(args: argparse.Namespace, config: FileTxtConfig) -> Pat
 def _build_config_with_overrides(args: argparse.Namespace, config: FileTxtConfig) -> FileTxtConfig:
     """Return a new FileTxtConfig with CLI flag overrides applied.
 
-    --force-ocr and --torch-device override marker settings so that
-    ad-hoc CLI invocations do not require editing the YAML file.
+    --force-ocr, --torch-device, and email flags override config settings
+    so that ad-hoc CLI invocations do not require editing the YAML file.
 
     Args:
         args: Parsed argparse namespace.
@@ -104,15 +115,25 @@ def _build_config_with_overrides(args: argparse.Namespace, config: FileTxtConfig
 
     updated_marker = replace(
         config.marker,
-        force_ocr=args.force_ocr if args.force_ocr else config.marker.force_ocr,
+        force_ocr=args.force_ocr if args.force_ocr is not None else config.marker.force_ocr,
         torch_device=args.torch_device if args.torch_device else config.marker.torch_device,
     )
-    updated_include_page_numbers = args.include_page_numbers or config.output.include_page_numbers
     updated_output = replace(
         config.output,
-        include_page_numbers=updated_include_page_numbers,
+        include_page_numbers=(
+            args.include_page_numbers if args.include_page_numbers is not None else config.output.include_page_numbers
+        ),
+        extract_images=args.extract_images if args.extract_images is not None else config.output.extract_images,
     )
-    return replace(config, marker=updated_marker, output=updated_output)
+    updated_email = replace(
+        config.email,
+        prefer_html=args.prefer_html if args.prefer_html is not None else config.email.prefer_html,
+        full_headers=args.full_headers if args.full_headers is not None else config.email.full_headers,
+        include_attachments=(
+            args.include_attachments if args.include_attachments is not None else config.email.include_attachments
+        ),
+    )
+    return replace(config, marker=updated_marker, output=updated_output, email=updated_email)
 
 
 def _result_to_document_summary(result: ConvertResult, output_root: Path) -> DocumentSummary | None:
@@ -138,9 +159,9 @@ def _result_to_document_summary(result: ConvertResult, output_root: Path) -> Doc
     raw_content = result.output_path.read_text(encoding="utf-8")
 
     # Strip frontmatter for LLM context — import inline to avoid circular
-    from deep_thought.file_txt.llms import _strip_frontmatter  # noqa: PLC2701
+    from deep_thought.file_txt.llms import strip_frontmatter
 
-    content = _strip_frontmatter(raw_content)
+    content = strip_frontmatter(raw_content)
 
     return DocumentSummary(
         name=result.source_path.stem,
@@ -171,6 +192,11 @@ def cmd_convert(args: argparse.Namespace) -> None:
     """
     config = _load_config_from_args(args)
     config = _build_config_with_overrides(args, config)
+
+    validation_issues = validate_config(config)
+    if validation_issues:
+        for issue_text in validation_issues:
+            print(f"WARNING: {issue_text}", file=sys.stderr)
 
     input_path = Path(args.path)
     output_root = _resolve_output_root(args, config)
@@ -270,6 +296,10 @@ def cmd_config(args: argparse.Namespace) -> None:
     print(f"  torch_device:          {config.marker.torch_device}")
     print(f"  force_ocr:             {config.marker.force_ocr}")
     print()
+    print(f"  prefer_html:           {config.email.prefer_html}")
+    print(f"  full_headers:          {config.email.full_headers}")
+    print(f"  include_attachments:   {config.email.include_attachments}")
+    print()
     print(f"  output_dir:            {config.output.output_dir}")
     print(f"  include_page_numbers:  {config.output.include_page_numbers}")
     print(f"  extract_images:        {config.output.extract_images}")
@@ -321,7 +351,7 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     """
     root_parser = argparse.ArgumentParser(
         prog="file-txt",
-        description="Convert PDF and Office files to markdown.",
+        description="Convert PDF, Office, and email files to markdown.",
     )
 
     root_parser.add_argument(
@@ -391,7 +421,7 @@ def _build_root_parser_with_convert_defaults() -> argparse.ArgumentParser:
     """
     root_parser = argparse.ArgumentParser(
         prog="file-txt",
-        description="Convert PDF and Office files to markdown.",
+        description="Convert PDF, Office, and email files to markdown.",
         add_help=False,
     )
 
@@ -432,21 +462,45 @@ def _add_convert_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--force-ocr",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=None,
         help="Force OCR for PDF files even when text is extractable directly.",
     )
     parser.add_argument(
         "--torch-device",
-        metavar="TEXT",
+        choices=["mps", "cuda", "cpu"],
         default=None,
         help="Hardware device for Marker: 'mps', 'cuda', or 'cpu'.",
     )
     parser.add_argument(
         "--include-page-numbers",
-        action="store_true",
-        default=False,
+        action=argparse.BooleanOptionalAction,
+        default=None,
         help="Retain page number markers in PDF output.",
+    )
+    parser.add_argument(
+        "--extract-images",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Extract embedded images to img/ subdirectories.",
+    )
+    parser.add_argument(
+        "--prefer-html",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="For email files: prefer HTML body (converted to markdown) over plain text.",
+    )
+    parser.add_argument(
+        "--full-headers",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Include additional headers beyond From/To/Date (email only).",
+    )
+    parser.add_argument(
+        "--include-attachments",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="For email files: include attachment metadata in output (default: from config).",
     )
     parser.add_argument(
         "--nuke",
@@ -459,12 +513,6 @@ def _add_convert_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         default=False,
         help="Show what would be converted without writing any files.",
-    )
-    parser.add_argument(
-        "--save-config",
-        metavar="PATH",
-        default=None,
-        help="Save the resolved configuration to a YAML file and exit.",
     )
 
 
@@ -498,6 +546,9 @@ def main() -> None:
     args, remaining_args = argument_parser.parse_known_args()
 
     _setup_logging(args.verbose)
+
+    if remaining_args and args.subcommand is not None:
+        print(f"WARNING: Unrecognized arguments ignored: {' '.join(remaining_args)}", file=sys.stderr)
 
     if args.subcommand is None:
         # No subcommand: re-parse the full argv as a direct conversion call

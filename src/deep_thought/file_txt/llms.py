@@ -36,7 +36,7 @@ class DocumentSummary:
 # ---------------------------------------------------------------------------
 
 
-def _strip_frontmatter(markdown_text: str) -> str:
+def strip_frontmatter(markdown_text: str) -> str:
     """Remove YAML frontmatter from a markdown string.
 
     Frontmatter is defined as content between the first two ``---`` lines

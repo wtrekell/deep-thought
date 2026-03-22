@@ -2,11 +2,28 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+_KNOWN_CONFIG_KEYS = frozenset(
+    {
+        "force_ocr",
+        "torch_device",
+        "prefer_html",
+        "full_headers",
+        "include_attachments",
+        "output_dir",
+        "include_page_numbers",
+        "extract_images",
+        "max_file_size_mb",
+        "allowed_extensions",
+        "exclude_patterns",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -19,6 +36,15 @@ class MarkerConfig:
 
     force_ocr: bool
     torch_device: str
+
+
+@dataclass
+class EmailConfig:
+    """Configuration for email (.eml/.msg) conversion."""
+
+    prefer_html: bool
+    full_headers: bool
+    include_attachments: bool
 
 
 @dataclass
@@ -50,6 +76,7 @@ class FileTxtConfig:
     """Top-level configuration for the file-txt tool."""
 
     marker: MarkerConfig
+    email: EmailConfig
     output: OutputConfig
     limits: LimitsConfig
     filter: FilterConfig
@@ -59,13 +86,19 @@ class FileTxtConfig:
 # Path helpers
 # ---------------------------------------------------------------------------
 
-_PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-_DEFAULT_CONFIG_RELATIVE_PATH = Path("src") / "config" / "file-txt-configuration.yaml"
-
 
 def get_default_config_path() -> Path:
-    """Return the absolute path to the default YAML configuration file."""
-    return _PROJECT_ROOT / _DEFAULT_CONFIG_RELATIVE_PATH
+    """Return the absolute path to the default YAML configuration file.
+
+    Resolves relative to this source file's location in the package tree.
+    Works in both editable installs (``pip install -e .``) and direct
+    source tree usage.
+    """
+    # config.py lives at src/deep_thought/file_txt/config.py
+    # Config file lives at src/config/file-txt-configuration.yaml
+    package_root = Path(__file__).resolve().parent.parent  # -> src/deep_thought
+    source_root = package_root.parent  # -> src/
+    return source_root / "config" / "file-txt-configuration.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +116,7 @@ def _parse_marker_config(raw: dict[str, Any]) -> MarkerConfig:
         A MarkerConfig with force_ocr and torch_device populated.
     """
     force_ocr: bool = raw.get("force_ocr", False)
-    torch_device: str = raw.get("torch_device", "cpu")
+    torch_device: str = raw.get("torch_device", "mps")
     return MarkerConfig(force_ocr=force_ocr, torch_device=torch_device)
 
 
@@ -119,6 +152,21 @@ def _parse_limits_config(raw: dict[str, Any]) -> LimitsConfig:
     if not isinstance(raw_max_mb, int):
         raise ValueError(f"max_file_size_mb must be an integer, got: {type(raw_max_mb).__name__}")
     return LimitsConfig(max_file_size_mb=raw_max_mb)
+
+
+def _parse_email_config(raw: dict[str, Any]) -> EmailConfig:
+    """Parse the email-related fields from the top-level YAML mapping.
+
+    Args:
+        raw: The full YAML mapping as a dict.
+
+    Returns:
+        An EmailConfig with prefer_html, full_headers, and include_attachments populated.
+    """
+    prefer_html: bool = raw.get("prefer_html", False)
+    full_headers: bool = raw.get("full_headers", False)
+    include_attachments: bool = raw.get("include_attachments", True)
+    return EmailConfig(prefer_html=prefer_html, full_headers=full_headers, include_attachments=include_attachments)
 
 
 def _parse_filter_config(raw: dict[str, Any]) -> FilterConfig:
@@ -178,12 +226,19 @@ def load_config(config_path: Path | None = None) -> FileTxtConfig:
     raw_dict: dict[str, Any] = raw
 
     marker_config = _parse_marker_config(raw_dict)
+    email_config = _parse_email_config(raw_dict)
     output_config = _parse_output_config(raw_dict)
     limits_config = _parse_limits_config(raw_dict)
     filter_config = _parse_filter_config(raw_dict)
 
+    unknown_keys = set(raw_dict.keys()) - _KNOWN_CONFIG_KEYS
+    if unknown_keys:
+        config_logger = logging.getLogger(__name__)
+        config_logger.warning("Unknown configuration keys (possibly misspelled): %s", sorted(unknown_keys))
+
     return FileTxtConfig(
         marker=marker_config,
+        email=email_config,
         output=output_config,
         limits=limits_config,
         filter=filter_config,
