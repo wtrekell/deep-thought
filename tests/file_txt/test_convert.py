@@ -7,7 +7,14 @@ from unittest.mock import patch
 
 import pytest
 
-from deep_thought.file_txt.config import FileTxtConfig, FilterConfig, LimitsConfig, MarkerConfig, OutputConfig
+from deep_thought.file_txt.config import (
+    EmailConfig,
+    FileTxtConfig,
+    FilterConfig,
+    LimitsConfig,
+    MarkerConfig,
+    OutputConfig,
+)
 from deep_thought.file_txt.convert import convert_file
 
 # ---------------------------------------------------------------------------
@@ -26,6 +33,7 @@ def _make_config(
     """Return a FileTxtConfig with sensible test defaults."""
     return FileTxtConfig(
         marker=MarkerConfig(force_ocr=force_ocr, torch_device=torch_device),
+        email=EmailConfig(prefer_html=False, full_headers=False, include_attachments=True),
         output=OutputConfig(
             output_dir=output_dir,
             include_page_numbers=include_page_numbers,
@@ -315,3 +323,117 @@ class TestConvertFileImageExtraction:
             convert_file(source_file, output_root, config)
 
         mock_extract.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Email conversion dispatch
+# ---------------------------------------------------------------------------
+
+
+class TestConvertFileEmail:
+    def test_eml_dispatches_to_email_engine(self, tmp_path: Path) -> None:
+        """A .eml file must trigger a call to the email conversion engine."""
+        source_file = tmp_path / "message.eml"
+        _write_small_file(source_file)
+        config = _make_config()
+        output_root = tmp_path / "output"
+
+        mock_markdown = "# Test Subject\n\n**From:** sender@test.com"
+        mock_metadata = {
+            "from_address": "sender@test.com",
+            "to_address": "recipient@test.com",
+            "subject": "Test Subject",
+            "date": "2026-03-22T10:00:00",
+            "has_attachments": False,
+            "attachment_count": 0,
+            "attachments": [],
+        }
+
+        with (
+            patch("deep_thought.file_txt.convert._convert_via_email_engine") as mock_email,
+            patch("deep_thought.file_txt.convert.write_document") as mock_write,
+        ):
+            mock_email.return_value = (mock_markdown, mock_metadata)
+            mock_write.return_value = output_root / "message" / "message.md"
+
+            result = convert_file(source_file, output_root, config)
+
+        mock_email.assert_called_once_with(source_file, config)
+        assert result.file_type == "eml"
+        assert result.page_count is None
+
+    def test_msg_dispatches_to_email_engine(self, tmp_path: Path) -> None:
+        """A .msg file must trigger a call to the email conversion engine."""
+        source_file = tmp_path / "message.msg"
+        _write_small_file(source_file)
+        config = _make_config()
+        output_root = tmp_path / "output"
+
+        mock_markdown = "# Test Subject\n\n**From:** sender@test.com"
+        mock_metadata = {
+            "from_address": "sender@test.com",
+            "to_address": "recipient@test.com",
+            "subject": "Test Subject",
+            "date": "2026-03-22T10:00:00",
+            "has_attachments": False,
+            "attachment_count": 0,
+            "attachments": [],
+        }
+
+        with (
+            patch("deep_thought.file_txt.convert._convert_via_email_engine") as mock_email,
+            patch("deep_thought.file_txt.convert.write_document") as mock_write,
+        ):
+            mock_email.return_value = (mock_markdown, mock_metadata)
+            mock_write.return_value = output_root / "message" / "message.md"
+
+            result = convert_file(source_file, output_root, config)
+
+        mock_email.assert_called_once_with(source_file, config)
+        assert result.file_type == "msg"
+
+    def test_email_metadata_passed_to_write_document(self, tmp_path: Path) -> None:
+        """The email_metadata dict must be forwarded to write_document."""
+        source_file = tmp_path / "message.eml"
+        _write_small_file(source_file)
+        config = _make_config()
+        output_root = tmp_path / "output"
+
+        mock_metadata = {
+            "from_address": "sender@test.com",
+            "to_address": "recipient@test.com",
+            "subject": "Test",
+            "date": "2026-03-22T10:00:00",
+            "has_attachments": False,
+            "attachment_count": 0,
+            "attachments": [],
+        }
+
+        with (
+            patch("deep_thought.file_txt.convert._convert_via_email_engine") as mock_email,
+            patch("deep_thought.file_txt.convert.write_document") as mock_write,
+        ):
+            mock_email.return_value = ("# Test", mock_metadata)
+            mock_write.return_value = output_root / "message" / "message.md"
+
+            convert_file(source_file, output_root, config)
+
+        write_call_kwargs = mock_write.call_args[1]
+        assert write_call_kwargs["email_metadata"] == mock_metadata
+
+    @pytest.mark.error_handling
+    def test_email_engine_error_recorded_in_result(self, tmp_path: Path) -> None:
+        """An exception from the email engine must be recorded in result.errors."""
+        source_file = tmp_path / "broken.eml"
+        _write_small_file(source_file)
+        config = _make_config()
+        output_root = tmp_path / "output"
+
+        with patch("deep_thought.file_txt.convert._convert_via_email_engine") as mock_email:
+            mock_email.side_effect = RuntimeError("Parse failed")
+
+            result = convert_file(source_file, output_root, config)
+
+        assert len(result.errors) > 0
+        assert "Conversion failed" in result.errors[0]
+        assert result.output_path is None

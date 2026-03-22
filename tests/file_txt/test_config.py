@@ -8,11 +8,13 @@ import pytest
 
 from deep_thought.file_txt.config import (
     FileTxtConfig,
+    _parse_email_config,
     _parse_filter_config,
     _parse_limits_config,
     _parse_marker_config,
     _parse_output_config,
     load_config,
+    save_default_config,
     validate_config,
 )
 
@@ -52,10 +54,23 @@ class TestLoadConfig:
         assert isinstance(config.filter.allowed_extensions, list)
         assert len(config.filter.allowed_extensions) > 0
 
+    def test_email_config_parsed(self) -> None:
+        """Email fields must be read from the YAML root."""
+        config = load_config()
+        assert isinstance(config.email.prefer_html, bool)
+        assert isinstance(config.email.full_headers, bool)
+        assert isinstance(config.email.include_attachments, bool)
+
     def test_allowed_extensions_contain_pdf(self) -> None:
         """The default config must include .pdf in allowed extensions."""
         config = load_config()
         assert ".pdf" in config.filter.allowed_extensions
+
+    def test_allowed_extensions_contain_eml_and_msg(self) -> None:
+        """The default config must include .eml and .msg in allowed extensions."""
+        config = load_config()
+        assert ".eml" in config.filter.allowed_extensions
+        assert ".msg" in config.filter.allowed_extensions
 
     @pytest.mark.error_handling
     def test_missing_file_raises_file_not_found(self, tmp_path: Path) -> None:
@@ -98,6 +113,41 @@ class TestLoadConfig:
         assert config.marker.force_ocr is True
         assert config.marker.torch_device == "cuda"
         assert config.limits.max_file_size_mb == 50
+
+    def test_unknown_keys_emit_warning(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        """Unknown keys in the YAML must emit a WARNING and not raise an error."""
+        yaml_with_typo = tmp_path / "typo.yaml"
+        yaml_with_typo.write_text(
+            "force_ocr: false\ntorch_device: cpu\n"
+            "output_dir: output/\ninclude_page_numbers: false\nextract_images: true\n"
+            "max_file_size_mb: 100\nallowed_extensions: ['.pdf']\nexclude_patterns: []\n"
+            "forcc_ocr: true\n",  # misspelled key
+            encoding="utf-8",
+        )
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="deep_thought.file_txt.config"):
+            config = load_config(yaml_with_typo)
+
+        assert isinstance(config, FileTxtConfig)
+        assert any("forcc_ocr" in record.message for record in caplog.records)
+
+    def test_known_keys_do_not_emit_warning(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+        """A config with only known keys must not emit any unknown-key warning."""
+        clean_yaml = tmp_path / "clean.yaml"
+        clean_yaml.write_text(
+            "force_ocr: false\ntorch_device: cpu\n"
+            "output_dir: output/\ninclude_page_numbers: false\nextract_images: true\n"
+            "max_file_size_mb: 100\nallowed_extensions: ['.pdf']\nexclude_patterns: []\n",
+            encoding="utf-8",
+        )
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="deep_thought.file_txt.config"):
+            load_config(clean_yaml)
+
+        unknown_key_warnings = [r for r in caplog.records if "possibly misspelled" in r.message]
+        assert unknown_key_warnings == []
 
 
 # ---------------------------------------------------------------------------
@@ -183,7 +233,7 @@ class TestParseMarkerConfig:
         """Missing keys must fall back to sensible defaults."""
         result = _parse_marker_config({})
         assert result.force_ocr is False
-        assert result.torch_device == "cpu"
+        assert result.torch_device == "mps"
 
 
 # ---------------------------------------------------------------------------
@@ -255,3 +305,59 @@ class TestParseFilterConfigFileTxt:
         result = _parse_filter_config({})
         assert result.allowed_extensions == []
         assert result.exclude_patterns == []
+
+
+# ---------------------------------------------------------------------------
+# _parse_email_config (internal helper)
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# save_default_config
+# ---------------------------------------------------------------------------
+
+
+class TestSaveDefaultConfig:
+    def test_writes_config_to_destination(self, tmp_path: Path) -> None:
+        """save_default_config must write the bundled config to the given path."""
+        destination_file = tmp_path / "config.yaml"
+        save_default_config(destination_file)
+        assert destination_file.exists()
+        written_content = destination_file.read_text(encoding="utf-8")
+        assert "force_ocr" in written_content
+
+    @pytest.mark.error_handling
+    def test_raises_if_file_exists(self, tmp_path: Path) -> None:
+        """save_default_config must raise FileExistsError if destination exists."""
+        destination_file = tmp_path / "config.yaml"
+        destination_file.write_text("existing content", encoding="utf-8")
+        with pytest.raises(FileExistsError):
+            save_default_config(destination_file)
+
+    def test_creates_parent_directories(self, tmp_path: Path) -> None:
+        """save_default_config must create parent dirs if they don't exist."""
+        destination_file = tmp_path / "nested" / "deep" / "config.yaml"
+        save_default_config(destination_file)
+        assert destination_file.exists()
+
+
+# ---------------------------------------------------------------------------
+# _parse_email_config (internal helper)
+# ---------------------------------------------------------------------------
+
+
+class TestParseEmailConfig:
+    def test_reads_all_email_fields(self) -> None:
+        """All three email fields must be parsed from the top-level dict."""
+        raw = {"prefer_html": True, "full_headers": True, "include_attachments": False}
+        result = _parse_email_config(raw)
+        assert result.prefer_html is True
+        assert result.full_headers is True
+        assert result.include_attachments is False
+
+    def test_defaults_when_keys_absent(self) -> None:
+        """Missing keys must fall back to sensible defaults."""
+        result = _parse_email_config({})
+        assert result.prefer_html is False
+        assert result.full_headers is False
+        assert result.include_attachments is True

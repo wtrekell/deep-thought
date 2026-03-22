@@ -6,7 +6,7 @@ from pathlib import Path  # noqa: TC003
 
 from deep_thought.file_txt.llms import (
     DocumentSummary,
-    _strip_frontmatter,
+    strip_frontmatter,
     write_llms_full,
     write_llms_index,
 )
@@ -44,26 +44,26 @@ class TestStripFrontmatter:
     def test_removes_frontmatter_block(self) -> None:
         """A document with frontmatter must have the block stripped."""
         text = "---\ntool: file-txt\n---\n# Title\n\nBody."
-        result = _strip_frontmatter(text)
+        result = strip_frontmatter(text)
         assert "tool: file-txt" not in result
         assert "# Title" in result
 
     def test_returns_unchanged_when_no_frontmatter(self) -> None:
         """Text without a leading --- must be returned unchanged."""
         text = "# Title\n\nBody content."
-        result = _strip_frontmatter(text)
+        result = strip_frontmatter(text)
         assert result == text
 
     def test_handles_document_with_only_frontmatter(self) -> None:
         """A document containing only a frontmatter block must return empty string."""
         text = "---\ntool: file-txt\n---\n"
-        result = _strip_frontmatter(text)
+        result = strip_frontmatter(text)
         assert result.strip() == ""
 
     def test_unclosed_frontmatter_returned_unchanged(self) -> None:
         """A --- that is never closed must leave the text unchanged."""
         text = "---\ntool: file-txt\n# Title"
-        result = _strip_frontmatter(text)
+        result = strip_frontmatter(text)
         assert result == text
 
 

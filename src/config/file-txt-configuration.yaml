@@ -2,6 +2,11 @@
 force_ocr: false
 torch_device: "mps" # 'mps', 'cuda', or 'cpu'
 
+# Email
+prefer_html: false
+full_headers: false
+include_attachments: true
+
 # Output
 output_dir: "output/"
 include_page_numbers: false
@@ -18,6 +23,8 @@ allowed_extensions:
   - ".xlsx"
   - ".html"
   - ".htm"
+  - ".eml"
+  - ".msg"
 exclude_patterns:
   - "~$*"
   - ".*"
