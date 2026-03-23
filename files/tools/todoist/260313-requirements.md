@@ -216,6 +216,16 @@ Tables mirror the Todoist entities listed in the requirements: `projects`, `sect
      - branch: { branch_name }
    ```
 
+## Error Handling
+
+- `todoist-api-python` SDK errors (auth failures, rate limits, network timeouts) — caught per-item during pull/push/sync so one failed task, project, or comment does not halt the entire operation; failed items are logged with their Todoist ID and the run continues with remaining items.
+- `ResultsPaginator` edge cases (empty pages, mid-pagination failures) — caught per-entity-type in the client wrapper; partial results are preserved and the failure is logged.
+- `FileNotFoundError` — missing config file at the resolved path.
+- `OSError` — missing environment variables (e.g., `TODOIST_API_TOKEN` not set).
+- `ValueError` — invalid configuration content (malformed YAML, unknown filter keys, type mismatches).
+- Top-level `try/except` in CLI entry point catches all above and prints descriptive messages.
+- Exit codes: `0` all items succeeded, `1` fatal error, `2` partial failure (some items errored).
+
 ## Pre-Build Tasks
 
 1. ~~Update data format section to reflect that data is only consumed by Claude.~~ Done — data format updated to note Claude-only consumption, markdown switched to key-value metadata for machine parsing.

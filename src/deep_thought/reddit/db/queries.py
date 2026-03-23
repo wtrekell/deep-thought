@@ -5,17 +5,16 @@ All functions accept an open sqlite3.Connection as their first argument and
 return plain Python types (dicts, lists, None). No business logic lives here —
 these are thin wrappers over SQL that the application layer calls directly.
 
-Upsert strategy: INSERT OR REPLACE replaces the entire row when the primary
-key conflicts. This is safe because we always provide all columns.
+Upsert strategy: INSERT ... ON CONFLICT(state_key) DO UPDATE SET is used so
+that the original `created_at` timestamp is preserved across re-processing.
 
 Timestamps:
 - `synced_at` is always set to the current UTC time at the moment of the write,
   marking when the local database last received data from the Reddit API.
 - `updated_at` is also set to now on every write, since every upsert reflects
   a change in the locally stored state.
-- `created_at` is passed in from the caller's data dict on first insertion.
-  INSERT OR REPLACE will overwrite it on subsequent upserts, so callers must
-  supply the original created_at value when updating an existing post.
+- `created_at` is set on first insertion and excluded from the ON CONFLICT
+  UPDATE clause so it is never overwritten by subsequent upserts.
 """
 
 from __future__ import annotations
@@ -52,11 +51,11 @@ def _rows_to_dicts(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
 
 
 def upsert_collected_post(conn: sqlite3.Connection, post_dict: dict[str, Any]) -> None:
-    """Insert or replace a collected post row. Sets updated_at and synced_at to now.
+    """Insert or update a collected post row. Sets updated_at and synced_at to now.
 
-    Uses INSERT OR REPLACE, which replaces the entire row on primary key
-    conflict (state_key). The caller must supply created_at in post_dict so
-    that the original collection timestamp is preserved across updates.
+    Uses INSERT ... ON CONFLICT(state_key) DO UPDATE SET so that the original
+    ``created_at`` timestamp is preserved across re-processing. All other
+    mutable columns are overwritten with the incoming values.
 
     The state_key must be pre-constructed by the caller as:
         "{post_id}:{subreddit}:{rule_name}"
@@ -72,7 +71,7 @@ def upsert_collected_post(conn: sqlite3.Connection, post_dict: dict[str, Any]) -
     now_iso = _now_utc_iso()
     conn.execute(
         """
-        INSERT OR REPLACE INTO collected_posts (
+        INSERT INTO collected_posts (
             state_key,
             post_id,
             subreddit,
@@ -108,7 +107,23 @@ def upsert_collected_post(conn: sqlite3.Connection, post_dict: dict[str, Any]) -
             :created_at,
             :updated_at,
             :synced_at
-        );
+        )
+        ON CONFLICT(state_key) DO UPDATE SET
+            post_id        = excluded.post_id,
+            subreddit      = excluded.subreddit,
+            rule_name      = excluded.rule_name,
+            title          = excluded.title,
+            author         = excluded.author,
+            score          = excluded.score,
+            comment_count  = excluded.comment_count,
+            url            = excluded.url,
+            is_video       = excluded.is_video,
+            flair          = excluded.flair,
+            word_count     = excluded.word_count,
+            output_path    = excluded.output_path,
+            status         = excluded.status,
+            updated_at     = excluded.updated_at,
+            synced_at      = excluded.synced_at;
         """,
         {**post_dict, "updated_at": now_iso, "synced_at": now_iso},
     )

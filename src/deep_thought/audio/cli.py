@@ -91,8 +91,8 @@ def _build_config_with_overrides(args: argparse.Namespace, config: AudioConfig) 
     """Return a new AudioConfig with CLI flag overrides applied.
 
     CLI flags override YAML config values so ad-hoc invocations do not require
-    editing the config file. Only non-None / non-False values from args replace
-    the config — unset flags leave the loaded config value intact.
+    editing the config file. Only non-None values from args replace the config —
+    unset flags (None) leave the loaded config value intact.
 
     Args:
         args: Parsed argparse namespace.
@@ -105,22 +105,22 @@ def _build_config_with_overrides(args: argparse.Namespace, config: AudioConfig) 
 
     updated_engine = replace(
         config.engine,
-        engine=args.engine if args.engine else config.engine.engine,
-        model=args.model if args.model else config.engine.model,
-        language=args.language if args.language else config.engine.language,
+        engine=args.engine if args.engine is not None else config.engine.engine,
+        model=args.model if args.model is not None else config.engine.model,
+        language=args.language if args.language is not None else config.engine.language,
     )
     updated_output = replace(
         config.output,
-        output_mode=args.output_mode if args.output_mode else config.output.output_mode,
+        output_mode=args.output_mode if args.output_mode is not None else config.output.output_mode,
         pause_threshold=args.pause_threshold if args.pause_threshold is not None else config.output.pause_threshold,
     )
     updated_diarization = replace(
         config.diarization,
-        diarize=args.diarize if args.diarize else config.diarization.diarize,
+        diarize=args.diarize if args.diarize is not None else config.diarization.diarize,
     )
     updated_filler = replace(
         config.filler,
-        remove_fillers=args.remove_fillers if args.remove_fillers else config.filler.remove_fillers,
+        remove_fillers=args.remove_fillers if args.remove_fillers is not None else config.filler.remove_fillers,
     )
 
     return replace(
@@ -194,6 +194,7 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
         nuke=args.nuke,
     )
 
+    conn.commit()
     conn.close()
 
     if not results:
@@ -391,9 +392,9 @@ def _add_transcribe_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--diarize",
-        action="store_true",
-        default=False,
-        help="Enable speaker identification.",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Enable speaker identification (--no-diarize to disable).",
     )
     parser.add_argument(
         "--pause-threshold",
@@ -404,9 +405,9 @@ def _add_transcribe_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--remove-fillers",
-        action="store_true",
-        default=False,
-        help="Strip filler words.",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Strip filler words (--no-remove-fillers to disable).",
     )
     parser.add_argument(
         "--llm",
@@ -548,6 +549,9 @@ def main() -> None:
     args, _remaining = argument_parser.parse_known_args()
 
     _setup_logging(args.verbose)
+
+    if _remaining and args.subcommand is not None:
+        logger.warning("Unrecognized arguments ignored: %s", " ".join(_remaining))
 
     if args.subcommand is None:
         # No subcommand: re-parse the full argv as a direct transcription call

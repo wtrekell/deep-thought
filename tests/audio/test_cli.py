@@ -83,9 +83,9 @@ def _make_transcribe_args(**kwargs: object) -> MagicMock:
     args.model = None
     args.language = None
     args.output_mode = None
-    args.diarize = False
+    args.diarize = None
     args.pause_threshold = None
-    args.remove_fillers = False
+    args.remove_fillers = None
     args.nuke = False
     args.dry_run = False
     args.force = False
@@ -181,6 +181,30 @@ class TestArgumentParser:
         parser = _build_argument_parser()
         args = parser.parse_args(["transcribe"])
         assert args.input == "input/"
+
+    def test_diarize_defaults_to_none(self) -> None:
+        """The --diarize flag must default to None when not specified."""
+        parser = _build_argument_parser()
+        args = parser.parse_args(["transcribe"])
+        assert args.diarize is None
+
+    def test_no_diarize_flag_parses_as_false(self) -> None:
+        """Passing --no-diarize must set args.diarize to False."""
+        parser = _build_argument_parser()
+        args = parser.parse_args(["transcribe", "--no-diarize"])
+        assert args.diarize is False
+
+    def test_remove_fillers_defaults_to_none(self) -> None:
+        """The --remove-fillers flag must default to None when not specified."""
+        parser = _build_argument_parser()
+        args = parser.parse_args(["transcribe"])
+        assert args.remove_fillers is None
+
+    def test_no_remove_fillers_flag_parses_as_false(self) -> None:
+        """Passing --no-remove-fillers must set args.remove_fillers to False."""
+        parser = _build_argument_parser()
+        args = parser.parse_args(["transcribe", "--no-remove-fillers"])
+        assert args.remove_fillers is False
 
 
 # ---------------------------------------------------------------------------
@@ -381,6 +405,42 @@ class TestConfigOverrides:
         """_build_config_with_overrides must enable filler removal when --remove-fillers is set."""
         base_config = _make_config(remove_fillers=False)
         args = _make_transcribe_args(remove_fillers=True)
+
+        updated_config = _build_config_with_overrides(args, base_config)
+
+        assert updated_config.filler.remove_fillers is True
+
+    def test_no_diarize_flag_disables_config_enabled_diarization(self) -> None:
+        """--no-diarize must disable diarization even when the config has diarize: true."""
+        base_config = _make_config(diarize=True)
+        args = _make_transcribe_args(diarize=False)
+
+        updated_config = _build_config_with_overrides(args, base_config)
+
+        assert updated_config.diarization.diarize is False
+
+    def test_no_remove_fillers_flag_disables_config_enabled_filler_removal(self) -> None:
+        """--no-remove-fillers must disable filler removal even when the config has remove_fillers: true."""
+        base_config = _make_config(remove_fillers=True)
+        args = _make_transcribe_args(remove_fillers=False)
+
+        updated_config = _build_config_with_overrides(args, base_config)
+
+        assert updated_config.filler.remove_fillers is False
+
+    def test_unset_diarize_leaves_config_value_intact(self) -> None:
+        """When --diarize is not passed (None), the config value must be preserved."""
+        base_config = _make_config(diarize=True)
+        args = _make_transcribe_args(diarize=None)
+
+        updated_config = _build_config_with_overrides(args, base_config)
+
+        assert updated_config.diarization.diarize is True
+
+    def test_unset_remove_fillers_leaves_config_value_intact(self) -> None:
+        """When --remove-fillers is not passed (None), the config value must be preserved."""
+        base_config = _make_config(remove_fillers=True)
+        args = _make_transcribe_args(remove_fillers=None)
 
         updated_config = _build_config_with_overrides(args, base_config)
 

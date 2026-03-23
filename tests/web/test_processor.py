@@ -78,6 +78,7 @@ def _make_web_config(
     return WebConfig(
         crawl=CrawlConfig(
             mode=mode,
+            input_url=None,
             max_depth=3,
             max_pages=100,
             js_wait=0.0,

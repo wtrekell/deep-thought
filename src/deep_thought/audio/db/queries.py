@@ -5,12 +5,13 @@ All functions accept an open sqlite3.Connection as their first argument and
 return plain Python types (dicts, lists, None, bool). No business logic lives
 here — these are thin wrappers over SQL that the application layer calls directly.
 
-Upsert strategy: INSERT OR REPLACE replaces the entire row when the primary
-key conflicts. This is safe because we always provide all columns.
+Upsert strategy: INSERT ... ON CONFLICT(file_path) DO UPDATE SET ... updates
+only the mutable columns when a row already exists, leaving `created_at`
+untouched so the original first-seen timestamp is never overwritten.
 
 Timestamps: `updated_at` is always set to the current UTC time at the moment
-of the write. `created_at` is sourced from the caller's data dict so that it
-reflects when the record was first created (even across upserts).
+of the write. `created_at` is set only on first insert; subsequent upserts
+leave it unchanged.
 """
 
 from __future__ import annotations
@@ -50,23 +51,30 @@ def _rows_to_dicts(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
 
 
 def upsert_processed_file(conn: sqlite3.Connection, data: dict[str, Any]) -> None:
-    """Insert or replace a processed file record. Sets updated_at to now.
+    """Insert or update a processed file record. Sets updated_at to now.
 
-    Uses INSERT OR REPLACE, which replaces the entire row on primary key
-    conflict (file_path). The caller must supply created_at in data; it is
-    passed through unchanged so the original creation timestamp is preserved
-    across updates.
+    On first insert all columns are written. On conflict (same file_path) only
+    the mutable columns are updated — created_at is intentionally left unchanged
+    so the original first-seen timestamp is never overwritten.
 
     Args:
         conn: An open SQLite connection.
         data: Dict with keys matching the processed_files table columns.
               Required keys: file_path, file_hash, engine, model, created_at.
               Optional keys: duration_seconds, speaker_count, output_path, status.
+
+    Raises:
+        ValueError: If any required key is absent from data.
     """
+    required_keys = {"file_path", "file_hash", "engine", "model", "created_at"}
+    missing_keys = required_keys - data.keys()
+    if missing_keys:
+        raise ValueError(f"Missing required keys for upsert: {missing_keys}")
+
     updated_at = _now_utc_iso()
     conn.execute(
         """
-        INSERT OR REPLACE INTO processed_files (
+        INSERT INTO processed_files (
             file_path,
             file_hash,
             engine,
@@ -88,7 +96,16 @@ def upsert_processed_file(conn: sqlite3.Connection, data: dict[str, Any]) -> Non
             :status,
             :created_at,
             :updated_at
-        );
+        )
+        ON CONFLICT(file_path) DO UPDATE SET
+            file_hash = excluded.file_hash,
+            engine = excluded.engine,
+            model = excluded.model,
+            duration_seconds = excluded.duration_seconds,
+            speaker_count = excluded.speaker_count,
+            output_path = excluded.output_path,
+            status = excluded.status,
+            updated_at = excluded.updated_at;
         """,
         {**data, "updated_at": updated_at},
     )

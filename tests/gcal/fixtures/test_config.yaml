@@ -1,0 +1,20 @@
+# Minimal test configuration for the GCal Tool
+credentials_path: "src/config/gmail/credentials.json"
+token_path: "data/gcal/token.json"
+scopes:
+  - "https://www.googleapis.com/auth/calendar"
+
+api_rate_limit_rpm: 250
+retry_max_attempts: 3
+retry_base_delay_seconds: 1
+
+calendars:
+  - "primary"
+lookback_days: 7
+lookahead_days: 30
+include_cancelled: false
+single_events: true
+
+output_dir: "data/gcal/export/"
+generate_llms_files: false
+flat_output: false

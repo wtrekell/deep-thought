@@ -6,9 +6,12 @@ using the standard library HTMLParser, keeping external dependencies minimal.
 
 from __future__ import annotations
 
+import logging
 import re
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # URL pattern matching
@@ -29,7 +32,11 @@ def matches_any_pattern(url: str, patterns: list[str]) -> bool:
         True if at least one pattern fully or partially matches url.
     """
     for pattern_text in patterns:
-        compiled_pattern = re.compile(pattern_text)
+        try:
+            compiled_pattern = re.compile(pattern_text)
+        except re.error:
+            logger.warning("Skipping invalid regex pattern: %r", pattern_text)
+            continue
         if compiled_pattern.search(url):
             return True
     return False

@@ -9,6 +9,7 @@ imported inside the transcribe method so the module can be loaded without it.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import subprocess
@@ -139,6 +140,11 @@ class MlxWhisperEngine:
             # Clean up temporary chunk files
             for chunk_path in chunks:
                 chunk_path.unlink(missing_ok=True)
+            # Clean up the parent temp directory
+            if chunks:
+                chunk_dir = chunks[0].parent
+                with contextlib.suppress(OSError):  # Directory not empty or already removed
+                    chunk_dir.rmdir()
 
         # Merge all chunk segments
         all_segments = [seg for cr in chunk_results for seg in cr.segments]

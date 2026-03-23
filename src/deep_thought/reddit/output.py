@@ -171,27 +171,45 @@ def _render_comment(comment: Any, depth: int) -> str:
         return f"{header_line}\n{prefix}\n{indented_body}"
 
 
-def _get_comment_depth(comment: Any, submission: Any) -> int:
+def _get_comment_depth(comment: Any, submission: Any, comment_lookup: dict[str, Any] | None = None) -> int:
     """Calculate the nesting depth of a comment within a submission.
 
-    Checks parent_id: if it starts with 't3_' the comment is top-level (depth 0),
-    otherwise it is a reply (depth > 0). Because we have a flat list, we
-    approximate depth by counting 't1_' chain length — but since we only need
-    depth for display formatting, we use a simpler approach: check whether the
-    parent is the submission (t3_) or another comment (t1_).
+    Walks the parent_id chain from the comment back to the submission. Each
+    ``t1_`` (comment) parent increments depth by one; reaching a ``t3_``
+    (submission) parent terminates at depth 0. A safety cap of 10 prevents
+    infinite loops if the data is malformed.
 
     Args:
         comment: A PRAW Comment object.
         submission: The parent PRAW Submission object.
+        comment_lookup: Optional dict mapping comment fullname (``t1_<id>``)
+            to Comment objects for efficient parent traversal. When ``None``,
+            the function falls back to the simple top-level-vs-reply heuristic
+            (depth 0 or 1) for backward compatibility.
 
     Returns:
         Integer depth; 0 for top-level comments.
     """
-    parent_id = str(getattr(comment, "parent_id", ""))
     submission_fullname = f"t3_{submission.id}"
+    parent_id = str(getattr(comment, "parent_id", ""))
+
     if parent_id == submission_fullname:
         return 0
-    return 1
+
+    if comment_lookup is None:
+        return 1
+
+    depth = 0
+    current_parent_id = parent_id
+    max_depth = 10
+    while current_parent_id != submission_fullname and depth < max_depth:
+        depth += 1
+        parent_comment = comment_lookup.get(current_parent_id)
+        if parent_comment is None:
+            break
+        current_parent_id = str(getattr(parent_comment, "parent_id", ""))
+
+    return depth
 
 
 def _render_comments_section(comments: list[Any], submission: Any) -> str:
@@ -208,10 +226,17 @@ def _render_comments_section(comments: list[Any], submission: Any) -> str:
     if not comments:
         return ""
 
+    # Build a lookup dict for efficient parent-chain traversal
+    comment_lookup: dict[str, Any] = {}
+    for comment in comments:
+        comment_id = getattr(comment, "id", None)
+        if comment_id is not None:
+            comment_lookup[f"t1_{comment_id}"] = comment
+
     rendered_blocks: list[str] = ["## Comments"]
 
     for comment in comments:
-        depth = _get_comment_depth(comment, submission)
+        depth = _get_comment_depth(comment, submission, comment_lookup)
         rendered_block = _render_comment(comment, depth)
         rendered_blocks.append(rendered_block)
 

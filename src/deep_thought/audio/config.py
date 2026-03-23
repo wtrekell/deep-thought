@@ -327,6 +327,12 @@ def validate_config(config: AudioConfig) -> list[str]:
     if config.limits.max_file_size_mb <= 0:
         issues.append(f"max_file_size_mb must be greater than 0, got: {config.limits.max_file_size_mb}.")
 
+    if config.output.pause_threshold <= 0:
+        issues.append(f"output.pause_threshold must be positive, got: {config.output.pause_threshold}.")
+
+    if config.limits.chunk_duration_minutes <= 0:
+        issues.append(f"limits.chunk_duration_minutes must be positive, got: {config.limits.chunk_duration_minutes}.")
+
     return issues
 
 

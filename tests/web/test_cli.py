@@ -31,6 +31,7 @@ def minimal_crawl_config() -> CrawlConfig:
     """Return a minimal CrawlConfig with safe test defaults."""
     return CrawlConfig(
         mode="blog",
+        input_url=None,
         max_depth=3,
         max_pages=100,
         js_wait=1.0,
@@ -564,6 +565,7 @@ class TestMain:
             mock_load.return_value = WebConfig(
                 crawl=CrawlConfig(
                     mode="blog",
+                    input_url=None,
                     max_depth=3,
                     max_pages=100,
                     js_wait=1.0,
