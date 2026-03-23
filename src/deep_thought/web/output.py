@@ -73,7 +73,14 @@ def url_to_output_path(url: str, output_root: Path) -> Path:
     for directory_segment in directory_parts:
         output_path = output_path / directory_segment
 
-    return output_path / f"{filename_slug}.md"
+    output_path = output_path / f"{filename_slug}.md"
+
+    resolved_output_path = output_path.resolve()
+    resolved_output_root = output_root.resolve()
+    if not resolved_output_path.is_relative_to(resolved_output_root):
+        raise ValueError(f"Resolved output path {resolved_output_path!r} escapes output root {resolved_output_root!r}")
+
+    return output_path
 
 
 # ---------------------------------------------------------------------------

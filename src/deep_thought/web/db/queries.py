@@ -4,8 +4,9 @@ All functions accept an open sqlite3.Connection as their first argument and
 return plain Python types (dicts, lists, None). No business logic lives here —
 these are thin wrappers over SQL that the application layer calls directly.
 
-Upsert strategy: INSERT OR REPLACE replaces the entire row when the primary
-key conflicts. This is safe because we always provide all columns.
+Upsert strategy: INSERT ... ON CONFLICT(url) DO UPDATE SET updates all columns
+except created_at when the URL already exists, preserving the original crawl
+timestamp across re-crawls.
 
 Note: The crawled_pages table and web_schema_version table are created by the
 DB agent via migration files in db/migrations/. The DB agent should create:
@@ -66,10 +67,13 @@ def _rows_to_dicts(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
 
 
 def upsert_crawled_page(conn: sqlite3.Connection, page_data: dict[str, Any]) -> None:
-    """Insert or replace a crawled_pages row from page data.
+    """Insert or update a crawled_pages row from page data.
 
-    All columns are sourced from page_data. ``synced_at`` is set to the
-    current UTC time regardless of what is in page_data.
+    On first insert all columns are written. On conflict (same URL), all columns
+    are updated except ``created_at``, which is preserved from the original row
+    so that the initial crawl timestamp is never overwritten.
+
+    ``synced_at`` is always set to the current UTC time.
 
     Args:
         conn: An open SQLite connection.
@@ -79,13 +83,22 @@ def upsert_crawled_page(conn: sqlite3.Connection, page_data: dict[str, Any]) -> 
     synced_at = _now_utc_iso()
     conn.execute(
         """
-        INSERT OR REPLACE INTO crawled_pages (
+        INSERT INTO crawled_pages (
             url, rule_name, title, status_code, word_count,
             output_path, status, created_at, updated_at, synced_at
         ) VALUES (
             :url, :rule_name, :title, :status_code, :word_count,
             :output_path, :status, :created_at, :updated_at, :synced_at
-        );
+        )
+        ON CONFLICT(url) DO UPDATE SET
+            rule_name = excluded.rule_name,
+            title = excluded.title,
+            status_code = excluded.status_code,
+            word_count = excluded.word_count,
+            output_path = excluded.output_path,
+            status = excluded.status,
+            updated_at = excluded.updated_at,
+            synced_at = excluded.synced_at;
         """,
         {**page_data, "synced_at": synced_at},
     )

@@ -192,6 +192,42 @@ class TestValidateConfig:
         issues = validate_config(config)
         assert len(issues) >= 3
 
+    def test_zero_pause_threshold_is_flagged(self, tmp_path: Path) -> None:
+        """A pause_threshold of 0 must appear in the issues list."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text(_VALID_YAML.replace("pause_threshold: 1.5", "pause_threshold: 0"), encoding="utf-8")
+        config = load_config(yaml_file)
+        issues = validate_config(config)
+        assert any("pause_threshold" in issue for issue in issues)
+
+    def test_negative_pause_threshold_is_flagged(self, tmp_path: Path) -> None:
+        """A negative pause_threshold must appear in the issues list."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text(_VALID_YAML.replace("pause_threshold: 1.5", "pause_threshold: -1.0"), encoding="utf-8")
+        config = load_config(yaml_file)
+        issues = validate_config(config)
+        assert any("pause_threshold" in issue for issue in issues)
+
+    def test_zero_chunk_duration_minutes_is_flagged(self, tmp_path: Path) -> None:
+        """A chunk_duration_minutes of 0 must appear in the issues list."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text(
+            _VALID_YAML.replace("chunk_duration_minutes: 5", "chunk_duration_minutes: 0"), encoding="utf-8"
+        )
+        config = load_config(yaml_file)
+        issues = validate_config(config)
+        assert any("chunk_duration_minutes" in issue for issue in issues)
+
+    def test_negative_chunk_duration_minutes_is_flagged(self, tmp_path: Path) -> None:
+        """A negative chunk_duration_minutes must appear in the issues list."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text(
+            _VALID_YAML.replace("chunk_duration_minutes: 5", "chunk_duration_minutes: -3"), encoding="utf-8"
+        )
+        config = load_config(yaml_file)
+        issues = validate_config(config)
+        assert any("chunk_duration_minutes" in issue for issue in issues)
+
 
 # ---------------------------------------------------------------------------
 # save_default_config

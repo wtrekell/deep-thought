@@ -21,6 +21,7 @@ class CrawlConfig:
     """Configuration for the web crawl behaviour."""
 
     mode: str
+    input_url: str | None
     max_depth: int
     max_pages: int
     js_wait: float
@@ -136,6 +137,10 @@ def _parse_crawl_config(raw: dict[str, Any]) -> CrawlConfig:
         A CrawlConfig with all crawl settings populated from raw or defaults.
     """
     mode: str = raw.get("mode", "blog")
+
+    raw_input_url = raw.get("input_url")
+    input_url: str | None = str(raw_input_url) if raw_input_url is not None else None
+
     max_depth: int = int(raw.get("max_depth", 3))
     max_pages: int = int(raw.get("max_pages", 100))
     js_wait: float = float(raw.get("js_wait", 1.0))
@@ -164,6 +169,7 @@ def _parse_crawl_config(raw: dict[str, Any]) -> CrawlConfig:
 
     return CrawlConfig(
         mode=mode,
+        input_url=input_url,
         max_depth=max_depth,
         max_pages=max_pages,
         js_wait=js_wait,

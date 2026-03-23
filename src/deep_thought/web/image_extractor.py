@@ -12,6 +12,10 @@ from html.parser import HTMLParser
 from pathlib import Path  # noqa: TC003
 from urllib.parse import urljoin, urlparse
 
+_ALLOWED_IMAGE_SCHEMES: frozenset[str] = frozenset({"http", "https"})
+_IMAGE_DOWNLOAD_TIMEOUT_SECONDS: int = 30
+_IMAGE_MAX_SIZE_BYTES: int = 50 * 1024 * 1024  # 50 MB
+
 logger = logging.getLogger(__name__)
 
 
@@ -60,6 +64,8 @@ def extract_image_urls(html: str, base_url: str) -> list[str]:
     resolved_image_urls: list[str] = []
 
     for raw_src in parser.src_values:
+        if raw_src.lower().startswith("data:"):
+            continue
         absolute_url = urljoin(base_url, raw_src)
         if absolute_url not in seen_urls:
             seen_urls.add(absolute_url)
@@ -92,13 +98,25 @@ def download_images(image_urls: list[str], output_dir: Path) -> list[Path]:
     downloaded_paths: list[Path] = []
 
     for image_index, image_url in enumerate(image_urls, start=1):
-        url_path_segment = urlparse(image_url).path
-        url_extension = Path(url_path_segment).suffix or ".jpg"
+        parsed_url = urlparse(image_url)
+
+        if parsed_url.scheme not in _ALLOWED_IMAGE_SCHEMES:
+            logger.warning("Skipping image %s: disallowed URL scheme %r", image_url, parsed_url.scheme)
+            continue
+
+        url_extension = Path(parsed_url.path).suffix or ".jpg"
         image_filename = f"image_{image_index:03d}{url_extension}"
         destination_path = output_dir / image_filename
 
         try:
-            urllib.request.urlretrieve(image_url, str(destination_path))  # noqa: S310
+            with urllib.request.urlopen(image_url, timeout=_IMAGE_DOWNLOAD_TIMEOUT_SECONDS) as response:  # noqa: S310
+                image_data = response.read(_IMAGE_MAX_SIZE_BYTES + 1)
+
+            if len(image_data) > _IMAGE_MAX_SIZE_BYTES:
+                logger.warning("Skipping image %s: exceeds %d-byte size limit", image_url, _IMAGE_MAX_SIZE_BYTES)
+                continue
+
+            destination_path.write_bytes(image_data)
             downloaded_paths.append(destination_path)
         except Exception as download_error:
             logger.warning("Skipping image %s: %s", image_url, download_error)

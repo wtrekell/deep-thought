@@ -41,7 +41,7 @@ def get_data_dir() -> Path:
     """
     env_override = os.environ.get("DEEP_THOUGHT_DATA_DIR")
     if env_override:
-        return Path(env_override)
+        return Path(env_override) / "reddit"
     return _project_root() / "data" / "reddit"
 
 

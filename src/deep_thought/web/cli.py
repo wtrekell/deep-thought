@@ -101,21 +101,48 @@ def _build_config_with_overrides(args: argparse.Namespace, config: WebConfig) ->
     """
     original_crawl = config.crawl
 
-    updated_mode: str = getattr(args, "mode", None) or original_crawl.mode
-    updated_max_depth: int = getattr(args, "max_depth", None) or original_crawl.max_depth
-    updated_max_pages: int = getattr(args, "max_pages", None) or original_crawl.max_pages
-    updated_js_wait: float = getattr(args, "js_wait", None) or original_crawl.js_wait
-    updated_browser_channel: str | None = getattr(args, "browser_channel", None) or original_crawl.browser_channel
-    updated_stealth: bool = getattr(args, "stealth", False) or original_crawl.stealth
-    updated_retry_attempts: int = getattr(args, "retry_attempts", None) or original_crawl.retry_attempts
-    updated_retry_delay: float = getattr(args, "retry_delay", None) or original_crawl.retry_delay
-    updated_extract_images: bool = getattr(args, "extract_images", False) or original_crawl.extract_images
+    cli_mode: str | None = getattr(args, "mode", None)
+    updated_mode: str = cli_mode if cli_mode is not None else original_crawl.mode
 
-    cli_include_patterns: list[str] = getattr(args, "include_patterns", None) or []
-    cli_exclude_patterns: list[str] = getattr(args, "exclude_patterns", None) or []
+    cli_max_depth: int | None = getattr(args, "max_depth", None)
+    updated_max_depth: int = cli_max_depth if cli_max_depth is not None else original_crawl.max_depth
 
-    updated_include_patterns = cli_include_patterns if cli_include_patterns else original_crawl.include_patterns
-    updated_exclude_patterns = cli_exclude_patterns if cli_exclude_patterns else original_crawl.exclude_patterns
+    cli_max_pages: int | None = getattr(args, "max_pages", None)
+    updated_max_pages: int = cli_max_pages if cli_max_pages is not None else original_crawl.max_pages
+
+    cli_js_wait: float | None = getattr(args, "js_wait", None)
+    updated_js_wait: float = cli_js_wait if cli_js_wait is not None else original_crawl.js_wait
+
+    cli_browser_channel: str | None = getattr(args, "browser_channel", None)
+    updated_browser_channel: str | None = (
+        cli_browser_channel if cli_browser_channel is not None else original_crawl.browser_channel
+    )
+
+    cli_stealth: bool | None = getattr(args, "stealth", None)
+    updated_stealth: bool = cli_stealth if cli_stealth is not None else original_crawl.stealth
+
+    cli_retry_attempts: int | None = getattr(args, "retry_attempts", None)
+    updated_retry_attempts: int = (
+        cli_retry_attempts if cli_retry_attempts is not None else original_crawl.retry_attempts
+    )
+
+    cli_retry_delay: float | None = getattr(args, "retry_delay", None)
+    updated_retry_delay: float = cli_retry_delay if cli_retry_delay is not None else original_crawl.retry_delay
+
+    cli_extract_images: bool | None = getattr(args, "extract_images", None)
+    updated_extract_images: bool = (
+        cli_extract_images if cli_extract_images is not None else original_crawl.extract_images
+    )
+
+    cli_include_patterns: list[str] | None = getattr(args, "include_patterns", None)
+    updated_include_patterns: list[str] = (
+        cli_include_patterns if cli_include_patterns is not None else original_crawl.include_patterns
+    )
+
+    cli_exclude_patterns: list[str] | None = getattr(args, "exclude_patterns", None)
+    updated_exclude_patterns: list[str] = (
+        cli_exclude_patterns if cli_exclude_patterns is not None else original_crawl.exclude_patterns
+    )
 
     updated_crawl: CrawlConfig = replace(
         original_crawl,
@@ -150,6 +177,12 @@ def cmd_crawl(args: argparse.Namespace) -> None:
     Args:
         args: Parsed argparse namespace containing all crawl flags.
     """
+    save_config_path_str: str | None = getattr(args, "save_config", None)
+    if save_config_path_str is not None:
+        save_default_config(Path(save_config_path_str))
+        print(f"Default configuration written to: {save_config_path_str}")
+        return
+
     config = _load_config_from_args(args)
     config = _build_config_with_overrides(args, config)
 

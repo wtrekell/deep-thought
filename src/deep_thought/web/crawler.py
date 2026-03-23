@@ -119,22 +119,6 @@ class WebCrawler:
             self._browser.close()
         self._playwright_cm.__exit__(exc_type, exc_val, exc_tb)
 
-    def _apply_stealth(self, context: BrowserContext) -> None:
-        """Apply stealth settings to a browser context.
-
-        Sets a random user-agent and random viewport dimensions to reduce
-        the likelihood of bot detection.
-
-        Args:
-            context: The Playwright BrowserContext to configure.
-        """
-        selected_user_agent = random.choice(_STEALTH_USER_AGENTS)
-        viewport_width = random.randint(1024, 1920)
-        viewport_height = random.randint(768, 1080)
-        context.set_extra_http_headers({"User-Agent": selected_user_agent})
-        for active_page in context.pages:
-            active_page.set_viewport_size({"width": viewport_width, "height": viewport_height})
-
     def fetch_page(self, url: str) -> PageResult:
         """Fetch a web page and return its content.
 
@@ -162,10 +146,16 @@ class WebCrawler:
                 time.sleep(self._config.retry_delay)
 
             try:
-                context: BrowserContext = self._browser.new_context()
-
                 if self._config.stealth:
-                    self._apply_stealth(context)
+                    selected_user_agent = random.choice(_STEALTH_USER_AGENTS)
+                    viewport_width = random.randint(1024, 1920)
+                    viewport_height = random.randint(768, 1080)
+                    context: BrowserContext = self._browser.new_context(
+                        user_agent=selected_user_agent,
+                        viewport={"width": viewport_width, "height": viewport_height},
+                    )
+                else:
+                    context = self._browser.new_context()
 
                 page: Page = context.new_page()
 

@@ -17,6 +17,10 @@ dependencies = [
     "extract-msg>=0.50.0",
     "mlx-whisper>=0.4.0",
     "praw>=7.7.1",
+    "google-api-python-client>=2.0.0",
+    "google-auth-oauthlib>=1.0.0",
+    "google-auth-httplib2>=0.2.0",
+    "google-generativeai>=0.5.0",
 ]
 
 [project.scripts]
@@ -25,6 +29,8 @@ file-txt = "deep_thought.file_txt.cli:main"
 web = "deep_thought.web.cli:main"
 audio = "deep_thought.audio.cli:main"
 reddit = "deep_thought.reddit.cli:main"
+gmail = "deep_thought.gmail.cli:main"
+gcal = "deep_thought.gcal.cli:main"
 
 [project.optional-dependencies]
 dev = [

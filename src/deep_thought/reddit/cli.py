@@ -194,6 +194,7 @@ def cmd_collect(args: argparse.Namespace) -> None:
             rule_name_filter=args.rule,
             output_override=output_override,
         )
+        connection.commit()
     finally:
         connection.close()
 

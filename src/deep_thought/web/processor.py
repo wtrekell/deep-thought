@@ -393,6 +393,10 @@ def run_blog_mode(
         except (PlaywrightError, ConnectionError) as fetch_error:
             _record_error_page(page_url, None, fetch_error, conn)
             failed_count += 1
+        except Exception as unexpected_error:
+            logger.error("Unexpected error processing %s: %s", page_url, unexpected_error)
+            _record_error_page(page_url, None, unexpected_error, conn)
+            failed_count += 1
 
     total_count = succeeded_count + failed_count + skipped_count
     crawl_result = CrawlResult(total=total_count, succeeded=succeeded_count, failed=failed_count, skipped=skipped_count)
@@ -531,6 +535,10 @@ def run_documentation_mode(
         except (PlaywrightError, ConnectionError) as fetch_error:
             _record_error_page(current_url, None, fetch_error, conn)
             failed_count += 1
+        except Exception as unexpected_error:
+            logger.error("Unexpected error processing %s: %s", current_url, unexpected_error)
+            _record_error_page(current_url, None, unexpected_error, conn)
+            failed_count += 1
 
     total_count = succeeded_count + failed_count + skipped_count
     crawl_result = CrawlResult(total=total_count, succeeded=succeeded_count, failed=failed_count, skipped=skipped_count)
@@ -637,6 +645,10 @@ def run_direct_mode(
 
         except (PlaywrightError, ConnectionError) as fetch_error:
             _record_error_page(page_url, None, fetch_error, conn)
+            failed_count += 1
+        except Exception as unexpected_error:
+            logger.error("Unexpected error processing %s: %s", page_url, unexpected_error)
+            _record_error_page(page_url, None, unexpected_error, conn)
             failed_count += 1
 
     total_count = succeeded_count + failed_count + skipped_count

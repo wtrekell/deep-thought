@@ -1,0 +1,30 @@
+# Minimal test configuration for the Gmail Tool
+credentials_path: 'src/config/gmail/credentials.json'
+token_path: 'data/gmail/token.json'
+scopes:
+  - 'https://mail.google.com/'
+
+gemini_api_key_env: 'GEMINI_API_KEY'
+gemini_model: 'gemini-2.5-flash'
+gemini_rate_limit_rpm: 15
+
+gmail_rate_limit_rpm: 250
+retry_max_attempts: 3
+retry_base_delay_seconds: 1
+
+max_emails_per_run: 50
+clean_newsletters: true
+decision_cache_ttl: 3600
+
+output_dir: 'data/gmail/export/'
+generate_llms_files: false
+flat_output: false
+
+rules:
+  - name: 'test_rule'
+    query: 'label:test newer_than:7d'
+    ai_instructions: 'Extract key points.'
+    actions:
+      - archive
+      - label:TestLabel
+    append_mode: false
