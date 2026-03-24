@@ -1,0 +1,50 @@
+{
+  "id": "chatcmpl-abc123",
+  "model": "sonar",
+  "object": "chat.completion",
+  "created": 1711180800,
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "MLX is Apple's open-source machine learning framework designed specifically for Apple Silicon, enabling researchers and developers to run and train models directly on M-series chips using unified memory. Unlike frameworks such as PyTorch that were designed with NVIDIA GPUs in mind, MLX uses a lazy evaluation model and supports both CPU and GPU execution through Metal without requiring data copies between separate memory pools. The framework is built around a NumPy-like API that makes it approachable for researchers familiar with Python-based ML tooling, while its just-in-time compilation and function transformation system allows for efficient gradient computation. As of early 2026, MLX has grown a substantial ecosystem of model implementations including large language models, diffusion models, and audio transcription systems that are optimized to run at near-native speeds on MacBook Pro and Mac Studio hardware."
+      }
+    }
+  ],
+  "search_results": [
+    {
+      "title": "MLX: Apple's New ML Framework",
+      "url": "https://ml-explore.github.io/mlx/",
+      "snippet": "MLX is an array framework for machine learning research on Apple silicon.",
+      "date": "2026-03-15"
+    },
+    {
+      "title": "Getting Started with MLX",
+      "url": "https://developer.apple.com/mlx",
+      "snippet": "Learn how to build and train models using MLX on Apple Silicon Macs.",
+      "date": "2026-03-10"
+    }
+  ],
+  "related_questions": [
+    "How does MLX compare to PyTorch on Apple Silicon?",
+    "What models are currently supported by MLX?"
+  ],
+  "usage": {
+    "prompt_tokens": 25,
+    "completion_tokens": 150,
+    "total_tokens": 175,
+    "citation_tokens": 50,
+    "num_search_queries": 1,
+    "cost": {
+      "input_tokens_cost": 0.001,
+      "output_tokens_cost": 0.003,
+      "reasoning_tokens_cost": null,
+      "request_cost": 0.002,
+      "citation_tokens_cost": 0.0005,
+      "search_queries_cost": null,
+      "total_cost": 0.0065
+    }
+  }
+}
