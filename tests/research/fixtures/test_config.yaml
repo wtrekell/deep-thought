@@ -1,0 +1,11 @@
+# Minimal test configuration for the Research Tool
+api_key_env: "TEST_PERPLEXITY_KEY"
+
+retry_max_attempts: 2
+retry_base_delay_seconds: 1
+
+search_model: "sonar"
+research_model: "sonar-deep-research"
+default_recency: null
+
+output_dir: "data/research/export/"

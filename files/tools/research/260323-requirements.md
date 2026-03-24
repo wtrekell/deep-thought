@@ -11,16 +11,17 @@
 | `search`   | sonar               | 2–10 seconds | ~$0.006/query |
 | `research` | sonar-deep-research | 2–4 minutes  | ~$0.24/query  |
 
-Both commands share the same query format, flags, configuration, and output structure. The only difference is which Perplexity model is called.
+Both commands share the same query format, flags, configuration, and output structure. The only difference is which Perplexity model is called. The `search` command additionally supports a `--quick` flag that prints the answer to stdout without writing a file — useful for rapid lookups from the terminal.
 
 ### Query Input
 
-The first positional argument is the query. It can be either:
+The first positional argument is the query text — always sent directly to Perplexity as-is.
 
-- **Inline text:** `search "What are the latest developments in MLX?"`
-- **Path to a query file:** `search query.md`
+```bash
+search "What are the latest developments in MLX?"
+```
 
-If the argument is a path to an existing file, the file's contents are read as the query text. Otherwise the argument is treated as inline text. Query files are plain text or markdown — no frontmatter parsing is performed on input files.
+There is no file detection or file-reading behavior. The positional argument is always treated as a query string.
 
 ## Requirements
 
@@ -34,9 +35,21 @@ If the argument is a path to an existing file, the file's contents are read as t
 ## Design Notes
 
 - **Two commands, one package:** `search` and `research` are separate `pyproject.toml` entry points that both route into `cli.py`. Each sets the Perplexity model internally — there is no `--mode` flag.
-- **API endpoint:** Both commands use the Perplexity Chat Completions endpoint (`POST https://api.perplexity.ai/chat/completions`), which follows the OpenAI-compatible format. The request sends `messages` (system + user) and receives `choices[0].message.content` as the answer. The `search_results` array and `usage.cost` object are included in the response metadata.
+- **API endpoints:** The `search` command uses the synchronous Chat Completions endpoint (`POST https://api.perplexity.ai/chat/completions`), which follows the OpenAI-compatible format. The `research` command uses the async endpoint (`POST https://api.perplexity.ai/async/chat/completions`) — it submits a job and polls for results, which is more reliable for the 2–4 minute deep research queries. Async polling uses a 5-second interval with a 10-minute timeout. Both endpoints return `choices[0].message.content` as the answer, with the `search_results` array and `usage.cost` object in the response metadata.
+- **Related questions:** All requests send `return_related_questions: true` — always enabled, not configurable.
 - **Stateless by design:** Research results are always fresh. No deduplication or skip logic. No `--force` flag is needed because there is no cached state to clear.
-- **Context flag:** `--context PATH` reads one or more prior research `.md` files and includes their content in the query, enabling informed follow-up questions without re-asking what was already covered.
+- **Context flag:** `--context PATH` reads one or more prior research `.md` files and prepends their content to the user message sent to the API. Context is wrapped in structured XML tags so the model can distinguish prior research from the new query:
+
+  ```xml
+  <prior_research>
+  <file path="data/research/export/2026-03-23_mlx-developments.md">
+  ...file contents...
+  </file>
+  </prior_research>
+
+  <query>What are the performance implications?</query>
+  ```
+
 - **Domain filtering:** Up to 20 domains can be specified to restrict search scope. Prefix a domain with `-` to exclude it (denylist mode). Allowlist and denylist domains cannot be mixed in the same request.
 - **No `.llms.txt` generation:** Each output file is already LLM-optimized markdown with structured frontmatter, so separate `.llms.txt` / `.llms-full.txt` files are not generated.
 
@@ -85,38 +98,43 @@ Both `search` and `research` accept the same flags:
 
 | Flag                                       | Description                                                                   |
 | ------------------------------------------ | ----------------------------------------------------------------------------- |
-| `QUERY` (positional)                       | Research question as inline text, or path to a query file (required)          |
+| `QUERY` (positional)                       | Research question as inline text (required)                                   |
 | `--output PATH`                            | Output directory override                                                     |
 | `--config PATH`                            | YAML configuration file (default: `src/config/research-configuration.yaml`)   |
 | `--context PATH`                           | Prior research file(s) to include as context (repeatable)                     |
 | `--domains TEXT`                           | Comma-separated domains to filter search (max 20; prefix with `-` to exclude) |
 | `--recency [hour\|day\|week\|month\|year]` | Filter results by recency                                                     |
-| `--rate-limit INT`                         | Max requests per minute (default from config)                                 |
 | `--dry-run`                                | Show query that would be sent without calling API                             |
 | `--verbose`, `-v`                          | Detailed logging                                                              |
 | `--save-config PATH`                       | Generate example config and exit                                              |
 | `--version`                                | Show version and exit                                                         |
 
-### Subcommands
+### search-only Flags
 
-Each entry point has the same subcommands:
+| Flag      | Description                                                        |
+| --------- | ------------------------------------------------------------------ |
+| `--quick` | Print the answer to stdout and exit without writing an output file |
 
-| Subcommand | Description                                                                                                                         |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `config`   | Validate and display current YAML configuration                                                                                     |
-| `init`     | Create data directories (`data/research/`, `data/research/export/`) and generate a starter `research-configuration.yaml` if missing |
+### Subcommands (research only)
+
+The `research` entry point has the following subcommands. The `search` entry point has no subcommands — it only accepts a query.
+
+| Subcommand        | Description                                                                                                                         |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `research config` | Validate and display current YAML configuration                                                                                     |
+| `research init`   | Create data directories (`data/research/`, `data/research/export/`) and generate a starter `research-configuration.yaml` if missing |
 
 ### Usage Examples
 
 ```bash
-# Quick search with inline query
+# Quick search — print answer to stdout, no file written
+search "What are the latest developments in MLX?" --quick
+
+# Search with file output (default)
 search "What are the latest developments in MLX?"
 
-# Deep research with inline query
+# Deep research with inline query (uses async API, writes file)
 research "Compare MLX vs PyTorch performance on Apple Silicon"
-
-# Search using a query file
-search queries/mlx-question.md
 
 # Deep research with context from prior search results
 research "What are the performance implications?" --context data/research/export/2026-03-23_mlx-developments.md
@@ -126,6 +144,10 @@ search "site reliability engineering best practices" --domains google.com,aws.am
 
 # Dry run to preview query
 search "test query" --dry-run
+
+# Setup and configuration (research entry point only)
+research init
+research config
 ```
 
 ## File & Output Map
@@ -139,8 +161,8 @@ src/deep_thought/research/
 ├── __init__.py
 ├── cli.py                       # CLI entry points (search_main, research_main)
 ├── config.py                    # YAML config loader and validation
-├── models.py                    # ResearchResult and Source dataclasses
-├── researcher.py                # Perplexity API client and query logic
+├── models.py                    # ResearchResult and SearchResult dataclasses
+├── researcher.py                # Perplexity API client (sync for search, async polling for research)
 └── output.py                    # Markdown + YAML frontmatter generation
 
 data/research/
@@ -165,7 +187,6 @@ Configuration is stored in `src/config/research-configuration.yaml`. All values 
 ```yaml
 # API
 api_key_env: "PERPLEXITY_API_KEY"
-rate_limit_rpm: 20
 retry_max_attempts: 3 # Retry failed API calls with exponential backoff
 retry_base_delay_seconds: 1 # Initial delay doubles on each retry
 
@@ -182,7 +203,6 @@ output_dir: "data/research/export/"
 
 ### Configuration Validation
 
-- `rate_limit_rpm` must be > 0
 - `retry_max_attempts` must be > 0
 - `retry_base_delay_seconds` must be > 0
 - `default_recency` must be one of `null`, `hour`, `day`, `week`, `month`, `year`
@@ -211,14 +231,12 @@ query: "What are the latest developments in MLX on Apple Silicon?"
 mode: search
 model: sonar
 recency: week
-domains: []
-context_files: []
 cost_usd: 0.006
 processed_date: 2026-03-18T10:00:00Z
 ---
 ```
 
-Only include metadata fields with non-null, non-empty values in the frontmatter. The `context_files` field records which prior research files were passed via `--context` for traceability.
+Only include metadata fields with non-null, non-empty values in the frontmatter. Empty lists (e.g., `domains`, `context_files`) are omitted. When present, `context_files` records which prior research files were passed via `--context` for traceability.
 
 ### Content Structure
 
@@ -231,8 +249,8 @@ Synthesized answer from multiple sources...
 
 ## Sources
 
-1. [Source Title](https://example.com/article) — excerpt
-2. [Another Source](https://another.com/post) — excerpt
+1. [Source Title](https://example.com/article) — snippet
+2. [Another Source](https://another.com/post) — snippet
 
 ## Related Questions
 
@@ -244,8 +262,8 @@ Synthesized answer from multiple sources...
 
 - `Perplexity API errors` (auth, rate limits, content filtering) — caught per-query; logs the error with the query text and exits with code 1.
 - `Perplexity API rate limit / transient errors` (HTTP 429, 500, 503) — retried with exponential backoff up to `retry_max_attempts` (default 3). Initial delay is `retry_base_delay_seconds`, doubling on each retry. Permanent failures (4xx other than 429) are not retried.
+- `Async polling timeout` — if the `research` command's async job does not complete within 10 minutes, exit with code 1 and a descriptive message.
 - `Context file loading errors` — caught per context file specified with `--context`; logs the offending path and aborts before calling the API.
-- `Query file loading errors` — if the positional argument looks like a file path but the file does not exist, exit with code 1 and a descriptive message.
 - Missing config file raises `FileNotFoundError`. Invalid config content raises `ValueError`. Missing required env vars (e.g., `PERPLEXITY_API_KEY`) raise `OSError`.
 - Top-level `try/except` in CLI entry point catches all above and prints descriptive messages.
 - Exit codes: `0` success, `1` fatal error
@@ -255,10 +273,13 @@ Note: Exit code `2` (partial failure) is not used because each command processes
 ## Testing
 
 - Mock target: **httpx** — mock at the transport layer to return fixture JSON responses without real network calls.
-- Test fixtures: mock Perplexity API response JSON covering search, deep research, and error responses.
-- Test both entry points (`search_main`, `research_main`) to verify correct model selection.
-- Test query input from inline text and from file paths.
-- Test classes organized by feature area: query construction, query file loading, context file loading, output formatting, config validation, retry logic.
+- Test fixtures: mock Perplexity API response JSON covering search, deep research, async polling responses, and error responses.
+- Test both entry points (`search_main`, `research_main`) to verify correct model and endpoint selection.
+- Test `search --quick` prints to stdout and does not write a file.
+- Test that the positional query argument is sent directly to the API as-is.
+- Test context XML formatting — verify `<prior_research>`, `<file>`, and `<query>` tags are correctly structured.
+- Test async polling flow for `research` — job submission, polling, and result retrieval.
+- Test classes organized by feature area: query construction, context file loading, output formatting, config validation, retry logic, async polling.
 - Mark slow or network-dependent tests with `@pytest.mark.slow` and `@pytest.mark.integration`.
 - Mark error path tests with `@pytest.mark.error_handling`.
 - Write docstrings on every test method.
@@ -271,14 +292,29 @@ _(None yet — record questions raised during requirements gathering and their a
 
 ## Claude Questions
 
-1. **Stdout output for quick searches** — For `search "quick question"`, should the answer be printed to stdout in addition to writing the file? Currently you'd have to open the exported file to see results. A `--stdout` flag or default stdout behavior for `search` would improve the quick-lookup UX.
-2. **Streaming for deep research** — `research` queries take 2–4 minutes. The API supports SSE streaming. Should the `research` command stream progress to stderr while building the final output file? This would avoid a silent multi-minute wait.
-3. **Entry point name collision** — `search` is a generic name that could collide with other packages or user scripts. Alternatives like `websearch` or `pplx-search` would be safer but less ergonomic. Is the collision risk acceptable?
-4. **`--rate-limit` flag usefulness** — For a single-query stateless tool, a per-minute rate limit CLI flag has limited value (it only matters if running the command in a loop). Consider removing the flag and keeping the config-only setting.
-5. **Subcommand duplication** — `search init`, `search config`, `research init`, `research config` are identical. Should `init` and `config` live on only one entry point to reduce duplication, or is having them on both preferable for discoverability?
-6. **How `--context` is sent to the API** — The spec says context files are "included in the query" but doesn't specify the mechanics. Options: (a) prepend context to the user message, (b) send context as a system message, (c) send context as separate user messages. This affects token usage, cost, and model behavior.
-7. **Query file detection ambiguity** — If someone runs `search "README.md"` and a file named `README.md` exists in the current directory, the tool reads the file instead of searching for the literal text "README.md". Should this be documented as a known behavior, or should a `--file` flag be added to make file input explicit?
-8. **Async mode for deep research** — Perplexity offers an async endpoint (`POST /async/chat/completions`) where you submit a job and poll for results (retained 7 days). This may be more reliable than a synchronous 2–4 minute HTTP request. Should `research` use the async endpoint instead of (or as a fallback for) synchronous requests?
+1. **Stdout output for quick searches** — Should the answer be printed to stdout for quick lookups?
+   **Decision:** Yes — added `--quick` flag to `search` that prints the answer to stdout without writing a file.
+
+2. **Streaming for deep research** — Should the `research` command stream progress to stderr during 2–4 minute queries?
+   **Decision:** No. No streaming.
+
+3. **Entry point name collision** — `search` is generic. Is the collision risk acceptable?
+   **Decision:** Yes. Single-user tool, known command environment.
+
+4. **`--rate-limit` flag usefulness** — Should there be a CLI flag for rate limiting?
+   **Decision:** Removed. Rate limit is config-only (`rate_limit_rpm` in YAML).
+
+5. **Subcommand duplication** — Should `init` and `config` exist on both entry points?
+   **Decision:** No duplication. Subcommands live on `research` only. `search` has no subcommands.
+
+6. **How `--context` is sent to the API** — How are context files incorporated into the request?
+   **Decision:** Prepend to the user message with structured XML tags (`<prior_research>`, `<file>`, `<query>`) so the model can distinguish prior research from the new query.
+
+7. **Query file detection ambiguity** — What if a query string matches an existing filename?
+   **Decision:** No file detection. The positional argument is always a query string sent directly to Perplexity. This is a web search tool, not a file system tool.
+
+8. **Async mode for deep research** — Should `research` use the async endpoint?
+   **Decision:** Yes. The `research` command uses `POST /async/chat/completions` (submit + poll) for reliability over long-running queries. The `search` command uses the synchronous endpoint.
 
 ## Pre-Build Tasks
 
