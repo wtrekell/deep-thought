@@ -27,6 +27,7 @@ class CrawlConfig:
     js_wait: float
     browser_channel: str | None
     stealth: bool
+    headless: bool
     include_patterns: list[str]
     exclude_patterns: list[str]
     retry_attempts: int
@@ -37,6 +38,10 @@ class CrawlConfig:
     index_depth: int
     min_article_words: int
     changelog_url: str | None
+    strip_path_prefix: str | None
+    strip_domain: bool
+    llms_lookback_days: int
+    strip_boilerplate: list[str]
 
 
 @dataclass
@@ -50,37 +55,60 @@ class WebConfig:
 # Path helpers
 # ---------------------------------------------------------------------------
 
-_PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-_DEFAULT_CONFIG_RELATIVE_PATH = Path("src") / "config" / "web-configuration.yaml"
+_PACKAGE_DIR = Path(__file__).resolve().parent
+_BUNDLED_DEFAULT_CONFIG = _PACKAGE_DIR / "default-config.yaml"
+_PROJECT_CONFIG_RELATIVE_PATH = Path("src") / "config" / "web-configuration.yaml"
 _TEMPLATES_RELATIVE_PATH = Path("src") / "config" / "web" / "templates"
 _BATCH_CONFIG_RELATIVE_PATH = Path("src") / "config" / "web"
 
 
-def get_default_config_path() -> Path:
-    """Return the absolute path to the default YAML configuration file.
+def get_bundled_config_path() -> Path:
+    """Return the absolute path to the bundled default config template.
+
+    This resolves via ``__file__`` so it always finds the template inside the
+    package, regardless of symlinks or the current working directory.
 
     Returns:
-        Absolute path to src/config/web-configuration.yaml relative to the project root.
+        Absolute path to the ``default-config.yaml`` bundled in the package.
     """
-    return _PROJECT_ROOT / _DEFAULT_CONFIG_RELATIVE_PATH
+    return _BUNDLED_DEFAULT_CONFIG
+
+
+def get_default_config_path() -> Path:
+    """Return the absolute path to the project-level configuration file.
+
+    Resolves relative to the current working directory so it targets the
+    *calling repo* (e.g., magrathea), not the source repo (deep-thought).
+
+    Returns:
+        Absolute path to src/config/web-configuration.yaml in the calling repo.
+    """
+    return Path.cwd() / _PROJECT_CONFIG_RELATIVE_PATH
 
 
 def get_templates_dir() -> Path:
     """Return the absolute path to the batch config templates directory.
 
+    This resolves via ``_PACKAGE_DIR`` (which follows ``__file__`` back to the
+    deep-thought source) so it always finds the bundled SOURCE templates,
+    regardless of symlinks or the current working directory.
+
     Returns:
-        Absolute path to src/config/web/templates/ relative to the project root.
+        Absolute path to src/config/web/templates/ relative to the package source.
     """
-    return _PROJECT_ROOT / _TEMPLATES_RELATIVE_PATH
+    return _PACKAGE_DIR.parent.parent.parent / _TEMPLATES_RELATIVE_PATH
 
 
 def get_batch_config_dir() -> Path:
-    """Return the absolute path to the batch config directory.
+    """Return the absolute path to the batch config destination directory.
+
+    Resolves relative to the current working directory so it targets the
+    *calling repo*, not the source repo (deep-thought).
 
     Returns:
-        Absolute path to src/config/web/ relative to the project root.
+        Absolute path to src/config/web/ in the calling repo.
     """
-    return _PROJECT_ROOT / _BATCH_CONFIG_RELATIVE_PATH
+    return Path.cwd() / _BATCH_CONFIG_RELATIVE_PATH
 
 
 def copy_default_templates(batch_config_dir: Path | None = None) -> list[tuple[str, str]]:
@@ -149,6 +177,7 @@ def _parse_crawl_config(raw: dict[str, Any]) -> CrawlConfig:
     browser_channel: str | None = str(raw_channel) if raw_channel is not None else None
 
     stealth: bool = bool(raw.get("stealth", False))
+    headless: bool = bool(raw.get("headless", True))
 
     raw_include = raw.get("include_patterns")
     include_patterns: list[str] = list(raw_include) if isinstance(raw_include, list) else []
@@ -167,6 +196,15 @@ def _parse_crawl_config(raw: dict[str, Any]) -> CrawlConfig:
     raw_changelog = raw.get("changelog_url")
     changelog_url: str | None = str(raw_changelog) if raw_changelog is not None else None
 
+    raw_strip_prefix = raw.get("strip_path_prefix")
+    strip_path_prefix: str | None = str(raw_strip_prefix) if raw_strip_prefix is not None else None
+
+    strip_domain: bool = bool(raw.get("strip_domain", False))
+    llms_lookback_days: int = int(raw.get("llms_lookback_days", 30))
+
+    raw_boilerplate = raw.get("strip_boilerplate")
+    strip_boilerplate: list[str] = list(raw_boilerplate) if isinstance(raw_boilerplate, list) else []
+
     return CrawlConfig(
         mode=mode,
         input_url=input_url,
@@ -175,6 +213,7 @@ def _parse_crawl_config(raw: dict[str, Any]) -> CrawlConfig:
         js_wait=js_wait,
         browser_channel=browser_channel,
         stealth=stealth,
+        headless=headless,
         include_patterns=include_patterns,
         exclude_patterns=exclude_patterns,
         retry_attempts=retry_attempts,
@@ -185,6 +224,10 @@ def _parse_crawl_config(raw: dict[str, Any]) -> CrawlConfig:
         index_depth=index_depth,
         min_article_words=min_article_words,
         changelog_url=changelog_url,
+        strip_path_prefix=strip_path_prefix,
+        strip_domain=strip_domain,
+        llms_lookback_days=llms_lookback_days,
+        strip_boilerplate=strip_boilerplate,
     )
 
 
@@ -275,6 +318,17 @@ def validate_config(config: WebConfig) -> list[str]:
     if config.crawl.min_article_words <= 0:
         issues.append(f"min_article_words must be > 0, got: {config.crawl.min_article_words}.")
 
+    if config.crawl.llms_lookback_days < 0:
+        issues.append(
+            f"llms_lookback_days must be >= 0 (0 = current run only), got: {config.crawl.llms_lookback_days}."
+        )
+
+    for pattern_text in config.crawl.strip_boilerplate:
+        try:
+            re.compile(pattern_text)
+        except re.error as regex_error:
+            issues.append(f"strip_boilerplate contains invalid regex '{pattern_text}': {regex_error}")
+
     return issues
 
 
@@ -293,7 +347,7 @@ def save_default_config(destination_path: Path) -> None:
     if destination_path.exists():
         raise FileExistsError(f"Configuration file already exists: {destination_path}")
 
-    source_path = get_default_config_path()
+    source_path = get_bundled_config_path()
     if not source_path.exists():
         raise FileNotFoundError(f"Bundled default config not found: {source_path}")
 

@@ -86,19 +86,33 @@ class FileTxtConfig:
 # Path helpers
 # ---------------------------------------------------------------------------
 
+_PACKAGE_DIR = Path(__file__).resolve().parent
+_BUNDLED_DEFAULT_CONFIG = _PACKAGE_DIR / "default-config.yaml"
+_PROJECT_CONFIG_RELATIVE_PATH = Path("src") / "config" / "file-txt-configuration.yaml"
+
+
+def get_bundled_config_path() -> Path:
+    """Return the absolute path to the bundled default config template.
+
+    This resolves via ``__file__`` so it always finds the template inside the
+    package, regardless of symlinks or the current working directory.
+
+    Returns:
+        Absolute path to the ``default-config.yaml`` bundled in the package.
+    """
+    return _BUNDLED_DEFAULT_CONFIG
+
 
 def get_default_config_path() -> Path:
-    """Return the absolute path to the default YAML configuration file.
+    """Return the absolute path to the project-level configuration file.
 
-    Resolves relative to this source file's location in the package tree.
-    Works in both editable installs (``pip install -e .``) and direct
-    source tree usage.
+    Resolves relative to the current working directory so it targets the
+    *calling repo* (e.g., magrathea), not the source repo (deep-thought).
+
+    Returns:
+        Absolute path to src/config/file-txt-configuration.yaml in the calling repo.
     """
-    # config.py lives at src/deep_thought/file_txt/config.py
-    # Config file lives at src/config/file-txt-configuration.yaml
-    package_root = Path(__file__).resolve().parent.parent  # -> src/deep_thought
-    source_root = package_root.parent  # -> src/
-    return source_root / "config" / "file-txt-configuration.yaml"
+    return Path.cwd() / _PROJECT_CONFIG_RELATIVE_PATH
 
 
 # ---------------------------------------------------------------------------
@@ -291,7 +305,7 @@ def save_default_config(destination_path: Path) -> None:
     if destination_path.exists():
         raise FileExistsError(f"Configuration file already exists: {destination_path}")
 
-    source_path = get_default_config_path()
+    source_path = get_bundled_config_path()
     if not source_path.exists():
         raise FileNotFoundError(f"Bundled default config not found: {source_path}")
 

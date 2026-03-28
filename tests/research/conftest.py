@@ -105,7 +105,7 @@ def make_async_submit_response(job_id: str = "async_job_123") -> dict[str, Any]:
     """Return a dict mimicking the Perplexity async job submission response.
 
     The API immediately returns a job ID and a pending status upon submission
-    to ``/async/chat/completions``.
+    to ``/v1/async/sonar``.
 
     Args:
         job_id: The job identifier string assigned by the API.
@@ -117,7 +117,7 @@ def make_async_submit_response(job_id: str = "async_job_123") -> dict[str, Any]:
 
 
 def make_async_poll_response(
-    status: str = "completed",
+    status: str = "COMPLETED",
     answer: str = "Deep answer.",
     search_results: list[dict[str, Any]] | None = None,
     related_questions: list[str] | None = None,
@@ -125,24 +125,24 @@ def make_async_poll_response(
 ) -> dict[str, Any]:
     """Return a dict mimicking a Perplexity async job poll response.
 
-    When status is "completed", returns the full response structure (same
+    When status is "COMPLETED", returns the full response structure (same
     shape as the synchronous response) with an added top-level ``status``
     field. When status is anything else (e.g. "pending", "processing"),
     returns the minimal in-progress payload.
 
     Args:
-        status: The job status string. Use "completed" for a finished job.
-        answer: The synthesised answer text (only used when status is "completed").
-        search_results: Source citation dicts (only used when status is "completed").
+        status: The job status string. Use "COMPLETED" for a finished job.
+        answer: The synthesised answer text (only used when status is "COMPLETED").
+        search_results: Source citation dicts (only used when status is "COMPLETED").
             Defaults to two sample entries.
-        related_questions: Follow-up questions (only used when status is "completed").
+        related_questions: Follow-up questions (only used when status is "COMPLETED").
             Defaults to two samples.
-        total_cost: Total cost in USD (only used when status is "completed").
+        total_cost: Total cost in USD (only used when status is "COMPLETED").
 
     Returns:
         A dict matching the Perplexity async poll response format.
     """
-    if status != "completed":
+    if status != "COMPLETED":
         return {"id": "async_job_123", "status": status}
 
     resolved_search_results: list[dict[str, Any]] = (
@@ -175,36 +175,39 @@ def make_async_poll_response(
 
     return {
         "id": "async_job_123",
-        "status": "completed",
-        "model": "sonar-deep-research",
-        "object": "chat.completion",
-        "created": 1711267200,
-        "choices": [
-            {
-                "index": 0,
-                "finish_reason": "stop",
-                "message": {
-                    "role": "assistant",
-                    "content": answer,
+        "status": "COMPLETED",
+        "response": {
+            "id": "async_job_123",
+            "model": "sonar-deep-research",
+            "object": "chat.completion",
+            "created": 1711267200,
+            "choices": [
+                {
+                    "index": 0,
+                    "finish_reason": "stop",
+                    "message": {
+                        "role": "assistant",
+                        "content": answer,
+                    },
+                }
+            ],
+            "search_results": resolved_search_results,
+            "related_questions": resolved_related_questions,
+            "usage": {
+                "prompt_tokens": 42,
+                "completion_tokens": 500,
+                "total_tokens": 542,
+                "citation_tokens": 100,
+                "num_search_queries": 8,
+                "cost": {
+                    "input_tokens_cost": 0.008,
+                    "output_tokens_cost": 0.100,
+                    "reasoning_tokens_cost": 0.018,
+                    "request_cost": 0.005,
+                    "citation_tokens_cost": 0.006,
+                    "search_queries_cost": 0.016,
+                    "total_cost": total_cost,
                 },
-            }
-        ],
-        "search_results": resolved_search_results,
-        "related_questions": resolved_related_questions,
-        "usage": {
-            "prompt_tokens": 42,
-            "completion_tokens": 500,
-            "total_tokens": 542,
-            "citation_tokens": 100,
-            "num_search_queries": 8,
-            "cost": {
-                "input_tokens_cost": 0.008,
-                "output_tokens_cost": 0.100,
-                "reasoning_tokens_cost": 0.018,
-                "request_cost": 0.005,
-                "citation_tokens_cost": 0.006,
-                "search_queries_cost": 0.016,
-                "total_cost": total_cost,
             },
         },
     }

@@ -40,6 +40,17 @@ Expanded document to standardize future tool builds in deep-thought.
 - Default to permissive settings (empty filters)
 - Separate validation from loading; return issue lists
 - Support CLI overrides for key config values
+- Bundle a default config template inside the tool's package (`src/deep_thought/<tool>/default-config.yaml`); this is the source of truth for defaults and the file that `init` copies out to the project-level location (`src/config/<tool>-configuration.yaml`)
+- The `init` command must reference the bundled template — never the project-level config, which does not exist yet when `init` runs
+- All other commands (`config`, tool-specific subcommands) read from the project-level config at `src/config/<tool>-configuration.yaml`
+- **Symlink-aware path resolution:** Tools in deep-thought may be referenced from other repos via symlink. Config and data paths that target the *calling repo* (project-level config, data directories) must resolve relative to the current working directory — never by traversing `__file__` parent directories, which would follow symlinks back to deep-thought. Paths that target files *bundled inside the package* (e.g., `default-config.yaml`, source templates) should use `__file__`-relative resolution so they always find the template regardless of where the tool is invoked
+- **config.py path helper pattern:** Every tool's `config.py` must define these module-level constants and two public helpers:
+  - `_PACKAGE_DIR = Path(__file__).resolve().parent` — resolves to the package directory inside deep-thought (follows symlinks)
+  - `_BUNDLED_DEFAULT_CONFIG = _PACKAGE_DIR / "default-config.yaml"` — bundled template
+  - `_PROJECT_CONFIG_RELATIVE_PATH = Path("src") / "config" / "<tool>-configuration.yaml"` — relative path from any repo root
+  - `get_bundled_config_path() -> Path` — returns `_BUNDLED_DEFAULT_CONFIG` (for `init` and `--save-config`)
+  - `get_default_config_path() -> Path` — returns `Path.cwd() / _PROJECT_CONFIG_RELATIVE_PATH` (for all runtime commands)
+- Tools with additional bundled source files (e.g., batch config templates) should locate those via `_PACKAGE_DIR`-relative paths, and write copies to cwd-relative destinations
 
 ## 4. Data Models
 
@@ -110,6 +121,7 @@ Expanded document to standardize future tool builds in deep-thought.
 - Print typed result objects to stdout
 - Catch specific exceptions with descriptive messages
 - Return proper exit codes: `0` success, `1` fatal error, `2` partial failure (some items errored)
+- The `init` subcommand bootstraps a tool for first use in the *calling repo*: locates the bundled `default-config.yaml` inside the package (via `__file__`), copies it to `src/config/<tool>-configuration.yaml` relative to the current working directory, creates data directories under `data/<tool>/` (also cwd-relative, respecting `DEEP_THOUGHT_DATA_DIR`), and prints a summary of what was created — it must never attempt to load the project-level config as a prerequisite, since that file does not yet exist
 
 ## 11. Error Handling
 

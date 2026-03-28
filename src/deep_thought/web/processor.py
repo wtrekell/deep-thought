@@ -11,13 +11,13 @@ import logging
 import sqlite3  # noqa: TC003 — sqlite3.Connection is used at runtime in function signatures
 from collections import deque
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path  # noqa: TC003
 
 from playwright.sync_api import Error as PlaywrightError
 
 from deep_thought.web.config import WebConfig  # noqa: TC001
-from deep_thought.web.converter import convert_html_to_markdown, count_words, extract_title
+from deep_thought.web.converter import apply_boilerplate_patterns, convert_html_to_markdown, count_words, extract_title
 from deep_thought.web.crawler import CrawlerConfig, PageResult, WebCrawler
 from deep_thought.web.db import queries
 from deep_thought.web.filters import extract_internal_links, is_url_allowed
@@ -62,6 +62,7 @@ def _make_crawler_config(config: WebConfig) -> CrawlerConfig:
         js_wait=config.crawl.js_wait,
         browser_channel=config.crawl.browser_channel,
         stealth=config.crawl.stealth,
+        headless=config.crawl.headless,
         retry_attempts=config.crawl.retry_attempts,
         retry_delay=config.crawl.retry_delay,
     )
@@ -122,6 +123,8 @@ def _process_page(
 
     html_title = extract_title(page_result.html) or page_result.title
     markdown_text = convert_html_to_markdown(page_result.html, base_url=page_result.url)
+    if config.crawl.strip_boilerplate:
+        markdown_text = apply_boilerplate_patterns(markdown_text, config.crawl.strip_boilerplate)
     word_count = count_words(markdown_text)
 
     # Quality gate: skip pages that are too sparse to be article content
@@ -147,7 +150,14 @@ def _process_page(
         return skip_model, None
 
     if dry_run:
-        output_path_str = str(url_to_output_path(page_result.url, output_root))
+        output_path_str = str(
+            url_to_output_path(
+                page_result.url,
+                output_root,
+                strip_path_prefix=config.crawl.strip_path_prefix,
+                strip_domain=config.crawl.strip_domain,
+            )
+        )
         page_model = CrawledPageLocal(
             url=page_result.url,
             rule_name=rule_name,
@@ -169,6 +179,8 @@ def _process_page(
         title=html_title,
         word_count=word_count,
         output_root=output_root,
+        strip_path_prefix=config.crawl.strip_path_prefix,
+        strip_domain=config.crawl.strip_domain,
     )
 
     if config.crawl.extract_images:
@@ -657,6 +669,82 @@ def run_direct_mode(
 
 
 # ---------------------------------------------------------------------------
+# LLMs file lookback helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_lookback_summaries(
+    conn: sqlite3.Connection,
+    current_summaries: list[PageSummary],
+    output_root: Path,
+    lookback_days: int,
+    mode: str,
+) -> list[PageSummary]:
+    """Merge current-run summaries with historical pages from the database.
+
+    Queries the DB for all successful pages updated within the lookback
+    window, reads their markdown content from disk, and merges with
+    current-run summaries.  Current-run summaries take precedence when
+    URLs overlap.
+
+    Args:
+        conn: An open SQLite connection to the web database.
+        current_summaries: PageSummary objects from the current crawl run.
+        output_root: Root directory where ``.md`` files are stored on disk.
+        lookback_days: Number of days to look back for historical pages.
+        mode: The crawl mode string (e.g. ``"blog"``).
+
+    Returns:
+        A merged, deduplicated list of PageSummary objects sorted by URL.
+    """
+    from deep_thought.web.llms import _strip_frontmatter  # noqa: PLC2701
+
+    cutoff = datetime.now(UTC) - timedelta(days=lookback_days)
+    since_iso = cutoff.isoformat()
+
+    db_rows = queries.get_successful_pages_since(conn, since_iso)
+
+    # Current-run summaries win on overlap
+    merged: dict[str, PageSummary] = {s.url: s for s in current_summaries}
+
+    for row in db_rows:
+        url: str = row["url"]
+        if url in merged:
+            continue
+
+        output_path_value: str = row.get("output_path", "")
+        if not output_path_value:
+            continue
+
+        md_file = Path(output_path_value)
+        if not md_file.is_absolute():
+            md_file = output_root / md_file
+
+        if not md_file.exists():
+            logger.debug("Skipping historical page %s: file not found at %s", url, md_file)
+            continue
+
+        raw_content = md_file.read_text(encoding="utf-8")
+        content = _strip_frontmatter(raw_content)
+
+        try:
+            md_relative_path = md_file.relative_to(output_root).as_posix()
+        except ValueError:
+            md_relative_path = md_file.name
+
+        merged[url] = PageSummary(
+            title=row.get("title"),
+            url=url,
+            md_relative_path=md_relative_path,
+            mode=mode,
+            word_count=row.get("word_count", 0),
+            content=content,
+        )
+
+    return sorted(merged.values(), key=lambda s: s.url)
+
+
+# ---------------------------------------------------------------------------
 # Top-level dispatcher
 # ---------------------------------------------------------------------------
 
@@ -737,8 +825,19 @@ def process(
         else:
             raise ValueError(f"Unknown crawl mode: '{mode}'. Must be one of: blog, documentation, direct")
 
-    if not dry_run and config.crawl.generate_llms_files and page_summaries:
-        write_llms_full(page_summaries, output_root)
-        write_llms_index(page_summaries, output_root)
+    if not dry_run and config.crawl.generate_llms_files:
+        if config.crawl.llms_lookback_days > 0:
+            llms_summaries = _build_lookback_summaries(
+                conn=conn,
+                current_summaries=page_summaries,
+                output_root=output_root,
+                lookback_days=config.crawl.llms_lookback_days,
+                mode=mode,
+            )
+        else:
+            llms_summaries = page_summaries
+        if llms_summaries:
+            write_llms_full(llms_summaries, output_root)
+            write_llms_index(llms_summaries, output_root)
 
     return crawl_result

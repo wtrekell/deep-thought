@@ -1,0 +1,36 @@
+# Engine
+engine: "mlx" # 'mlx' (default), 'whisper', or 'auto' (selects MLX on Apple Silicon)
+model: "large-v3-turbo" # 'tiny', 'base', 'small', 'medium', 'large-v3', 'large-v3-turbo'
+language: null # null = auto-detect, or language code e.g. 'en'
+
+# Output mode
+output_mode: "paragraph" # 'paragraph', 'segment', or 'timestamp'
+pause_threshold: 1.5 # Seconds of silence to trigger paragraph break
+
+# Diarization
+diarize: false
+hf_token_env: "HF_TOKEN" # Env var holding HuggingFace token
+
+# Filler words
+remove_fillers: false
+
+# Output
+output_dir: "data/audio/export/"
+generate_llms_files: false # Set true to generate .llms.txt / .llms-full.txt per file
+
+# Limits
+max_file_size_mb: 500
+chunk_duration_minutes: 5 # MLX only: split audio longer than this
+
+# Hallucination detection (multi-signal scoring system)
+hallucination_detection:
+  repetition_threshold: 3 # Max allowed phrase repetitions in a window
+  compression_ratio_threshold: 2.4 # Flag segments above this ratio
+  confidence_floor: -1.0 # Average log-probability floor per segment
+  no_speech_prob_threshold: 0.6 # Flag segments above this no-speech probability
+  duration_chars_per_sec_max: 25 # Flag segments exceeding this text density
+  duration_chars_per_sec_min: 2 # Flag segments below this (for segments > 0.5s)
+  use_vad: true # Use Voice Activity Detector for silence detection
+  blocklist_enabled: true # Check against known hallucination phrases
+  score_threshold: 2 # Number of layers that must flag before action is taken
+  action: "remove" # 'remove', 'flag', or 'log'

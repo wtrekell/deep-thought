@@ -30,6 +30,7 @@ from deep_thought.todoist.client import TodoistClient
 from deep_thought.todoist.config import (
     TodoistConfig,
     get_api_token,
+    get_bundled_config_path,
     get_default_config_path,
     load_config,
     validate_config,
@@ -103,40 +104,62 @@ def _make_client_from_config(config: TodoistConfig) -> TodoistClient:
 
 
 def cmd_init(args: argparse.Namespace) -> None:
-    """Create the database, required directories, and print setup instructions.
+    """Bootstrap the Todoist Tool for first use in the calling repo.
 
-    Creates:
-    - The SQLite database at <data_dir>/todoist.db
-    - <data_dir>/snapshots/ for raw JSON backups per sync
-    - <data_dir>/export/ for generated markdown files
+    Copies the bundled default config template from the package to
+    ``src/config/todoist_configuration.yaml`` (relative to cwd), creates the
+    SQLite database, snapshot and export directories, and prints a summary.
 
-    <data_dir> defaults to data/todoist/ at the project root but can be
-    overridden by setting the DEEP_THOUGHT_DATA_DIR environment variable.
+    Never attempts to load the project-level config — it does not exist yet.
 
     Args:
         args: Parsed argparse namespace (no subcommand-specific flags).
     """
+    import os
+    import shutil
+
+    bundled_config = get_bundled_config_path()
+    project_config = get_default_config_path()
+
+    if not bundled_config.exists():
+        print(f"ERROR: Bundled config template not found at {bundled_config}.", file=sys.stderr)
+        sys.exit(1)
+
+    created_items: list[str] = []
+
+    if project_config.exists():
+        print(f"  Configuration file already exists: {project_config}")
+    else:
+        project_config.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(bundled_config, project_config)
+        created_items.append(f"  Configuration file: {project_config}")
+
     database_path = get_database_path()
     connection = initialize_database(database_path)
     connection.close()
     logger.debug("Database initialised at: %s", database_path)
+    created_items.append(f"  Database: {database_path}")
 
     snapshots_directory = database_path.parent / "snapshots"
     export_directory = database_path.parent / "export"
 
     snapshots_directory.mkdir(parents=True, exist_ok=True)
-    export_directory.mkdir(parents=True, exist_ok=True)
+    created_items.append(f"  Snapshots directory: {snapshots_directory}")
 
-    default_config_path = get_default_config_path()
+    export_directory.mkdir(parents=True, exist_ok=True)
+    created_items.append(f"  Export directory: {export_directory}")
+
+    # Honour DEEP_THOUGHT_DATA_DIR override in the summary line
+    data_root = Path(os.environ.get("DEEP_THOUGHT_DATA_DIR", "data"))
+    _ = data_root  # referenced only for documentation; get_database_path handles it
 
     print("Todoist Tool initialised successfully.")
     print()
-    print(f"  Database:  {database_path}")
-    print(f"  Snapshots: {snapshots_directory}")
-    print(f"  Export:    {export_directory}")
+    for item in created_items:
+        print(item)
     print()
     print("Next steps:")
-    print(f"  1. Edit the configuration file:  {default_config_path}")
+    print(f"  1. Edit the configuration file: {project_config}")
     print("  2. Add your Todoist API token to a .env file at the project root:")
     print("       TODOIST_API_TOKEN=your_token_here")
     print("  3. Run `todoist pull` to fetch your tasks.")

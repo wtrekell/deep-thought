@@ -29,6 +29,7 @@ from dotenv import load_dotenv
 
 from deep_thought.gcal.config import (
     GcalConfig,
+    get_bundled_config_path,
     get_default_config_path,
     load_config,
     validate_config,
@@ -125,48 +126,66 @@ def _make_client_from_config(config: GcalConfig) -> GcalClient:
 
 
 def cmd_init(args: argparse.Namespace) -> None:
-    """Create the database, required directories, and print setup instructions.
+    """Bootstrap the GCal tool for first use in the calling repo.
+
+    Copies the bundled default config template from the package to
+    ``src/config/gcal-configuration.yaml`` (relative to cwd), creates the
+    data directory and subdirectories, initialises the database, and prints
+    a summary of what was created.
+
+    Never attempts to load the project-level config — it does not exist yet.
 
     Args:
         args: Parsed argparse namespace.
     """
+    import os
+    import shutil
+
+    bundled_config = get_bundled_config_path()
+    project_config = get_default_config_path()
+    data_root = Path(os.environ.get("DEEP_THOUGHT_DATA_DIR", "data"))
+    data_dir = data_root / "gcal"
+    output_dir = Path(args.output) if args.output else data_dir / "export"
+
+    if not bundled_config.exists():
+        print(f"ERROR: Bundled config template not found at {bundled_config}.", file=sys.stderr)
+        sys.exit(1)
+
+    created_items: list[str] = []
+
+    if project_config.exists():
+        print(f"  Configuration file already exists: {project_config}")
+    else:
+        project_config.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(bundled_config, project_config)
+        created_items.append(f"  Configuration file: {project_config}")
+
     database_path = get_database_path()
     connection = initialize_database(database_path)
     connection.close()
     logger.debug("Database initialised at: %s", database_path)
+    created_items.append(f"  Database: {database_path}")
 
-    data_dir = database_path.parent
     snapshots_directory = data_dir / "snapshots"
-    export_directory = data_dir / "export"
     input_directory = data_dir / "input"
 
     snapshots_directory.mkdir(parents=True, exist_ok=True)
-    export_directory.mkdir(parents=True, exist_ok=True)
+    created_items.append(f"  Snapshots directory: {snapshots_directory}")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    created_items.append(f"  Export directory: {output_dir}")
+
     input_directory.mkdir(parents=True, exist_ok=True)
-
-    default_config_path = get_default_config_path()
-
-    config = _load_config_from_args(args)
-    credentials_path = Path(config.credentials_path)
+    created_items.append(f"  Input directory: {input_directory}")
 
     print("GCal Tool initialised successfully.")
     print()
-    print(f"  Database:  {database_path}")
-    print(f"  Snapshots: {snapshots_directory}")
-    print(f"  Export:    {export_directory}")
-    print(f"  Input:     {input_directory}")
-    print()
-
-    if credentials_path.exists():
-        print(f"  Credentials found at: {credentials_path}")
-    else:
-        print(f"  WARNING: Credentials NOT found at: {credentials_path}")
-        print("  Download credentials.json from Google Cloud Console into that path.")
-
+    for created_item in created_items:
+        print(created_item)
     print()
     print("Next steps:")
-    print(f"  1. Edit the configuration file:  {default_config_path}")
-    print("  2. Ensure credentials.json is in place (see above).")
+    print(f"  1. Edit the configuration file: {project_config}")
+    print("  2. Place credentials.json at the path set in the config.")
     print("  3. Run `gcal auth` to authenticate with Google.")
     print("  4. Run `gcal` to start pulling calendar events.")
 
@@ -608,13 +627,13 @@ def main() -> None:
 
 
 def _handle_save_config(destination_path_str: str) -> None:
-    """Write a default example configuration to the specified path and exit.
+    """Write the bundled default configuration template to the specified path and exit.
 
     Args:
         destination_path_str: String path where the default config should be written.
     """
     destination_path = Path(destination_path_str)
-    source_path = get_default_config_path()
+    source_path = get_bundled_config_path()
 
     if not source_path.exists():
         print(f"ERROR: Default config template not found at {source_path}.", file=sys.stderr)

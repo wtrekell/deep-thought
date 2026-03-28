@@ -20,9 +20,9 @@ from pathlib import Path
 
 from deep_thought.file_txt.config import (
     FileTxtConfig,
+    get_bundled_config_path,
     get_default_config_path,
     load_config,
-    save_default_config,
     validate_config,
 )
 from deep_thought.file_txt.convert import ConvertResult, convert_file
@@ -311,30 +311,46 @@ def cmd_config(args: argparse.Namespace) -> None:
 
 
 def cmd_init(args: argparse.Namespace) -> None:
-    """Write a default configuration file and create the output directory.
+    """Bootstrap the file-txt tool for first use in the calling repo.
 
-    If --save-config is provided, the default config is written there.
-    Otherwise it is written to the default location. The output directory
-    is created at config.output.output_dir.
+    Copies the bundled default config template from the package to
+    ``src/config/file-txt-configuration.yaml`` (relative to cwd), creates
+    the default output directory, and prints a summary.
+
+    Never attempts to load the project-level config — it does not exist yet.
 
     Args:
         args: Parsed argparse namespace.
     """
-    destination_path: Path = Path(args.save_config) if args.save_config else get_default_config_path()
+    import shutil
 
-    try:
-        save_default_config(destination_path)
-        print(f"Configuration written to: {destination_path}")
-    except FileExistsError:
-        print(f"Configuration already exists at: {destination_path}")
+    bundled_config_path = get_bundled_config_path()
+    project_config_path: Path = Path(args.save_config) if args.save_config else get_default_config_path()
 
-    config = load_config(destination_path)
-    output_dir = Path(config.output.output_dir)
+    if not bundled_config_path.exists():
+        print(f"ERROR: Bundled config template not found at {bundled_config_path}.", file=sys.stderr)
+        sys.exit(1)
+
+    created_items: list[str] = []
+
+    if project_config_path.exists():
+        print(f"  Configuration file already exists: {project_config_path}")
+    else:
+        project_config_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(bundled_config_path, project_config_path)
+        created_items.append(f"  Configuration file: {project_config_path}")
+
+    output_dir = Path(args.output) if hasattr(args, "output") and args.output else Path("output")
     output_dir.mkdir(parents=True, exist_ok=True)
-    print(f"Output directory ready:   {output_dir}")
+    created_items.append(f"  Output directory: {output_dir}")
+
+    print("file-txt initialised successfully.")
+    print()
+    for item in created_items:
+        print(item)
     print()
     print("Next steps:")
-    print(f"  1. Review configuration:  {destination_path}")
+    print(f"  1. Review configuration:  {project_config_path}")
     print("  2. Run: file-txt <path-to-files>")
 
 

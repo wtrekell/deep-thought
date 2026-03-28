@@ -14,6 +14,7 @@ import pytest
 
 from deep_thought.reddit.cli import (
     _build_argument_parser,
+    _handle_save_config,
     _load_config_from_args,
     _setup_logging,
     cmd_config,
@@ -189,29 +190,203 @@ class TestLoadConfigFromArgs:
 
 
 class TestCmdInit:
-    def test_creates_directories_and_prints_paths(
+    def test_prints_confirmation(
         self,
         args_base: argparse.Namespace,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """init must create snapshots/export dirs and print setup instructions."""
-        fake_db_path = tmp_path / "reddit.db"
-        fake_config_path = tmp_path / "reddit-configuration.yaml"
+        """init must print a confirmation message."""
+        monkeypatch.chdir(tmp_path)
+        bundled_config = tmp_path / "bundled.yaml"
+        bundled_config.write_text("# default reddit config\n", encoding="utf-8")
+        fake_db_path = tmp_path / "data" / "reddit" / "reddit.db"
         mock_conn = MagicMock()
 
         with (
+            patch("deep_thought.reddit.cli.get_bundled_config_path", return_value=bundled_config),
             patch("deep_thought.reddit.cli.get_database_path", return_value=fake_db_path),
             patch("deep_thought.reddit.cli.initialize_database", return_value=mock_conn),
-            patch("deep_thought.reddit.cli.get_default_config_path", return_value=fake_config_path),
         ):
             cmd_init(args_base)
 
         captured_output = capsys.readouterr().out
         assert "initialised successfully" in captured_output
-        assert str(fake_db_path) in captured_output
-        assert "REDDIT_CLIENT_ID" in captured_output
         mock_conn.close.assert_called_once()
+
+    def test_copies_config_to_project(
+        self,
+        args_base: argparse.Namespace,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """init must copy the bundled config to src/config/ in the calling repo."""
+        monkeypatch.chdir(tmp_path)
+        bundled_config = tmp_path / "bundled.yaml"
+        bundled_config.write_text("# bundled default reddit config\n", encoding="utf-8")
+        fake_db_path = tmp_path / "data" / "reddit" / "reddit.db"
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.reddit.cli.get_bundled_config_path", return_value=bundled_config),
+            patch("deep_thought.reddit.cli.get_database_path", return_value=fake_db_path),
+            patch("deep_thought.reddit.cli.initialize_database", return_value=mock_conn),
+        ):
+            cmd_init(args_base)
+
+        project_config = tmp_path / "src" / "config" / "reddit-configuration.yaml"
+        assert project_config.exists()
+        assert project_config.read_text() == "# bundled default reddit config\n"
+
+    def test_skips_config_copy_if_already_exists(
+        self,
+        args_base: argparse.Namespace,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """init must not overwrite an existing project-level config file."""
+        monkeypatch.chdir(tmp_path)
+        bundled_config = tmp_path / "bundled.yaml"
+        bundled_config.write_text("# new bundled content\n", encoding="utf-8")
+        project_config = tmp_path / "src" / "config" / "reddit-configuration.yaml"
+        project_config.parent.mkdir(parents=True)
+        project_config.write_text("# existing content\n", encoding="utf-8")
+        fake_db_path = tmp_path / "data" / "reddit" / "reddit.db"
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.reddit.cli.get_bundled_config_path", return_value=bundled_config),
+            patch("deep_thought.reddit.cli.get_database_path", return_value=fake_db_path),
+            patch("deep_thought.reddit.cli.initialize_database", return_value=mock_conn),
+        ):
+            cmd_init(args_base)
+
+        assert project_config.read_text() == "# existing content\n"
+        captured_output = capsys.readouterr().out
+        assert "already exists" in captured_output
+
+    def test_creates_snapshots_and_export_directories(
+        self,
+        args_base: argparse.Namespace,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """init must create the snapshots and export subdirectories under data/reddit/."""
+        monkeypatch.chdir(tmp_path)
+        bundled_config = tmp_path / "bundled.yaml"
+        bundled_config.write_text("# default\n", encoding="utf-8")
+        fake_db_path = tmp_path / "data" / "reddit" / "reddit.db"
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.reddit.cli.get_bundled_config_path", return_value=bundled_config),
+            patch("deep_thought.reddit.cli.get_database_path", return_value=fake_db_path),
+            patch("deep_thought.reddit.cli.initialize_database", return_value=mock_conn),
+        ):
+            cmd_init(args_base)
+
+        assert (tmp_path / "data" / "reddit" / "snapshots").exists()
+        assert (tmp_path / "data" / "reddit" / "export").exists()
+
+    def test_prints_credentials_next_steps(
+        self,
+        args_base: argparse.Namespace,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """init must print Reddit credential env var names in the next-steps section."""
+        monkeypatch.chdir(tmp_path)
+        bundled_config = tmp_path / "bundled.yaml"
+        bundled_config.write_text("# default\n", encoding="utf-8")
+        fake_db_path = tmp_path / "data" / "reddit" / "reddit.db"
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.reddit.cli.get_bundled_config_path", return_value=bundled_config),
+            patch("deep_thought.reddit.cli.get_database_path", return_value=fake_db_path),
+            patch("deep_thought.reddit.cli.initialize_database", return_value=mock_conn),
+        ):
+            cmd_init(args_base)
+
+        captured_output = capsys.readouterr().out
+        assert "REDDIT_CLIENT_ID" in captured_output
+
+    def test_exits_if_bundled_config_missing(
+        self,
+        args_base: argparse.Namespace,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """init must exit with code 1 if the bundled config template is not found."""
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            patch("deep_thought.reddit.cli.get_bundled_config_path", return_value=tmp_path / "nonexistent.yaml"),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            cmd_init(args_base)
+
+        assert exc_info.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# _handle_save_config
+# ---------------------------------------------------------------------------
+
+
+class TestHandleSaveConfig:
+    def test_copies_bundled_config_to_destination(self, tmp_path: Path) -> None:
+        """_handle_save_config must copy the bundled template to the given path."""
+        destination = tmp_path / "output.yaml"
+        source = tmp_path / "source.yaml"
+        source.write_text("# example reddit config\n", encoding="utf-8")
+
+        with patch("deep_thought.reddit.cli.get_bundled_config_path", return_value=source):
+            _handle_save_config(str(destination))
+
+        assert destination.exists()
+        assert destination.read_text() == "# example reddit config\n"
+
+    def test_exits_if_source_missing(self, tmp_path: Path) -> None:
+        """Should exit with code 1 if the bundled config template is missing."""
+        with patch("deep_thought.reddit.cli.get_bundled_config_path") as mock_bundled_path:
+            mock_bundled_path.return_value = tmp_path / "nonexistent.yaml"
+
+            with pytest.raises(SystemExit) as exit_info:
+                _handle_save_config(str(tmp_path / "output.yaml"))
+
+        assert exit_info.value.code == 1
+
+    def test_exits_if_destination_exists(self, tmp_path: Path) -> None:
+        """Should exit with code 1 if the destination file already exists."""
+        destination = tmp_path / "existing.yaml"
+        destination.write_text("existing content", encoding="utf-8")
+
+        with patch("deep_thought.reddit.cli.get_bundled_config_path") as mock_bundled_path:
+            source = tmp_path / "source.yaml"
+            source.write_text("# config", encoding="utf-8")
+            mock_bundled_path.return_value = source
+
+            with pytest.raises(SystemExit) as exit_info:
+                _handle_save_config(str(destination))
+
+        assert exit_info.value.code == 1
+
+    def test_creates_parent_directories(self, tmp_path: Path) -> None:
+        """Should create missing parent directories before writing the config file."""
+        destination = tmp_path / "nested" / "dirs" / "my-config.yaml"
+
+        with patch("deep_thought.reddit.cli.get_bundled_config_path") as mock_bundled_path:
+            source = tmp_path / "source.yaml"
+            source.write_text("# config", encoding="utf-8")
+            mock_bundled_path.return_value = source
+
+            _handle_save_config(str(destination))
+
+        assert destination.exists()
 
 
 # ---------------------------------------------------------------------------
@@ -291,13 +466,8 @@ class TestMain:
 
     def test_dispatches_init_to_cmd_init(self, minimal_config: RedditConfig) -> None:
         """main must dispatch the 'init' subcommand to cmd_init."""
-        mock_db_path = MagicMock()
-        mock_conn = MagicMock()
         with (
             patch("sys.argv", ["reddit", "init"]),
-            patch("deep_thought.reddit.cli.get_database_path", return_value=mock_db_path),
-            patch("deep_thought.reddit.cli.initialize_database", return_value=mock_conn),
-            patch("deep_thought.reddit.cli.get_default_config_path", return_value=MagicMock()),
             patch.dict("deep_thought.reddit.cli._COMMAND_HANDLERS", {"init": MagicMock()}),
         ):
             main()

@@ -7,6 +7,7 @@ HTMLParser for title extraction.
 
 from __future__ import annotations
 
+import re
 from html.parser import HTMLParser
 
 import html2text
@@ -104,7 +105,34 @@ def convert_html_to_markdown(html: str, base_url: str = "") -> str:
         converter.baseurl = base_url
 
     raw_markdown: str = str(converter.handle(html))
-    return raw_markdown.strip()
+    normalized_markdown = re.sub(r"\n{3,}", "\n\n", raw_markdown)
+    return normalized_markdown.strip()
+
+
+def apply_boilerplate_patterns(markdown_text: str, patterns: list[str]) -> str:
+    """Remove boilerplate sections from markdown text using regex patterns.
+
+    Each pattern is applied as a regex substitution against the full markdown
+    text.  Patterns use ``re.DOTALL`` so ``.`` matches newlines, allowing
+    multi-line blocks (navigation menus, footers) to be matched.
+
+    Args:
+        markdown_text: The converted markdown to clean.
+        patterns: A list of regex pattern strings.  Empty list = no-op.
+
+    Returns:
+        The markdown text with all pattern matches removed and whitespace
+        normalised (no runs of three or more consecutive newlines).
+    """
+    if not patterns:
+        return markdown_text
+
+    cleaned_text = markdown_text
+    for pattern in patterns:
+        cleaned_text = re.sub(pattern, "", cleaned_text, flags=re.DOTALL)
+
+    cleaned_text = re.sub(r"\n{3,}", "\n\n", cleaned_text)
+    return cleaned_text.strip()
 
 
 def count_words(markdown_text: str) -> int:

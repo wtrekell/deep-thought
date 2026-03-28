@@ -8,6 +8,7 @@ import pytest
 
 from deep_thought.gcal.config import (
     GcalConfig,
+    get_bundled_config_path,
     get_default_config_path,
     load_config,
     validate_config,
@@ -178,3 +179,39 @@ class TestGetDefaultConfigPath:
         """Should return a Path instance, not a string."""
         config_path = get_default_config_path()
         assert isinstance(config_path, Path)
+
+    def test_is_relative_to_cwd(self) -> None:
+        """Should return a path relative to the current working directory."""
+        import os
+
+        config_path = get_default_config_path()
+        assert str(config_path).startswith(os.getcwd())
+
+
+# ---------------------------------------------------------------------------
+# Bundled config path
+# ---------------------------------------------------------------------------
+
+
+class TestGetBundledConfigPath:
+    """Tests for get_bundled_config_path."""
+
+    def test_returns_path_object(self) -> None:
+        """Should return a Path instance, not a string."""
+        bundled_path = get_bundled_config_path()
+        assert isinstance(bundled_path, Path)
+
+    def test_returns_path_ending_in_default_config_yaml(self) -> None:
+        """Should return a Path ending in default-config.yaml."""
+        bundled_path = get_bundled_config_path()
+        assert bundled_path.name == "default-config.yaml"
+
+    def test_bundled_config_file_exists(self) -> None:
+        """The bundled config template should exist inside the package."""
+        bundled_path = get_bundled_config_path()
+        assert bundled_path.exists(), f"Bundled config not found at: {bundled_path}"
+
+    def test_bundled_config_is_inside_package(self) -> None:
+        """The bundled config path should be located inside the gcal package directory."""
+        bundled_path = get_bundled_config_path()
+        assert "deep_thought/gcal" in str(bundled_path)

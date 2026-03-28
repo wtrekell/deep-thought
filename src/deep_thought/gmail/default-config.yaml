@@ -1,0 +1,54 @@
+# Gmail Tool Configuration
+# See files/tools/gmail/260323-requirements.md for full documentation.
+
+# Auth
+credentials_path: "src/config/gmail/credentials.json"
+token_path: "data/gmail/token.json"
+scopes:
+  - "https://mail.google.com/" # Use 'gmail.modify' if permanent delete is not needed
+
+# Gemini AI
+gemini_api_key_env: "GEMINI_API_KEY"
+gemini_model: "gemini-2.5-flash"
+gemini_rate_limit_rpm: 15
+
+# Gmail API
+gmail_rate_limit_rpm: 250 # Gmail API default quota; lower to be conservative
+retry_max_attempts: 3 # Retry failed Gmail API calls with exponential backoff
+retry_base_delay_seconds: 1 # Initial delay doubles on each retry
+
+# Collection
+max_emails_per_run: 100
+clean_newsletters: true # Strip tracking pixels, social buttons (50-70% reduction)
+decision_cache_ttl: 3600 # Seconds to cache AI extraction decisions
+
+# Output
+output_dir: "data/gmail/export/"
+generate_llms_files: false # Set true to generate .llms.txt / .llms-full.txt files
+flat_output: false # true = all files in one directory
+
+rules:
+  - name: "newsletters"
+    query: "label:newsletter"
+    ai_instructions: "Extract the main content and key takeaways. Ignore promotional sections."
+    actions:
+      - archive
+      - label:Processed
+    append_mode: true # Append to existing file rather than create new
+
+  - name: "receipts"
+    query: "subject:receipt OR subject:invoice newer_than:7d"
+    ai_instructions: "Extract order number, total, merchant, and item list."
+    actions:
+      - archive
+      - label:Receipts
+    append_mode: false
+
+  - name: "readwise"
+    query: "label:newsletter -label:Forwarded newer_than:7d"
+    ai_instructions: null # No AI extraction — forward only
+    actions:
+      - forward:yourname@feed.readwise.io
+      - label:Forwarded
+      - archive
+    append_mode: false

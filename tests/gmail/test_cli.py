@@ -221,11 +221,11 @@ class TestHandleSaveConfig:
     """Tests for _handle_save_config."""
 
     def test_writes_config_to_destination(self, tmp_path: Path) -> None:
-        """Should copy the default config to the specified path."""
+        """Should copy the bundled config template to the specified path."""
 
         destination = tmp_path / "my-config.yaml"
 
-        with patch("deep_thought.gmail.cli.get_default_config_path") as mock_config_path:
+        with patch("deep_thought.gmail.cli.get_bundled_config_path") as mock_config_path:
             source = tmp_path / "source-config.yaml"
             source.write_text("# example config\nrules: []", encoding="utf-8")
             mock_config_path.return_value = source
@@ -236,9 +236,9 @@ class TestHandleSaveConfig:
         assert destination.read_text() == "# example config\nrules: []"
 
     def test_exits_if_source_missing(self, tmp_path: Path) -> None:
-        """Should exit with code 1 if the default config template is missing."""
+        """Should exit with code 1 if the bundled config template is missing."""
 
-        with patch("deep_thought.gmail.cli.get_default_config_path") as mock_config_path:
+        with patch("deep_thought.gmail.cli.get_bundled_config_path") as mock_config_path:
             mock_config_path.return_value = tmp_path / "nonexistent.yaml"
 
             with pytest.raises(SystemExit) as exit_info:
@@ -252,13 +252,126 @@ class TestHandleSaveConfig:
         destination = tmp_path / "existing.yaml"
         destination.write_text("existing content", encoding="utf-8")
 
-        with patch("deep_thought.gmail.cli.get_default_config_path") as mock_config_path:
+        with patch("deep_thought.gmail.cli.get_bundled_config_path") as mock_config_path:
             source = tmp_path / "source.yaml"
             source.write_text("# config", encoding="utf-8")
             mock_config_path.return_value = source
 
             with pytest.raises(SystemExit) as exit_info:
                 _handle_save_config(str(destination))
+
+        assert exit_info.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# cmd_init
+# ---------------------------------------------------------------------------
+
+
+class TestCmdInit:
+    """Tests for cmd_init."""
+
+    def test_prints_confirmation(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Should print a confirmation message to stdout."""
+        monkeypatch.chdir(tmp_path)
+        bundled = tmp_path / "bundled.yaml"
+        bundled.write_text("# bundled config\n", encoding="utf-8")
+
+        with (
+            patch("deep_thought.gmail.cli.get_bundled_config_path", return_value=bundled),
+            patch("deep_thought.gmail.cli.get_database_path", return_value=tmp_path / "gmail.db"),
+            patch("deep_thought.gmail.cli.initialize_database") as mock_db,
+        ):
+            mock_db.return_value = MagicMock()
+            args = argparse.Namespace()
+            cmd_init(args)
+
+        captured = capsys.readouterr()
+        assert "Gmail Tool initialised" in captured.out
+
+    def test_copies_config_to_project(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should copy the bundled config template to src/config/ in the calling repo."""
+        monkeypatch.chdir(tmp_path)
+        bundled = tmp_path / "bundled.yaml"
+        bundled.write_text("# bundled default\nrules: []\n", encoding="utf-8")
+
+        with (
+            patch("deep_thought.gmail.cli.get_bundled_config_path", return_value=bundled),
+            patch("deep_thought.gmail.cli.get_database_path", return_value=tmp_path / "gmail.db"),
+            patch("deep_thought.gmail.cli.initialize_database") as mock_db,
+        ):
+            mock_db.return_value = MagicMock()
+            args = argparse.Namespace()
+            cmd_init(args)
+
+        project_config = tmp_path / "src" / "config" / "gmail-configuration.yaml"
+        assert project_config.exists()
+        assert project_config.read_text() == "# bundled default\nrules: []\n"
+
+    def test_skips_config_copy_if_exists(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Should not overwrite an existing project-level config file."""
+        monkeypatch.chdir(tmp_path)
+        bundled = tmp_path / "bundled.yaml"
+        bundled.write_text("# new content\n", encoding="utf-8")
+        project_config = tmp_path / "src" / "config" / "gmail-configuration.yaml"
+        project_config.parent.mkdir(parents=True)
+        project_config.write_text("# existing content\n", encoding="utf-8")
+
+        with (
+            patch("deep_thought.gmail.cli.get_bundled_config_path", return_value=bundled),
+            patch("deep_thought.gmail.cli.get_database_path", return_value=tmp_path / "gmail.db"),
+            patch("deep_thought.gmail.cli.initialize_database") as mock_db,
+        ):
+            mock_db.return_value = MagicMock()
+            args = argparse.Namespace()
+            cmd_init(args)
+
+        assert project_config.read_text() == "# existing content\n"
+        captured = capsys.readouterr()
+        assert "already exists" in captured.out
+
+    def test_creates_data_directories(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should create snapshots, export, and input subdirectories under the data dir."""
+        monkeypatch.chdir(tmp_path)
+        bundled = tmp_path / "bundled.yaml"
+        bundled.write_text("# bundled\n", encoding="utf-8")
+        fake_db_path = tmp_path / "data" / "gmail" / "gmail.db"
+
+        with (
+            patch("deep_thought.gmail.cli.get_bundled_config_path", return_value=bundled),
+            patch("deep_thought.gmail.cli.get_database_path", return_value=fake_db_path),
+            patch("deep_thought.gmail.cli.initialize_database") as mock_db,
+        ):
+            mock_db.return_value = MagicMock()
+            args = argparse.Namespace()
+            cmd_init(args)
+
+        data_dir = tmp_path / "data" / "gmail"
+        assert (data_dir / "snapshots").exists()
+        assert (data_dir / "export").exists()
+        assert (data_dir / "input").exists()
+
+    def test_exits_if_bundled_config_missing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should exit with code 1 if the bundled config template is not found."""
+        monkeypatch.chdir(tmp_path)
+        missing_bundled = tmp_path / "nonexistent.yaml"
+
+        with (
+            patch("deep_thought.gmail.cli.get_bundled_config_path", return_value=missing_bundled),
+        ):
+            args = argparse.Namespace()
+            with pytest.raises(SystemExit) as exit_info:
+                cmd_init(args)
 
         assert exit_info.value.code == 1
 

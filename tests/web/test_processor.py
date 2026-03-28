@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 from deep_thought.web.config import CrawlConfig, WebConfig
 from deep_thought.web.crawler import PageResult, WebCrawler
 from deep_thought.web.processor import (
+    _build_lookback_summaries,
     _collect_article_urls,
     _get_changelog_changed_urls,
     _is_article_content,
@@ -73,6 +74,7 @@ def _make_web_config(
     changelog_url: str | None = None,
     include_patterns: list[str] | None = None,
     exclude_patterns: list[str] | None = None,
+    strip_boilerplate: list[str] | None = None,
 ) -> WebConfig:
     """Create a minimal WebConfig for use in tests."""
     return WebConfig(
@@ -84,6 +86,7 @@ def _make_web_config(
             js_wait=0.0,
             browser_channel=None,
             stealth=False,
+            headless=True,
             include_patterns=include_patterns or [],
             exclude_patterns=exclude_patterns or [],
             retry_attempts=1,
@@ -94,6 +97,10 @@ def _make_web_config(
             index_depth=index_depth,
             min_article_words=min_article_words,
             changelog_url=changelog_url,
+            strip_path_prefix=None,
+            strip_domain=False,
+            llms_lookback_days=30,
+            strip_boilerplate=strip_boilerplate or [],
         )
     )
 
@@ -321,3 +328,175 @@ class TestProcessPageQualityGate:
         # No markdown files should exist in the output directory
         md_files = list(tmp_path.rglob("*.md"))
         assert md_files == []
+
+
+# ---------------------------------------------------------------------------
+# TestBuildLookbackSummaries
+# ---------------------------------------------------------------------------
+
+
+def _insert_test_page(
+    conn: sqlite3.Connection,
+    url: str,
+    title: str,
+    output_path: str,
+    word_count: int,
+    updated_at: str,
+    status: str = "success",
+) -> None:
+    """Insert a crawled_pages row for testing."""
+    from deep_thought.web.db.queries import upsert_crawled_page
+
+    upsert_crawled_page(
+        conn,
+        {
+            "url": url,
+            "rule_name": None,
+            "title": title,
+            "status_code": 200,
+            "word_count": word_count,
+            "output_path": output_path,
+            "status": status,
+            "created_at": updated_at,
+            "updated_at": updated_at,
+        },
+    )
+    conn.commit()
+
+
+class TestBuildLookbackSummaries:
+    """Tests for _build_lookback_summaries merging current + historical pages."""
+
+    def test_includes_historical_pages_from_db(self, in_memory_db: sqlite3.Connection, tmp_path: Path) -> None:
+        """Historical pages within the lookback window are included."""
+        from datetime import UTC, datetime
+
+        output_root = tmp_path / "output"
+        output_root.mkdir()
+
+        # Write a historical .md file on disk
+        md_path = output_root / "example.com" / "old-post.md"
+        md_path.parent.mkdir(parents=True)
+        md_path.write_text("---\ntool: web\n---\n\nOld post content here.", encoding="utf-8")
+
+        now_iso = datetime.now(UTC).isoformat()
+        _insert_test_page(
+            in_memory_db, "https://example.com/old-post", "Old Post", "example.com/old-post.md", 100, now_iso
+        )
+
+        result = _build_lookback_summaries(in_memory_db, [], output_root, lookback_days=30, mode="blog")
+
+        assert len(result) == 1
+        assert result[0].url == "https://example.com/old-post"
+        assert result[0].title == "Old Post"
+        assert "Old post content here." in result[0].content
+
+    def test_current_run_wins_on_overlap(self, in_memory_db: sqlite3.Connection, tmp_path: Path) -> None:
+        """When a URL exists in both current run and DB, the current-run version wins."""
+        from datetime import UTC, datetime
+
+        from deep_thought.web.llms import PageSummary
+
+        output_root = tmp_path / "output"
+        output_root.mkdir()
+
+        now_iso = datetime.now(UTC).isoformat()
+        _insert_test_page(in_memory_db, "https://example.com/page", "DB Title", "example.com/page.md", 50, now_iso)
+
+        current_summary = PageSummary(
+            title="Current Title",
+            url="https://example.com/page",
+            md_relative_path="example.com/page.md",
+            mode="blog",
+            word_count=200,
+            content="Fresh content from current run.",
+        )
+
+        result = _build_lookback_summaries(in_memory_db, [current_summary], output_root, lookback_days=30, mode="blog")
+
+        assert len(result) == 1
+        assert result[0].title == "Current Title"
+        assert result[0].content == "Fresh content from current run."
+
+    def test_missing_file_skipped_gracefully(self, in_memory_db: sqlite3.Connection, tmp_path: Path) -> None:
+        """A DB row whose .md file is missing on disk is silently skipped."""
+        from datetime import UTC, datetime
+
+        output_root = tmp_path / "output"
+        output_root.mkdir()
+
+        now_iso = datetime.now(UTC).isoformat()
+        _insert_test_page(in_memory_db, "https://example.com/gone", "Gone Page", "example.com/gone.md", 100, now_iso)
+
+        result = _build_lookback_summaries(in_memory_db, [], output_root, lookback_days=30, mode="blog")
+
+        assert len(result) == 0
+
+    def test_old_pages_outside_window_excluded(self, in_memory_db: sqlite3.Connection, tmp_path: Path) -> None:
+        """Pages with updated_at older than the lookback window are not included."""
+        from datetime import UTC, datetime, timedelta
+
+        output_root = tmp_path / "output"
+        output_root.mkdir()
+
+        md_path = output_root / "example.com" / "ancient.md"
+        md_path.parent.mkdir(parents=True)
+        md_path.write_text("---\ntool: web\n---\n\nAncient content.", encoding="utf-8")
+
+        old_date = (datetime.now(UTC) - timedelta(days=60)).isoformat()
+        _insert_test_page(
+            in_memory_db, "https://example.com/ancient", "Ancient", "example.com/ancient.md", 100, old_date
+        )
+
+        result = _build_lookback_summaries(in_memory_db, [], output_root, lookback_days=30, mode="blog")
+
+        assert len(result) == 0
+
+    def test_output_sorted_by_url(self, in_memory_db: sqlite3.Connection, tmp_path: Path) -> None:
+        """Merged summaries are sorted alphabetically by URL."""
+        from datetime import UTC, datetime
+
+        from deep_thought.web.llms import PageSummary
+
+        output_root = tmp_path / "output"
+        output_root.mkdir()
+
+        now_iso = datetime.now(UTC).isoformat()
+
+        # Historical page (alphabetically first)
+        md_path = output_root / "example.com" / "aaa.md"
+        md_path.parent.mkdir(parents=True)
+        md_path.write_text("---\ntool: web\n---\n\nAAA content.", encoding="utf-8")
+        _insert_test_page(in_memory_db, "https://example.com/aaa", "AAA", "example.com/aaa.md", 50, now_iso)
+
+        # Current-run page (alphabetically last)
+        current_summary = PageSummary(
+            title="ZZZ",
+            url="https://example.com/zzz",
+            md_relative_path="example.com/zzz.md",
+            mode="blog",
+            word_count=100,
+            content="ZZZ content.",
+        )
+
+        result = _build_lookback_summaries(in_memory_db, [current_summary], output_root, lookback_days=30, mode="blog")
+
+        assert len(result) == 2
+        assert result[0].url == "https://example.com/aaa"
+        assert result[1].url == "https://example.com/zzz"
+
+    def test_error_status_pages_excluded(self, in_memory_db: sqlite3.Connection, tmp_path: Path) -> None:
+        """Pages with status 'error' are not included even if within the window."""
+        from datetime import UTC, datetime
+
+        output_root = tmp_path / "output"
+        output_root.mkdir()
+
+        now_iso = datetime.now(UTC).isoformat()
+        _insert_test_page(
+            in_memory_db, "https://example.com/broken", "Broken", "example.com/broken.md", 100, now_iso, status="error"
+        )
+
+        result = _build_lookback_summaries(in_memory_db, [], output_root, lookback_days=30, mode="blog")
+
+        assert len(result) == 0

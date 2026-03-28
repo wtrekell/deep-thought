@@ -10,7 +10,7 @@ from __future__ import annotations
 import random
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from playwright.sync_api import (
     Browser,
@@ -45,6 +45,7 @@ class CrawlerConfig:
     js_wait: float
     browser_channel: str | None
     stealth: bool
+    headless: bool
     retry_attempts: int
     retry_delay: float
 
@@ -96,10 +97,18 @@ class WebCrawler:
         Returns:
             This WebCrawler instance, ready to fetch pages.
         """
+        stealth_args = ["--disable-blink-features=AutomationControlled"] if self._config.stealth else []
         if self._config.browser_channel is not None:
-            self._browser = self._playwright_instance.chromium.launch(channel=self._config.browser_channel)
+            self._browser = self._playwright_instance.chromium.launch(
+                channel=self._config.browser_channel,
+                headless=self._config.headless,
+                args=stealth_args,
+            )
         else:
-            self._browser = self._playwright_instance.chromium.launch()
+            self._browser = self._playwright_instance.chromium.launch(
+                headless=self._config.headless,
+                args=stealth_args,
+            )
         return self
 
     def __exit__(
@@ -159,9 +168,25 @@ class WebCrawler:
 
                 page: Page = context.new_page()
 
+                if self._config.stealth:
+                    page.add_init_script(
+                        'Object.defineProperty(navigator, "webdriver", {get: () => undefined})'
+                    )
+
                 try:
-                    response = page.goto(url, wait_until="networkidle")
+                    wait_strategy: Literal["networkidle", "domcontentloaded"] = (
+                        "networkidle" if self._config.js_wait < 2.0 else "domcontentloaded"
+                    )
+                    response = page.goto(url, wait_until=wait_strategy, timeout=60000)
                     page.wait_for_timeout(int(self._config.js_wait * 1000))
+
+                    # Wait for Cloudflare challenge to resolve (up to 30s)
+                    cloudflare_wait_elapsed = 0.0
+                    cloudflare_poll_interval = 2.0
+                    cloudflare_max_wait = 30.0
+                    while page.title() == "Just a moment..." and cloudflare_wait_elapsed < cloudflare_max_wait:
+                        page.wait_for_timeout(int(cloudflare_poll_interval * 1000))
+                        cloudflare_wait_elapsed += cloudflare_poll_interval
 
                     status_code: int = response.status if response is not None else 0
                     page_title: str | None = page.title() or None

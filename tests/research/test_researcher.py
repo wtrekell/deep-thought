@@ -236,7 +236,7 @@ class TestResearch:
         from deep_thought.research.models import ResearchResult
 
         submit_body = make_async_submit_response(job_id="job_abc")
-        completed_body = make_async_poll_response(status="completed", answer="Deep answer here.")
+        completed_body = make_async_poll_response(status="COMPLETED", answer="Deep answer here.")
 
         mock_submit_response = _make_mock_response(200, submit_body)
         mock_poll_response = _make_mock_response(200, completed_body)
@@ -254,9 +254,9 @@ class TestResearch:
         assert result.answer == "Deep answer here."
 
     def test_research_calls_async_endpoint(self, sample_config: ResearchConfig) -> None:
-        """Should POST to the /async/chat/completions endpoint for the initial submission."""
+        """Should POST to the /v1/async/sonar endpoint for the initial submission."""
         submit_body = make_async_submit_response()
-        completed_body = make_async_poll_response(status="completed")
+        completed_body = make_async_poll_response(status="COMPLETED")
 
         client = _make_client(sample_config)
         client._client = MagicMock()
@@ -271,14 +271,14 @@ class TestResearch:
         first_call_args = client._client.request.call_args_list[0][0]
         method_arg, endpoint_arg = first_call_args
         assert method_arg == "POST"
-        assert endpoint_arg == "/async/chat/completions"
+        assert endpoint_arg == "/v1/async/sonar"
 
     def test_research_polls_until_complete(self, sample_config: ResearchConfig) -> None:
-        """Should keep polling until status is 'completed', making 3 total requests."""
+        """Should keep polling until status is 'COMPLETED', making 3 total requests."""
         submit_body = make_async_submit_response(job_id="job_xyz")
         pending_body_one = make_async_poll_response(status="pending")
         pending_body_two = make_async_poll_response(status="pending")
-        completed_body = make_async_poll_response(status="completed")
+        completed_body = make_async_poll_response(status="COMPLETED")
 
         client = _make_client(sample_config)
         client._client = MagicMock()

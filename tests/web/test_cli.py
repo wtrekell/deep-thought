@@ -37,6 +37,7 @@ def minimal_crawl_config() -> CrawlConfig:
         js_wait=1.0,
         browser_channel=None,
         stealth=False,
+        headless=True,
         include_patterns=[],
         exclude_patterns=[],
         retry_attempts=2,
@@ -47,6 +48,10 @@ def minimal_crawl_config() -> CrawlConfig:
         index_depth=1,
         min_article_words=200,
         changelog_url=None,
+        strip_path_prefix=None,
+        strip_domain=False,
+        llms_lookback_days=30,
+        strip_boilerplate=[],
     )
 
 
@@ -230,47 +235,107 @@ class TestCmdInit:
     """Tests for the cmd_init scaffolding command."""
 
     @staticmethod
-    def _init_mocks() -> tuple[MagicMock, MagicMock, MagicMock]:
-        """Return mock objects for save_default_config, copy_default_templates, and initialize_database."""
-        mock_save_config = MagicMock()
+    def _make_bundled_config(tmp_path: Path) -> Path:
+        """Write a minimal bundled config file and return its path."""
+        bundled_config_path = tmp_path / "bundled-default-config.yaml"
+        bundled_config_path.write_text("# bundled default\nmode: blog\n", encoding="utf-8")
+        return bundled_config_path
+
+    @staticmethod
+    def _init_mocks() -> tuple[MagicMock, MagicMock]:
+        """Return mock objects for copy_default_templates and initialize_database."""
         mock_copy_templates = MagicMock(return_value=[("created", "blog.yaml"), ("created", "docs.yaml")])
         mock_init_db = MagicMock()
-        return mock_save_config, mock_copy_templates, mock_init_db
+        return mock_copy_templates, mock_init_db
 
-    def test_with_save_config_writes_file_to_temp_path(
+    def test_copies_config_when_missing(
         self,
         tmp_path: Path,
-        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """cmd_init with --save-config must write a config file to the specified path."""
-        target_config_path = tmp_path / "my-web-config.yaml"
-        mock_save, mock_templates, mock_db = self._init_mocks()
-
-        args = argparse.Namespace(save_config=str(target_config_path), config=None)
+        """cmd_init must copy the bundled config to the project location when it does not exist."""
+        monkeypatch.chdir(tmp_path)
+        bundled_config_path = self._make_bundled_config(tmp_path)
+        mock_templates, mock_db = self._init_mocks()
+        args = argparse.Namespace(save_config=None, config=None)
 
         with (
-            patch("deep_thought.web.cli.save_default_config", mock_save),
+            patch("deep_thought.web.cli.get_bundled_config_path", return_value=bundled_config_path),
             patch("deep_thought.web.cli.copy_default_templates", mock_templates),
             patch("deep_thought.web.cli.initialize_database", mock_db),
         ):
             cmd_init(args)
-            mock_save.assert_called_once_with(target_config_path)
+
+        expected_project_config = tmp_path / "src" / "config" / "web-configuration.yaml"
+        assert expected_project_config.exists()
+        assert expected_project_config.read_text() == "# bundled default\nmode: blog\n"
+
+    def test_skips_config_copy_when_already_exists(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """cmd_init must not overwrite an existing project-level config file."""
+        monkeypatch.chdir(tmp_path)
+        bundled_config_path = self._make_bundled_config(tmp_path)
+        mock_templates, mock_db = self._init_mocks()
+
+        existing_config_path = tmp_path / "src" / "config" / "web-configuration.yaml"
+        existing_config_path.parent.mkdir(parents=True)
+        existing_config_path.write_text("# customized config\n", encoding="utf-8")
+
+        args = argparse.Namespace(save_config=None, config=None)
+
+        with (
+            patch("deep_thought.web.cli.get_bundled_config_path", return_value=bundled_config_path),
+            patch("deep_thought.web.cli.copy_default_templates", mock_templates),
+            patch("deep_thought.web.cli.initialize_database", mock_db),
+        ):
+            cmd_init(args)
+
+        assert existing_config_path.read_text() == "# customized config\n"
+        captured_output = capsys.readouterr().out
+        assert "already exists" in captured_output
+
+    def test_with_save_config_writes_to_custom_path(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """cmd_init with --save-config must write a config file to the specified path."""
+        monkeypatch.chdir(tmp_path)
+        bundled_config_path = self._make_bundled_config(tmp_path)
+        mock_templates, mock_db = self._init_mocks()
+        custom_config_path = tmp_path / "my-web-config.yaml"
+        args = argparse.Namespace(save_config=str(custom_config_path), config=None)
+
+        with (
+            patch("deep_thought.web.cli.get_bundled_config_path", return_value=bundled_config_path),
+            patch("deep_thought.web.cli.copy_default_templates", mock_templates),
+            patch("deep_thought.web.cli.initialize_database", mock_db),
+        ):
+            cmd_init(args)
+
+        assert custom_config_path.exists()
+        assert custom_config_path.read_text() == "# bundled default\nmode: blog\n"
 
     def test_prints_output_directory_paths(
         self,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """cmd_init must print both output directory paths."""
-        mock_save, mock_templates, mock_db = self._init_mocks()
-
+        monkeypatch.chdir(tmp_path)
+        bundled_config_path = self._make_bundled_config(tmp_path)
+        mock_templates, mock_db = self._init_mocks()
         args = argparse.Namespace(save_config=None, config=None)
 
         with (
-            patch("deep_thought.web.cli.save_default_config", mock_save),
+            patch("deep_thought.web.cli.get_bundled_config_path", return_value=bundled_config_path),
             patch("deep_thought.web.cli.copy_default_templates", mock_templates),
             patch("deep_thought.web.cli.initialize_database", mock_db),
-            patch("deep_thought.web.cli.get_default_config_path", return_value=tmp_path / "web-config.yaml"),
         ):
             cmd_init(args)
 
@@ -282,17 +347,18 @@ class TestCmdInit:
         self,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """cmd_init must print 'Next steps:' guidance to help the user get started."""
-        mock_save, mock_templates, mock_db = self._init_mocks()
-
+        monkeypatch.chdir(tmp_path)
+        bundled_config_path = self._make_bundled_config(tmp_path)
+        mock_templates, mock_db = self._init_mocks()
         args = argparse.Namespace(save_config=None, config=None)
 
         with (
-            patch("deep_thought.web.cli.save_default_config", mock_save),
+            patch("deep_thought.web.cli.get_bundled_config_path", return_value=bundled_config_path),
             patch("deep_thought.web.cli.copy_default_templates", mock_templates),
             patch("deep_thought.web.cli.initialize_database", mock_db),
-            patch("deep_thought.web.cli.get_default_config_path", return_value=tmp_path / "web-config.yaml"),
         ):
             cmd_init(args)
 
@@ -303,17 +369,18 @@ class TestCmdInit:
     def test_calls_copy_default_templates(
         self,
         tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """cmd_init must call copy_default_templates to scaffold batch configs."""
-        mock_save, mock_templates, mock_db = self._init_mocks()
-
+        monkeypatch.chdir(tmp_path)
+        bundled_config_path = self._make_bundled_config(tmp_path)
+        mock_templates, mock_db = self._init_mocks()
         args = argparse.Namespace(save_config=None, config=None)
 
         with (
-            patch("deep_thought.web.cli.save_default_config", mock_save),
+            patch("deep_thought.web.cli.get_bundled_config_path", return_value=bundled_config_path),
             patch("deep_thought.web.cli.copy_default_templates", mock_templates),
             patch("deep_thought.web.cli.initialize_database", mock_db),
-            patch("deep_thought.web.cli.get_default_config_path", return_value=tmp_path / "web-config.yaml"),
         ):
             cmd_init(args)
 
@@ -322,17 +389,18 @@ class TestCmdInit:
     def test_calls_initialize_database(
         self,
         tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """cmd_init must initialize the SQLite database."""
-        mock_save, mock_templates, mock_db = self._init_mocks()
-
+        monkeypatch.chdir(tmp_path)
+        bundled_config_path = self._make_bundled_config(tmp_path)
+        mock_templates, mock_db = self._init_mocks()
         args = argparse.Namespace(save_config=None, config=None)
 
         with (
-            patch("deep_thought.web.cli.save_default_config", mock_save),
+            patch("deep_thought.web.cli.get_bundled_config_path", return_value=bundled_config_path),
             patch("deep_thought.web.cli.copy_default_templates", mock_templates),
             patch("deep_thought.web.cli.initialize_database", mock_db),
-            patch("deep_thought.web.cli.get_default_config_path", return_value=tmp_path / "web-config.yaml"),
         ):
             cmd_init(args)
 
@@ -342,18 +410,19 @@ class TestCmdInit:
         self,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """cmd_init must print 'created' status for newly copied batch configs."""
-        mock_save, _, mock_db = self._init_mocks()
+        monkeypatch.chdir(tmp_path)
+        bundled_config_path = self._make_bundled_config(tmp_path)
+        _, mock_db = self._init_mocks()
         mock_templates = MagicMock(return_value=[("created", "blog.yaml")])
-
         args = argparse.Namespace(save_config=None, config=None)
 
         with (
-            patch("deep_thought.web.cli.save_default_config", mock_save),
+            patch("deep_thought.web.cli.get_bundled_config_path", return_value=bundled_config_path),
             patch("deep_thought.web.cli.copy_default_templates", mock_templates),
             patch("deep_thought.web.cli.initialize_database", mock_db),
-            patch("deep_thought.web.cli.get_default_config_path", return_value=tmp_path / "web-config.yaml"),
         ):
             cmd_init(args)
 
@@ -365,18 +434,19 @@ class TestCmdInit:
         self,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """cmd_init must print 'already exists' status for existing batch configs."""
-        mock_save, _, mock_db = self._init_mocks()
+        monkeypatch.chdir(tmp_path)
+        bundled_config_path = self._make_bundled_config(tmp_path)
+        _, mock_db = self._init_mocks()
         mock_templates = MagicMock(return_value=[("exists", "blog.yaml")])
-
         args = argparse.Namespace(save_config=None, config=None)
 
         with (
-            patch("deep_thought.web.cli.save_default_config", mock_save),
+            patch("deep_thought.web.cli.get_bundled_config_path", return_value=bundled_config_path),
             patch("deep_thought.web.cli.copy_default_templates", mock_templates),
             patch("deep_thought.web.cli.initialize_database", mock_db),
-            patch("deep_thought.web.cli.get_default_config_path", return_value=tmp_path / "web-config.yaml"),
         ):
             cmd_init(args)
 
@@ -388,17 +458,18 @@ class TestCmdInit:
         self,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """cmd_init must print a database initialized message."""
-        mock_save, mock_templates, mock_db = self._init_mocks()
-
+        monkeypatch.chdir(tmp_path)
+        bundled_config_path = self._make_bundled_config(tmp_path)
+        mock_templates, mock_db = self._init_mocks()
         args = argparse.Namespace(save_config=None, config=None)
 
         with (
-            patch("deep_thought.web.cli.save_default_config", mock_save),
+            patch("deep_thought.web.cli.get_bundled_config_path", return_value=bundled_config_path),
             patch("deep_thought.web.cli.copy_default_templates", mock_templates),
             patch("deep_thought.web.cli.initialize_database", mock_db),
-            patch("deep_thought.web.cli.get_default_config_path", return_value=tmp_path / "web-config.yaml"),
         ):
             cmd_init(args)
 
@@ -571,6 +642,7 @@ class TestMain:
                     js_wait=1.0,
                     browser_channel=None,
                     stealth=False,
+                    headless=True,
                     include_patterns=[],
                     exclude_patterns=[],
                     retry_attempts=2,
@@ -581,6 +653,10 @@ class TestMain:
                     index_depth=1,
                     min_article_words=200,
                     changelog_url=None,
+                    strip_path_prefix=None,
+                    strip_domain=False,
+                    llms_lookback_days=30,
+                    strip_boilerplate=[],
                 )
             )
             main()

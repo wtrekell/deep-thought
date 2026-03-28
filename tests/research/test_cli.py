@@ -332,7 +332,7 @@ class TestHandleSaveConfig:
         """Should copy the default config to the specified destination path."""
         destination = tmp_path / "my-config.yaml"
 
-        with patch("deep_thought.research.cli.get_default_config_path") as mock_config_path:
+        with patch("deep_thought.research.cli.get_bundled_config_path") as mock_config_path:
             source = tmp_path / "source-config.yaml"
             source.write_text("# example research config\n", encoding="utf-8")
             mock_config_path.return_value = source
@@ -344,7 +344,7 @@ class TestHandleSaveConfig:
 
     def test_exits_if_source_missing(self, tmp_path: Path) -> None:
         """Should exit with code 1 if the default config template is missing."""
-        with patch("deep_thought.research.cli.get_default_config_path") as mock_config_path:
+        with patch("deep_thought.research.cli.get_bundled_config_path") as mock_config_path:
             mock_config_path.return_value = tmp_path / "nonexistent.yaml"
 
             with pytest.raises(SystemExit) as exit_info:
@@ -357,7 +357,7 @@ class TestHandleSaveConfig:
         destination = tmp_path / "existing.yaml"
         destination.write_text("existing content", encoding="utf-8")
 
-        with patch("deep_thought.research.cli.get_default_config_path") as mock_config_path:
+        with patch("deep_thought.research.cli.get_bundled_config_path") as mock_config_path:
             source = tmp_path / "source.yaml"
             source.write_text("# config", encoding="utf-8")
             mock_config_path.return_value = source
@@ -371,7 +371,7 @@ class TestHandleSaveConfig:
         """Should create missing parent directories before writing the config file."""
         destination = tmp_path / "nested" / "dirs" / "my-config.yaml"
 
-        with patch("deep_thought.research.cli.get_default_config_path") as mock_config_path:
+        with patch("deep_thought.research.cli.get_bundled_config_path") as mock_config_path:
             source = tmp_path / "source.yaml"
             source.write_text("# config", encoding="utf-8")
             mock_config_path.return_value = source
@@ -389,37 +389,76 @@ class TestHandleSaveConfig:
 class TestCmdInit:
     """Tests for cmd_init."""
 
-    def test_prints_confirmation(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    def test_prints_confirmation(self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
         """Should print a confirmation message to stdout."""
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text(
-            f"api_key_env: TEST_KEY\noutput_dir: {tmp_path}/output\n",
-            encoding="utf-8",
-        )
-        args = argparse.Namespace(config=str(config_file), output=None)
-        cmd_init(args)
+        monkeypatch.chdir(tmp_path)
+        bundled = tmp_path / "bundled.yaml"
+        bundled.write_text("api_key_env: TEST_KEY\n", encoding="utf-8")
+
+        with patch("deep_thought.research.cli.get_bundled_config_path", return_value=bundled):
+            args = argparse.Namespace(output=None)
+            cmd_init(args)
+
         captured = capsys.readouterr()
         assert "Research Tool initialised" in captured.out
 
-    def test_uses_output_override(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        """Should use the --output override path instead of config.output_dir."""
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text("api_key_env: TEST_KEY\noutput_dir: data/research/export/\n", encoding="utf-8")
+    def test_uses_output_override(self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should use the --output override path instead of the default output dir."""
+        monkeypatch.chdir(tmp_path)
+        bundled = tmp_path / "bundled.yaml"
+        bundled.write_text("api_key_env: TEST_KEY\n", encoding="utf-8")
         override_output_dir = tmp_path / "custom_output"
-        args = argparse.Namespace(config=str(config_file), output=str(override_output_dir))
-        cmd_init(args)
+
+        with patch("deep_thought.research.cli.get_bundled_config_path", return_value=bundled):
+            args = argparse.Namespace(output=str(override_output_dir))
+            cmd_init(args)
+
         captured = capsys.readouterr()
         assert str(override_output_dir) in captured.out
         assert override_output_dir.exists()
 
-    def test_creates_output_directory(self, tmp_path: Path) -> None:
-        """Should create the configured output directory on disk."""
-        output_dir = tmp_path / "research_output"
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text(f"api_key_env: TEST_KEY\noutput_dir: {output_dir}\n", encoding="utf-8")
-        args = argparse.Namespace(config=str(config_file), output=None)
-        cmd_init(args)
-        assert output_dir.exists()
+    def test_creates_output_directory(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should create the default output directory on disk."""
+        monkeypatch.chdir(tmp_path)
+        bundled = tmp_path / "bundled.yaml"
+        bundled.write_text("api_key_env: TEST_KEY\n", encoding="utf-8")
+
+        with patch("deep_thought.research.cli.get_bundled_config_path", return_value=bundled):
+            args = argparse.Namespace(output=None)
+            cmd_init(args)
+
+        assert (tmp_path / "data" / "research" / "export").exists()
+
+    def test_copies_config_to_project(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should copy the bundled config template to src/config/ in the calling repo."""
+        monkeypatch.chdir(tmp_path)
+        bundled = tmp_path / "bundled.yaml"
+        bundled.write_text("# bundled default\napi_key_env: TEST_KEY\n", encoding="utf-8")
+
+        with patch("deep_thought.research.cli.get_bundled_config_path", return_value=bundled):
+            args = argparse.Namespace(output=None)
+            cmd_init(args)
+
+        project_config = tmp_path / "src" / "config" / "research-configuration.yaml"
+        assert project_config.exists()
+        assert project_config.read_text() == "# bundled default\napi_key_env: TEST_KEY\n"
+
+    def test_skips_config_copy_if_exists(self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+        """Should not overwrite an existing project-level config file."""
+        monkeypatch.chdir(tmp_path)
+        bundled = tmp_path / "bundled.yaml"
+        bundled.write_text("# new content\n", encoding="utf-8")
+        project_config = tmp_path / "src" / "config" / "research-configuration.yaml"
+        project_config.parent.mkdir(parents=True)
+        project_config.write_text("# existing content\n", encoding="utf-8")
+
+        with patch("deep_thought.research.cli.get_bundled_config_path", return_value=bundled):
+            args = argparse.Namespace(output=None)
+            cmd_init(args)
+
+        assert project_config.read_text() == "# existing content\n"
+        captured = capsys.readouterr()
+        assert "already exists" in captured.out
 
 
 # ---------------------------------------------------------------------------

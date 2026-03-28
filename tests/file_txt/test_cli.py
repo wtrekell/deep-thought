@@ -13,6 +13,7 @@ from deep_thought.file_txt.cli import (
     _resolve_output_root,
     cmd_config,
     cmd_convert,
+    cmd_init,
 )
 from deep_thought.file_txt.config import (
     EmailConfig,
@@ -435,6 +436,104 @@ class TestCmdConfig:
         captured = capsys.readouterr()
         assert "torch_device" in captured.out
         assert "max_file_size_mb" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# TestCmdInit
+# ---------------------------------------------------------------------------
+
+
+class TestCmdInit:
+    """Tests for cmd_init — symlink-aware bootstrap command."""
+
+    def test_prints_confirmation(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """cmd_init must print a success message to stdout."""
+        monkeypatch.chdir(tmp_path)
+        bundled_template = tmp_path / "bundled.yaml"
+        bundled_template.write_text("force_ocr: false\n", encoding="utf-8")
+
+        with patch("deep_thought.file_txt.cli.get_bundled_config_path", return_value=bundled_template):
+            args = argparse.Namespace(save_config=None, output=None)
+            cmd_init(args)
+
+        captured = capsys.readouterr()
+        assert "file-txt initialised successfully." in captured.out
+
+    def test_copies_config_to_project(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """cmd_init must copy the bundled template to src/config/ relative to cwd."""
+        monkeypatch.chdir(tmp_path)
+        bundled_template = tmp_path / "bundled.yaml"
+        bundled_template.write_text("# bundled default\nforce_ocr: false\n", encoding="utf-8")
+
+        with patch("deep_thought.file_txt.cli.get_bundled_config_path", return_value=bundled_template):
+            args = argparse.Namespace(save_config=None, output=None)
+            cmd_init(args)
+
+        expected_project_config = tmp_path / "src" / "config" / "file-txt-configuration.yaml"
+        assert expected_project_config.exists()
+        assert expected_project_config.read_text() == "# bundled default\nforce_ocr: false\n"
+
+    def test_skips_config_copy_if_exists(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """cmd_init must not overwrite an existing project-level config file."""
+        monkeypatch.chdir(tmp_path)
+        bundled_template = tmp_path / "bundled.yaml"
+        bundled_template.write_text("# new content\n", encoding="utf-8")
+
+        existing_project_config = tmp_path / "src" / "config" / "file-txt-configuration.yaml"
+        existing_project_config.parent.mkdir(parents=True)
+        existing_project_config.write_text("# existing content\n", encoding="utf-8")
+
+        with patch("deep_thought.file_txt.cli.get_bundled_config_path", return_value=bundled_template):
+            args = argparse.Namespace(save_config=None, output=None)
+            cmd_init(args)
+
+        assert existing_project_config.read_text() == "# existing content\n"
+        captured = capsys.readouterr()
+        assert "already exists" in captured.out
+
+    def test_creates_default_output_directory(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """cmd_init must create the default output directory on disk."""
+        monkeypatch.chdir(tmp_path)
+        bundled_template = tmp_path / "bundled.yaml"
+        bundled_template.write_text("force_ocr: false\n", encoding="utf-8")
+
+        with patch("deep_thought.file_txt.cli.get_bundled_config_path", return_value=bundled_template):
+            args = argparse.Namespace(save_config=None, output=None)
+            cmd_init(args)
+
+        assert (tmp_path / "output").exists()
+
+    def test_uses_save_config_override_path(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """--save-config must write the config to the specified path instead of the default."""
+        monkeypatch.chdir(tmp_path)
+        bundled_template = tmp_path / "bundled.yaml"
+        bundled_template.write_text("# bundled\nforce_ocr: false\n", encoding="utf-8")
+        custom_config_destination = tmp_path / "custom" / "my-config.yaml"
+
+        with patch("deep_thought.file_txt.cli.get_bundled_config_path", return_value=bundled_template):
+            args = argparse.Namespace(save_config=str(custom_config_destination), output=None)
+            cmd_init(args)
+
+        assert custom_config_destination.exists()
+
+    @pytest.mark.error_handling
+    def test_exits_if_bundled_config_missing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """cmd_init must exit with code 1 if the bundled config template is missing."""
+        monkeypatch.chdir(tmp_path)
+        missing_bundled_config = tmp_path / "nonexistent.yaml"
+
+        with (
+            patch("deep_thought.file_txt.cli.get_bundled_config_path", return_value=missing_bundled_config),
+            pytest.raises(SystemExit) as exit_info,
+        ):
+            args = argparse.Namespace(save_config=None, output=None)
+            cmd_init(args)
+
+        assert exit_info.value.code == 1
 
 
 # ---------------------------------------------------------------------------
