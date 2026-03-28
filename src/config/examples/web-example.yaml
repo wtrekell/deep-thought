@@ -1,0 +1,135 @@
+# =============================================================================
+# Web Tool — Example Configuration
+# All settings shown with every valid option documented.
+# Copy to src/config/web-configuration.yaml and customize.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Crawl mode
+# ---------------------------------------------------------------------------
+mode:
+  "blog" # Options: "blog", "documentation", "direct"
+  #   blog          — Discover articles from a blog index page
+  #   documentation — Follow links to crawl a documentation site
+  #   direct        — Crawl a list of specific URLs (from --input-file)
+
+input_url:
+  null # Starting URL to crawl (used by blog and documentation modes)
+  # Options: null or a URL string
+  #   null           — Must be provided via --input CLI flag
+  #   "https://..."  — The index/root URL to start crawling from
+
+# ---------------------------------------------------------------------------
+# Crawl depth and limits
+# ---------------------------------------------------------------------------
+max_depth:
+  3 # Maximum link depth to follow from the starting URL
+  # Must be >= 0 (0 = only the starting page)
+
+max_pages: 100 # Maximum number of pages to crawl; must be >= 0
+
+# ---------------------------------------------------------------------------
+# Rendering
+# ---------------------------------------------------------------------------
+js_wait:
+  1.0 # Seconds to wait after page load for JavaScript to render
+  # Increase for heavy SPA sites; must be >= 0
+
+browser_channel:
+  null # Options: null, "chrome", "msedge", "chrome-beta", etc.
+  #   null    — Use Playwright's bundled Chromium
+  #   "chrome" — Use locally installed Chrome
+  #   "msedge" — Use locally installed Microsoft Edge
+
+# ---------------------------------------------------------------------------
+# Browser
+# ---------------------------------------------------------------------------
+headless:
+  true # Options: true, false
+  #   true  — Run the browser without a visible window (default)
+  #   false — Show the browser window during crawling
+
+stealth:
+  false # Options: true, false
+  #   true  — Randomize user-agent and viewport to avoid detection
+  #   false — Use default Playwright fingerprint
+
+# ---------------------------------------------------------------------------
+# URL filtering (regex patterns)
+# ---------------------------------------------------------------------------
+include_patterns: # URLs must match at least one pattern to be crawled
+  [] # Empty list = all discovered URLs are eligible
+
+exclude_patterns: # URLs matching any pattern are skipped
+  - '.*\.pdf$' # Example: skip PDF links
+  - ".*login.*" # Example: skip login pages
+
+# ---------------------------------------------------------------------------
+# Retry
+# ---------------------------------------------------------------------------
+retry_attempts: 2 # Number of retry attempts on fetch failure; must be >= 0
+
+retry_delay: 5.0 # Seconds to wait between retries; must be >= 0
+
+# ---------------------------------------------------------------------------
+# Output
+# ---------------------------------------------------------------------------
+output_dir: "output/web/" # Directory where crawled pages are written as markdown
+
+extract_images:
+  false # Options: true, false
+  #   true  — Download images found on crawled pages
+  #   false — Skip image downloads
+
+generate_llms_files:
+  true # Options: true, false
+  #   true  — Generate llms.txt and llms-full.txt aggregate files
+  #   false — Only generate individual page files
+
+llms_lookback_days:
+  30 # Days of history to include in llms.txt / llms-full.txt
+  # Must be >= 0
+  #   0  — Current run only (old behavior)
+  #   30 — Include all successful pages from the past 30 days
+
+strip_path_prefix:
+  null # Options: null, or a path string
+  #   null           — No prefix stripping
+  #   "/docs/en"     — Remove /docs/en from output paths
+  #                    e.g., example.com/docs/en/guide → example.com/guide.md
+
+strip_domain:
+  false # Options: true, false
+  #   true  — Omit the domain directory from output paths
+  #           e.g., example.com/guide.md → guide.md
+  #   false — Keep the domain directory
+
+# ---------------------------------------------------------------------------
+# Content stripping (regex patterns)
+# ---------------------------------------------------------------------------
+strip_boilerplate: [] # Regex patterns to remove from converted markdown before saving
+  # Applied after HTML-to-markdown conversion, before word counting.
+  # Uses re.DOTALL so '.' matches newlines for multi-line blocks.
+  # Examples:
+  #   - 'Subscribe to our newsletter.*?(?=\n\n|\Z)'
+  #   - 'Related Posts\n- .*?(?=\n\n|\Z)'
+  #   - 'Was this page helpful\?.*?(?=\n\n|\Z)'
+  #   - 'Cookie Policy.*?(?=\n\n|\Z)'
+  # Tip: use [^\n]* instead of .* to match within a single line only.
+
+# ---------------------------------------------------------------------------
+# Content quality
+# ---------------------------------------------------------------------------
+index_depth:
+  1 # Levels of index/listing pages before article pages
+  # Must be >= 1
+
+min_article_words:
+  200 # Pages below this word count are skipped as index/nav pages
+  # Must be > 0
+
+changelog_url:
+  null # Options: null, or a URL string
+  #   null           — No incremental re-crawl support
+  #   "https://..."  — Documentation mode only: URL of a changelog page
+  #                    used to detect which pages need re-crawling

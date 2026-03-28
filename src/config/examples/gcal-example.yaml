@@ -1,0 +1,69 @@
+# =============================================================================
+# GCal Tool — Example Configuration
+# All settings shown with every valid option documented.
+# Copy to src/config/gcal-configuration.yaml and customize.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Auth (OAuth 2.0)
+# ---------------------------------------------------------------------------
+credentials_path: "src/config/gmail/credentials.json"  # Path to Google OAuth client secret JSON
+                                                        # Shared with the Gmail tool by default
+
+token_path: "data/gcal/token.json"  # Path where the OAuth refresh token is stored
+
+scopes:                             # Google OAuth scopes to request
+  - "https://www.googleapis.com/auth/calendar"
+                                    # Options:
+                                    #   "https://www.googleapis.com/auth/calendar"
+                                    #       — Full read/write access (required for create/update/delete)
+                                    #   "https://www.googleapis.com/auth/calendar.readonly"
+                                    #       — Read-only access (sufficient for pull-only workflows)
+                                    #   "https://www.googleapis.com/auth/calendar.events"
+                                    #       — Read/write access to events only
+
+# ---------------------------------------------------------------------------
+# Calendar API behaviour
+# ---------------------------------------------------------------------------
+api_rate_limit_rpm: 250     # Maximum requests per minute to the Google Calendar API
+                            # Default Google quota is 250; lower to be conservative
+
+retry_max_attempts: 3       # Number of retry attempts for failed API calls
+                            # Uses exponential backoff; must be > 0
+
+retry_base_delay_seconds: 1 # Initial delay in seconds before the first retry
+                            # Doubles on each subsequent attempt
+
+# ---------------------------------------------------------------------------
+# Pull settings
+# ---------------------------------------------------------------------------
+calendars:                  # List of calendar IDs to pull events from
+  - "primary"               # "primary" is the user's main calendar
+                            # Additional calendars use their full ID, e.g.:
+                            #   - "family@group.calendar.google.com"
+                            #   - "work-team@group.calendar.google.com"
+
+lookback_days: 7            # Number of days in the past to include; must be >= 0
+
+lookahead_days: 30          # Number of days in the future to include; must be >= 0
+
+include_cancelled: false    # Options: true, false
+                            #   true  — Include cancelled/deleted events
+                            #   false — Only include active events
+
+single_events: true         # Options: true, false
+                            #   true  — Expand recurring events into individual instances
+                            #   false — Return recurring events as a single master entry
+
+# ---------------------------------------------------------------------------
+# Output
+# ---------------------------------------------------------------------------
+output_dir: "data/gcal/export/"  # Directory where exported markdown files are written
+
+generate_llms_files: false  # Options: true, false
+                            #   true  — Generate .llms.txt and .llms-full.txt aggregate files
+                            #   false — Only generate individual event files
+
+flat_output: false          # Options: true, false
+                            #   true  — Write all files into a single flat directory
+                            #   false — Organize files into subdirectories by calendar

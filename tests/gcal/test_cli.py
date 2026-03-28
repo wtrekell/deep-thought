@@ -268,13 +268,13 @@ class TestHandleSaveConfig:
     """Tests for _handle_save_config."""
 
     def test_writes_config_to_destination(self, tmp_path: Path) -> None:
-        """Should copy the default config to the specified path."""
+        """Should copy the bundled config template to the specified path."""
         destination = tmp_path / "my-config.yaml"
 
-        with patch("deep_thought.gcal.cli.get_default_config_path") as mock_config_path:
+        with patch("deep_thought.gcal.cli.get_bundled_config_path") as mock_bundled_path:
             source = tmp_path / "source-config.yaml"
             source.write_text("# example config\ncalendars: []", encoding="utf-8")
-            mock_config_path.return_value = source
+            mock_bundled_path.return_value = source
 
             _handle_save_config(str(destination))
 
@@ -282,9 +282,9 @@ class TestHandleSaveConfig:
         assert destination.read_text() == "# example config\ncalendars: []"
 
     def test_exits_if_source_missing(self, tmp_path: Path) -> None:
-        """Should exit with code 1 if the default config template is missing."""
-        with patch("deep_thought.gcal.cli.get_default_config_path") as mock_config_path:
-            mock_config_path.return_value = tmp_path / "nonexistent.yaml"
+        """Should exit with code 1 if the bundled config template is missing."""
+        with patch("deep_thought.gcal.cli.get_bundled_config_path") as mock_bundled_path:
+            mock_bundled_path.return_value = tmp_path / "nonexistent.yaml"
 
             with pytest.raises(SystemExit) as exit_info:
                 _handle_save_config(str(tmp_path / "output.yaml"))
@@ -296,10 +296,10 @@ class TestHandleSaveConfig:
         destination = tmp_path / "existing.yaml"
         destination.write_text("existing content", encoding="utf-8")
 
-        with patch("deep_thought.gcal.cli.get_default_config_path") as mock_config_path:
+        with patch("deep_thought.gcal.cli.get_bundled_config_path") as mock_bundled_path:
             source = tmp_path / "source.yaml"
             source.write_text("# config", encoding="utf-8")
-            mock_config_path.return_value = source
+            mock_bundled_path.return_value = source
 
             with pytest.raises(SystemExit) as exit_info:
                 _handle_save_config(str(destination))
@@ -435,22 +435,27 @@ class TestMainEntryPoint:
 class TestCmdInit:
     """Tests for cmd_init."""
 
+    def _make_args(self, output: str | None = None) -> argparse.Namespace:
+        """Build a minimal argparse.Namespace for cmd_init tests."""
+        return argparse.Namespace(config=None, output=output, calendar=None, days_back=None, days_ahead=None)
+
     def test_creates_directories_and_database(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """Should initialise the database and create required subdirectories."""
-        mock_db_path = tmp_path / "gcal.db"
+        bundled_config = tmp_path / "bundled.yaml"
+        bundled_config.write_text("# bundled config\ncalendars: [primary]", encoding="utf-8")
+
+        project_config = tmp_path / "src" / "config" / "gcal-configuration.yaml"
+        mock_db_path = tmp_path / "data" / "gcal" / "gcal.db"
         mock_connection = MagicMock()
 
-        mock_config = MagicMock()
-        mock_config.credentials_path = str(tmp_path / "credentials.json")
-
-        args = argparse.Namespace(config=None, output=None, calendar=None, days_back=None, days_ahead=None)
-
         with (
+            patch("deep_thought.gcal.cli.get_bundled_config_path", return_value=bundled_config),
+            patch("deep_thought.gcal.cli.get_default_config_path", return_value=project_config),
             patch("deep_thought.gcal.cli.get_database_path", return_value=mock_db_path),
             patch("deep_thought.gcal.cli.initialize_database", return_value=mock_connection) as mock_init_db,
-            patch("deep_thought.gcal.cli._load_config_from_args", return_value=mock_config),
+            patch.dict("os.environ", {"DEEP_THOUGHT_DATA_DIR": str(tmp_path / "data")}),
         ):
-            cmd_init(args)
+            cmd_init(self._make_args())
             mock_init_db.assert_called_once_with(mock_db_path)
             mock_connection.close.assert_called_once()
 
@@ -458,48 +463,92 @@ class TestCmdInit:
         assert "GCal Tool initialised successfully." in captured_output.out
         assert str(mock_db_path) in captured_output.out
 
-    def test_prints_credentials_warning_when_missing(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        """Should warn when credentials.json does not exist."""
-        mock_db_path = tmp_path / "gcal.db"
+    def test_copies_bundled_config_when_missing(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """Should copy the bundled config to the project location when it does not exist."""
+        bundled_config = tmp_path / "bundled.yaml"
+        bundled_config.write_text("# bundled config\ncalendars: [primary]", encoding="utf-8")
+
+        project_config = tmp_path / "src" / "config" / "gcal-configuration.yaml"
+        mock_db_path = tmp_path / "data" / "gcal" / "gcal.db"
         mock_connection = MagicMock()
 
-        mock_config = MagicMock()
-        mock_config.credentials_path = str(tmp_path / "credentials.json")  # file does not exist
-
-        args = argparse.Namespace(config=None, output=None, calendar=None, days_back=None, days_ahead=None)
-
         with (
+            patch("deep_thought.gcal.cli.get_bundled_config_path", return_value=bundled_config),
+            patch("deep_thought.gcal.cli.get_default_config_path", return_value=project_config),
             patch("deep_thought.gcal.cli.get_database_path", return_value=mock_db_path),
             patch("deep_thought.gcal.cli.initialize_database", return_value=mock_connection),
-            patch("deep_thought.gcal.cli._load_config_from_args", return_value=mock_config),
+            patch.dict("os.environ", {"DEEP_THOUGHT_DATA_DIR": str(tmp_path / "data")}),
         ):
-            cmd_init(args)
+            cmd_init(self._make_args())
 
+        assert project_config.exists()
+        assert project_config.read_text() == "# bundled config\ncalendars: [primary]"
         captured_output = capsys.readouterr()
-        assert "WARNING: Credentials NOT found" in captured_output.out
+        assert str(project_config) in captured_output.out
 
-    def test_prints_credentials_found_when_present(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        """Should confirm credentials found when credentials.json exists."""
-        mock_db_path = tmp_path / "gcal.db"
+    def test_skips_config_copy_when_already_exists(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """Should skip copying config and notify when project config already exists."""
+        bundled_config = tmp_path / "bundled.yaml"
+        bundled_config.write_text("# bundled", encoding="utf-8")
+
+        project_config = tmp_path / "src" / "config" / "gcal-configuration.yaml"
+        project_config.parent.mkdir(parents=True, exist_ok=True)
+        project_config.write_text("# existing config", encoding="utf-8")
+
+        mock_db_path = tmp_path / "data" / "gcal" / "gcal.db"
         mock_connection = MagicMock()
 
-        credentials_file = tmp_path / "credentials.json"
-        credentials_file.write_text("{}", encoding="utf-8")
-
-        mock_config = MagicMock()
-        mock_config.credentials_path = str(credentials_file)
-
-        args = argparse.Namespace(config=None, output=None, calendar=None, days_back=None, days_ahead=None)
-
         with (
+            patch("deep_thought.gcal.cli.get_bundled_config_path", return_value=bundled_config),
+            patch("deep_thought.gcal.cli.get_default_config_path", return_value=project_config),
             patch("deep_thought.gcal.cli.get_database_path", return_value=mock_db_path),
             patch("deep_thought.gcal.cli.initialize_database", return_value=mock_connection),
-            patch("deep_thought.gcal.cli._load_config_from_args", return_value=mock_config),
+            patch.dict("os.environ", {"DEEP_THOUGHT_DATA_DIR": str(tmp_path / "data")}),
         ):
-            cmd_init(args)
+            cmd_init(self._make_args())
 
+        # Original content should be preserved
+        assert project_config.read_text() == "# existing config"
         captured_output = capsys.readouterr()
-        assert "Credentials found at:" in captured_output.out
+        assert "already exists" in captured_output.out
+
+    def test_exits_if_bundled_config_missing(self, tmp_path: Path) -> None:
+        """Should exit with code 1 if the bundled config template cannot be found."""
+        missing_bundled = tmp_path / "nonexistent.yaml"
+        project_config = tmp_path / "src" / "config" / "gcal-configuration.yaml"
+
+        with (
+            patch("deep_thought.gcal.cli.get_bundled_config_path", return_value=missing_bundled),
+            patch("deep_thought.gcal.cli.get_default_config_path", return_value=project_config),
+            pytest.raises(SystemExit) as exit_info,
+        ):
+            cmd_init(self._make_args())
+
+        assert exit_info.value.code == 1
+
+    def test_creates_subdirectories(self, tmp_path: Path) -> None:
+        """Should create snapshots, export, and input subdirectories."""
+        bundled_config = tmp_path / "bundled.yaml"
+        bundled_config.write_text("# cfg", encoding="utf-8")
+
+        project_config = tmp_path / "src" / "config" / "gcal-configuration.yaml"
+        data_root = tmp_path / "data"
+        mock_db_path = data_root / "gcal" / "gcal.db"
+        mock_connection = MagicMock()
+
+        with (
+            patch("deep_thought.gcal.cli.get_bundled_config_path", return_value=bundled_config),
+            patch("deep_thought.gcal.cli.get_default_config_path", return_value=project_config),
+            patch("deep_thought.gcal.cli.get_database_path", return_value=mock_db_path),
+            patch("deep_thought.gcal.cli.initialize_database", return_value=mock_connection),
+            patch.dict("os.environ", {"DEEP_THOUGHT_DATA_DIR": str(data_root)}),
+        ):
+            cmd_init(self._make_args())
+
+        gcal_dir = data_root / "gcal"
+        assert (gcal_dir / "snapshots").is_dir()
+        assert (gcal_dir / "export").is_dir()
+        assert (gcal_dir / "input").is_dir()
 
 
 # ---------------------------------------------------------------------------

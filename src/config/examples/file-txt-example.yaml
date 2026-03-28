@@ -1,0 +1,67 @@
+# =============================================================================
+# File-Txt Tool — Example Configuration
+# All settings shown with every valid option documented.
+# Copy to src/config/file-txt-configuration.yaml and customize.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Marker (PDF conversion engine)
+# ---------------------------------------------------------------------------
+force_ocr: false            # Options: true, false
+                            #   true  — Force OCR even when text is extractable from the PDF
+                            #   false — Use embedded text when available, OCR only as fallback
+
+torch_device: "mps"        # Options: "mps", "cuda", "cpu"
+                            #   mps  — Apple Silicon GPU (Metal Performance Shaders)
+                            #   cuda — NVIDIA GPU
+                            #   cpu  — CPU only (slowest, most compatible)
+
+# ---------------------------------------------------------------------------
+# Email (.eml / .msg files)
+# ---------------------------------------------------------------------------
+prefer_html: false          # Options: true, false
+                            #   true  — Use the HTML body of the email for conversion
+                            #   false — Use the plain text body when available
+
+full_headers: false         # Options: true, false
+                            #   true  — Include all email headers (CC, BCC, Reply-To, etc.)
+                            #   false — Include only From, To, and Date headers
+
+include_attachments: true   # Options: true, false
+                            #   true  — Include attachment metadata in the markdown output
+                            #   false — Ignore attachments entirely
+
+# ---------------------------------------------------------------------------
+# Output
+# ---------------------------------------------------------------------------
+output_dir: "output/"       # Directory where converted markdown files are written
+
+include_page_numbers: false # Options: true, false
+                            #   true  — Retain page number markers in PDF output
+                            #   false — Strip page number markers for cleaner output
+
+extract_images: true        # Options: true, false
+                            #   true  — Extract embedded images to img/ subdirectories
+                            #   false — Skip image extraction
+
+# ---------------------------------------------------------------------------
+# Limits
+# ---------------------------------------------------------------------------
+max_file_size_mb: 200       # Maximum file size in megabytes; must be a positive integer
+
+# ---------------------------------------------------------------------------
+# File filter
+# ---------------------------------------------------------------------------
+allowed_extensions:         # List of file extensions to process (empty list = nothing processed)
+  - ".pdf"                  # PDF documents
+  - ".docx"                 # Microsoft Word
+  - ".pptx"                 # Microsoft PowerPoint
+  - ".xlsx"                 # Microsoft Excel
+  - ".html"                 # HTML files
+  - ".htm"                  # HTML files (alternate extension)
+  - ".eml"                  # Email message files
+  - ".msg"                  # Outlook message files
+
+exclude_patterns:           # Glob patterns for files to skip
+  - "~$*"                   # Microsoft Office temporary files
+  - ".*"                    # Hidden files (dotfiles)

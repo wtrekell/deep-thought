@@ -27,7 +27,7 @@
 
 Located at `data/web/web.db` by default; respects the `DEEP_THOUGHT_DATA_DIR` env var to redirect the data root at runtime.
 
-- Table: `crawled_pages` — columns: `url TEXT PRIMARY KEY`, `rule_name TEXT`, `status_code INT`, `word_count INT`, `output_path TEXT`, `created_at TEXT`, `updated_at TEXT`, `synced_at TEXT`, `status TEXT`
+- Table: `crawled_pages` — columns: `url TEXT PRIMARY KEY`, `rule_name TEXT`, `title TEXT`, `status_code INT`, `word_count INT`, `output_path TEXT`, `status TEXT`, `created_at TEXT`, `updated_at TEXT`, `synced_at TEXT`
 - State key: URL
 - Incremental: on subsequent runs, already-crawled URLs are skipped unless `--force`
 - Schema version tracked in a `web_schema_version` table
@@ -39,18 +39,18 @@ Located at `data/web/web.db` by default; respects the `DEEP_THOUGHT_DATA_DIR` en
 
 Local dataclass representing a crawled page result.
 
-| Field | Type | Description |
-| --- | --- | --- |
-| `url` | `str` | Page URL (primary key) |
-| `rule_name` | `str \| None` | Batch config rule that triggered crawl |
-| `title` | `str \| None` | Extracted page title |
-| `status_code` | `int` | HTTP response status |
-| `word_count` | `int` | Word count of converted markdown |
-| `output_path` | `str` | Relative path to output file |
-| `status` | `str` | `success`, `error`, `skipped` |
-| `created_at` | `str` | ISO 8601 timestamp |
-| `updated_at` | `str` | ISO 8601 timestamp |
-| `synced_at` | `str` | ISO 8601 timestamp |
+| Field         | Type          | Description                            |
+| ------------- | ------------- | -------------------------------------- |
+| `url`         | `str`         | Page URL (primary key)                 |
+| `rule_name`   | `str \| None` | Batch config rule that triggered crawl |
+| `title`       | `str \| None` | Extracted page title                   |
+| `status_code` | `int`         | HTTP response status                   |
+| `word_count`  | `int`         | Word count of converted markdown       |
+| `output_path` | `str`         | Relative path to output file           |
+| `status`      | `str`         | `success`, `error`, `skipped`          |
+| `created_at`  | `str`         | ISO 8601 timestamp                     |
+| `updated_at`  | `str`         | ISO 8601 timestamp                     |
+| `synced_at`   | `str`         | ISO 8601 timestamp                     |
 
 Methods: `to_dict()` for database insertion.
 
@@ -64,42 +64,49 @@ Running `web` with no arguments shows help. Crawling is the default operation �
 | `web config` | Validate and display current YAML configuration                          |
 | `web init`   | Scaffold configs, output directories, and database                       |
 
-| Flag                          | Description                                                          |
-| ----------------------------- | -------------------------------------------------------------------- |
-| `--input URL`                 | Root URL for documentation/blog mode                                 |
-| `--input-file PATH`           | Text file of URLs, one per line (direct mode)                        |
-| `--mode [documentation\|blog\|direct]` | Crawl mode (default: `blog`)                              |
-| `--output PATH`               | Output directory (default: `output/web/` for blog/direct, `docs/` for documentation) |
-| `--config PATH`               | Override default config file path                                    |
-| `--max-depth INT`             | Max link-following depth (documentation mode; default: 3)            |
-| `--max-pages INT`             | Max pages per run (default: 100)                                     |
-| `--js-wait FLOAT`             | Seconds to wait for JS to render (default: 1.0)                     |
-| `--browser-channel TEXT`      | Chromium channel for WAF bypass (e.g., `chrome`)                     |
-| `--stealth`                   | Randomize user-agent, viewport, and inter-request delays             |
-| `--include-pattern REGEX`     | Only crawl URLs matching this pattern (repeatable)                   |
-| `--exclude-pattern REGEX`     | Skip URLs matching this pattern (repeatable)                         |
-| `--retry-attempts INT`        | Max retries per URL (default: 2)                                     |
-| `--retry-delay FLOAT`         | Seconds between retries (default: 5.0)                               |
-| `--extract-images`            | Extract images found on crawled pages                                |
-| `--batch`                     | Auto-discover and run all `src/config/web/*.yaml`                    |
-| `--dry-run`                   | Preview without fetching                                             |
-| `--verbose`, `-v`             | Detailed logging                                                     |
-| `--force`                     | Clear state and recrawl                                              |
-| `--save-config PATH`          | Generate example config and exit                                     |
-| `--version`                   | Show version and exit                                                |
+| Flag                                   | Description                                                                          |
+| -------------------------------------- | ------------------------------------------------------------------------------------ |
+| `--input URL`                          | Root URL for documentation/blog mode                                                 |
+| `--input-file PATH`                    | Text file of URLs, one per line (direct mode)                                        |
+| `--mode [documentation\|blog\|direct]` | Crawl mode (default: `blog`)                                                         |
+| `--output PATH`                        | Output directory (default: `output/web/` for blog/direct, `docs/` for documentation) |
+| `--config PATH`                        | Override default config file path                                                    |
+| `--max-depth INT`                      | Max link-following depth (documentation mode; default: 3)                            |
+| `--max-pages INT`                      | Max pages per run (default: 100)                                                     |
+| `--js-wait FLOAT`                      | Seconds to wait for JS to render (default: 1.0)                                      |
+| `--browser-channel TEXT`               | Chromium channel for WAF bypass (e.g., `chrome`)                                     |
+| `--stealth`                            | Randomize user-agent, viewport, and inter-request delays                             |
+| `--include-pattern REGEX`              | Only crawl URLs matching this pattern (repeatable)                                   |
+| `--exclude-pattern REGEX`              | Skip URLs matching this pattern (repeatable)                                         |
+| `--retry-attempts INT`                 | Max retries per URL (default: 2)                                                     |
+| `--retry-delay FLOAT`                  | Seconds between retries (default: 5.0)                                               |
+| `--extract-images`                     | Extract images found on crawled pages                                                |
+| `--batch`                              | Auto-discover and run all `src/config/web/*.yaml`                                    |
+| `--dry-run`                            | Preview without fetching                                                             |
+| `--verbose`, `-v`                      | Detailed logging                                                                     |
+| `--force`                              | Clear state and recrawl                                                              |
+| `--save-config PATH`                   | Generate example config and exit                                                     |
+| `--version`                            | Show version and exit                                                                |
 
 ## File & Output Map
 
 ```
 files/tools/web/
 ├── 260322-requirements.md       # This document
-└── CHANGELOG.md                 # Release history
+├── CHANGELOG.md                 # Release history
+└── ISSUES.md                    # Open issues tracker
 
 src/config/
 ├── web-configuration.yaml       # Tool configuration
+├── examples/
+│   └── web-example.yaml         # Fully documented example config
 └── web/                         # Batch mode config files
+    ├── blog.yaml
+    ├── docs.yaml
     ├── docs-site.yaml
-    └── blog.yaml
+    └── templates/
+        ├── blog-template.yaml   # Starting point template for blog sites
+        └── docs-template.yaml   # Starting point template for documentation sites
 
 src/deep_thought/web/
 ├── __init__.py
@@ -113,22 +120,19 @@ src/deep_thought/web/
 ├── image_extractor.py           # Image URL extraction and download
 ├── crawler.py                   # Playwright-based page fetching
 ├── converter.py                 # HTML → markdown conversion
+├── default-config.yaml          # Bundled default configuration
 └── db/
     ├── __init__.py
     ├── schema.py                # Table creation and migration runner
     ├── queries.py               # All SQL operations
     └── migrations/
-        └── 001_init_schema.sql   # Initial schema
-
-src/config/web/templates/
-├── blog-template.yaml           # Starting point template for blog sites
-└── docs-template.yaml           # Starting point template for documentation sites
+        └── 001_init_schema.sql  # Initial schema
 
 data/web/
 └── web.db                       # SQLite state database
 
-output/web/                          # Blog/direct mode markdown output
-docs/                                # Documentation mode markdown output
+output/web/                      # Blog/direct mode markdown output
+docs/                            # Documentation mode markdown output
 
 ```
 
@@ -138,27 +142,31 @@ Configuration is stored in `src/config/web-configuration.yaml`. All values below
 
 ```yaml
 # Crawl behavior
-mode: "blog"                     # 'blog', 'documentation', or 'direct'
+mode: "blog" # 'blog', 'documentation', or 'direct'
 max_depth: 3
 max_pages: 100
 
 # Rendering
-js_wait: 1.0                     # Seconds to wait after page load
-browser_channel: null             # e.g., 'chrome' to bypass WAF fingerprinting
+js_wait: 1.0 # Seconds to wait after page load
+browser_channel: null # e.g., 'chrome' to bypass WAF fingerprinting
 
-# Stealth
-stealth: false                    # Randomize user-agent, viewport, delays
+# Browser
+headless: true # Run the browser without a visible window
+stealth: false # Randomize user-agent, viewport, delays
 
 # Index structure
-index_depth: 1                    # Levels of listing/nav pages before article content
-min_article_words: 200            # Pages below this word count are treated as index pages
-changelog_url: null               # Documentation mode only: URL of changelog for incremental re-crawls
+index_depth: 1 # Levels of listing/nav pages before article content
+min_article_words: 200 # Pages below this word count are treated as index pages
+changelog_url: null # Documentation mode only: URL of changelog for incremental re-crawls
 
 # URL filtering
-include_patterns: []              # Only crawl URLs matching these regexes
-exclude_patterns:                 # Skip URLs matching these regexes
+include_patterns: [] # Only crawl URLs matching these regexes
+exclude_patterns: # Skip URLs matching these regexes
   - '.*\.pdf$'
-  - '.*login.*'
+  - ".*login.*"
+
+# Content stripping
+strip_boilerplate: [] # Regex patterns to remove from converted markdown (e.g., nav menus, footers)
 
 # Retry
 retry_attempts: 2
@@ -166,8 +174,11 @@ retry_delay: 5.0
 
 # Output — blog/direct default: "output/web/", documentation default: "docs/"
 output_dir: "output/web/"
+strip_path_prefix: null # Strip this URL path prefix from output file paths
+strip_domain: false # Omit the domain directory from output file paths
 extract_images: false
 generate_llms_files: true
+llms_lookback_days: 30 # Days of history to include in llms.txt / llms-full.txt (0 = current run only)
 ```
 
 ## Data Format
@@ -203,7 +214,7 @@ processed_date: 2026-03-18T10:00:00Z
 
 ### llms-full.txt (generate_llms_files only)
 
-One file in the export root. Each page is separated by a delimiter block:
+One file in the export root. When `llms_lookback_days > 0` (default: 30), includes all successfully crawled pages from the database within that time window — not just pages from the current run. Set to `0` for current-run-only behavior. Each page is separated by a delimiter block:
 
 ```
 # {Page Title}

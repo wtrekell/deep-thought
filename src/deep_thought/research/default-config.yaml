@@ -1,0 +1,14 @@
+# API
+api_key_env: "PERPLEXITY_API_KEY"
+retry_max_attempts: 3 # Retry failed API calls with exponential backoff
+retry_base_delay_seconds: 1 # Initial delay doubles on each retry
+
+# Models
+search_model: "sonar" # Model used by the search command
+research_model: "sonar-deep-research" # Model used by the research command
+
+# Defaults
+default_recency: null # null, "hour", "day", "week", "month", "year" (optional)
+
+# Output
+output_dir: "data/research/export/"

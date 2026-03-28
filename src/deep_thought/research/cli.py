@@ -23,6 +23,7 @@ from typing import Any
 from deep_thought.research.config import (
     ResearchConfig,
     get_api_key,
+    get_bundled_config_path,
     get_default_config_path,
     load_config,
     validate_config,
@@ -74,7 +75,7 @@ def _handle_save_config(destination_path_str: str) -> None:
         destination_path_str: String path where the default config should be written.
     """
     destination_path = Path(destination_path_str)
-    source_path = get_default_config_path()
+    source_path = get_bundled_config_path()
 
     if not source_path.exists():
         print(f"ERROR: Default config template not found at {source_path}.", file=sys.stderr)
@@ -314,33 +315,49 @@ def _build_research_parser() -> argparse.ArgumentParser:
 
 
 def cmd_init(args: argparse.Namespace) -> None:
-    """Create data directories and print setup confirmation.
+    """Bootstrap the research tool for first use in the calling repo.
 
-    Creates ``data/research/`` and the configured (or overridden) output
-    directory. Prints the path to the configuration file.
+    Copies the bundled default config template from the package to
+    ``src/config/research-configuration.yaml`` (relative to cwd), creates
+    ``data/research/`` and the default output directory, and prints a summary.
+
+    Never attempts to load the project-level config — it does not exist yet.
 
     Args:
         args: Parsed argparse namespace.
     """
     import os
+    import shutil
 
-    config = _load_config_from_args(args)
-
-    resolved_output_dir = Path(args.output) if args.output else Path(config.output_dir)
+    bundled_config = get_bundled_config_path()
+    project_config = get_default_config_path()
     data_root = Path(os.environ.get("DEEP_THOUGHT_DATA_DIR", "data"))
     data_dir = data_root / "research"
+    output_dir = Path(args.output) if args.output else data_root / "research" / "export"
+
+    if not bundled_config.exists():
+        print(f"ERROR: Bundled config template not found at {bundled_config}.", file=sys.stderr)
+        sys.exit(1)
+
+    created_items: list[str] = []
+
+    if project_config.exists():
+        print(f"  Configuration file already exists: {project_config}")
+    else:
+        project_config.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(bundled_config, project_config)
+        created_items.append(f"  Configuration file: {project_config}")
 
     data_dir.mkdir(parents=True, exist_ok=True)
-    resolved_output_dir.mkdir(parents=True, exist_ok=True)
+    created_items.append(f"  Data directory: {data_dir}")
 
-    config_file_path = get_default_config_path()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    created_items.append(f"  Output directory: {output_dir}")
 
     print("Research Tool initialised successfully.")
     print()
-    print(f"  Data directory: {data_dir}")
-    print(f"  Output directory: {resolved_output_dir}")
-    print()
-    print(f"  Configuration file: {config_file_path}")
+    for item in created_items:
+        print(item)
 
 
 def cmd_config(args: argparse.Namespace) -> None:

@@ -52,17 +52,33 @@ class GmailConfig:
 # Path helpers
 # ---------------------------------------------------------------------------
 
-_PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
-_DEFAULT_CONFIG_RELATIVE_PATH = Path("src") / "config" / "gmail-configuration.yaml"
+_PACKAGE_DIR = Path(__file__).resolve().parent
+_BUNDLED_DEFAULT_CONFIG = _PACKAGE_DIR / "default-config.yaml"
+_PROJECT_CONFIG_RELATIVE_PATH = Path("src") / "config" / "gmail-configuration.yaml"
+
+
+def get_bundled_config_path() -> Path:
+    """Return the absolute path to the bundled default config template.
+
+    This resolves via ``__file__`` so it always finds the template inside the
+    package, regardless of symlinks or the current working directory.
+
+    Returns:
+        Absolute path to the ``default-config.yaml`` bundled in the package.
+    """
+    return _BUNDLED_DEFAULT_CONFIG
 
 
 def get_default_config_path() -> Path:
-    """Return the absolute path to the default YAML configuration file.
+    """Return the absolute path to the project-level configuration file.
+
+    Resolves relative to the current working directory so it targets the
+    *calling repo* (e.g., magrathea), not the source repo (deep-thought).
 
     Returns:
-        Absolute path to src/config/gmail-configuration.yaml relative to the project root.
+        Absolute path to src/config/gmail-configuration.yaml in the calling repo.
     """
-    return _PROJECT_ROOT / _DEFAULT_CONFIG_RELATIVE_PATH
+    return Path.cwd() / _PROJECT_CONFIG_RELATIVE_PATH
 
 
 # ---------------------------------------------------------------------------

@@ -257,51 +257,77 @@ class TestCommandHandlers:
         assert "engine 'bad' is not valid" in captured.out
 
     def test_cmd_init_creates_config_output_dir_and_database(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """cmd_init must call save_default_config, mkdir, and initialize_database."""
+        """cmd_init must copy the bundled config, create the output dir, and initialise the DB."""
+        monkeypatch.chdir(tmp_path)
+        bundled_config = tmp_path / "bundled.yaml"
+        bundled_config.write_text("engine: mlx\n", encoding="utf-8")
         args = MagicMock()
         args.save_config = None
 
+        mock_db_conn = MagicMock()
+
         with (
-            patch("deep_thought.audio.cli.get_default_config_path", return_value=tmp_path / "audio.yaml"),
-            patch("deep_thought.audio.cli.save_default_config") as mock_save,
-            patch("deep_thought.audio.cli.load_config", return_value=_make_config(output_dir=str(tmp_path / "out"))),
-            patch("deep_thought.audio.db.schema.initialize_database") as mock_init_db,
+            patch("deep_thought.audio.cli.get_bundled_config_path", return_value=bundled_config),
+            patch("deep_thought.audio.db.schema.initialize_database", return_value=mock_db_conn) as mock_init_db,
             patch("deep_thought.audio.db.schema.get_data_dir", return_value=tmp_path),
         ):
-            mock_db_conn = MagicMock()
-            mock_init_db.return_value = mock_db_conn
-
             cmd_init(args)
 
-        mock_save.assert_called_once()
         mock_init_db.assert_called_once()
         mock_db_conn.close.assert_called_once()
 
         captured = capsys.readouterr()
-        assert "Configuration" in captured.out
-        assert "Output directory" in captured.out
-        assert "Database initialized" in captured.out
+        assert "Audio Tool initialised" in captured.out
 
-    def test_cmd_init_handles_existing_config_gracefully(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    def test_cmd_init_copies_config_when_missing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """cmd_init must print an 'already exists' message when the config file is present."""
+        """cmd_init must copy the bundled config to the project-level path when it does not exist."""
+        monkeypatch.chdir(tmp_path)
+        bundled_config = tmp_path / "bundled.yaml"
+        bundled_config.write_text("engine: mlx\n", encoding="utf-8")
         args = MagicMock()
         args.save_config = None
 
         with (
-            patch("deep_thought.audio.cli.get_default_config_path", return_value=tmp_path / "audio.yaml"),
-            patch("deep_thought.audio.cli.save_default_config", side_effect=FileExistsError("already exists")),
-            patch("deep_thought.audio.cli.load_config", return_value=_make_config(output_dir=str(tmp_path / "out"))),
+            patch("deep_thought.audio.cli.get_bundled_config_path", return_value=bundled_config),
+            patch("deep_thought.audio.db.schema.initialize_database", return_value=MagicMock()),
+            patch("deep_thought.audio.db.schema.get_data_dir", return_value=tmp_path),
+        ):
+            cmd_init(args)
+
+        expected_project_config = tmp_path / "src" / "config" / "audio-configuration.yaml"
+        assert expected_project_config.exists()
+        assert expected_project_config.read_text(encoding="utf-8") == "engine: mlx\n"
+
+    def test_cmd_init_skips_config_copy_when_already_exists(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """cmd_init must print an 'already exists' message and skip copying when config is present."""
+        monkeypatch.chdir(tmp_path)
+        bundled_config = tmp_path / "bundled.yaml"
+        bundled_config.write_text("engine: mlx\n", encoding="utf-8")
+
+        project_config = tmp_path / "src" / "config" / "audio-configuration.yaml"
+        project_config.parent.mkdir(parents=True)
+        project_config.write_text("engine: whisper\n", encoding="utf-8")
+
+        args = MagicMock()
+        args.save_config = None
+
+        with (
+            patch("deep_thought.audio.cli.get_bundled_config_path", return_value=bundled_config),
             patch("deep_thought.audio.db.schema.initialize_database", return_value=MagicMock()),
             patch("deep_thought.audio.db.schema.get_data_dir", return_value=tmp_path),
         ):
             cmd_init(args)
 
         captured = capsys.readouterr()
-        assert "already exists" in captured.out.lower()
+        assert "already exists" in captured.out
+        # Original content must be preserved — not overwritten
+        assert project_config.read_text(encoding="utf-8") == "engine: whisper\n"
 
     def test_cmd_transcribe_calls_process_batch_with_correct_args(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]

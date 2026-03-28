@@ -1,0 +1,111 @@
+# =============================================================================
+# Gmail Tool — Example Configuration
+# All settings shown with every valid option documented.
+# Copy to src/config/gmail-configuration.yaml and customize.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Auth (OAuth 2.0)
+# ---------------------------------------------------------------------------
+credentials_path: "src/config/gmail/credentials.json"  # Path to Google OAuth client secret JSON
+
+token_path: "data/gmail/token.json"  # Path where the OAuth refresh token is stored
+
+scopes:                              # Google OAuth scopes to request
+  - "https://mail.google.com/"
+                                     # Options:
+                                     #   "https://mail.google.com/"
+                                     #       — Full access including permanent delete
+                                     #   "https://www.googleapis.com/auth/gmail.modify"
+                                     #       — Read/write without permanent delete
+                                     #   "https://www.googleapis.com/auth/gmail.readonly"
+                                     #       — Read-only access
+
+# ---------------------------------------------------------------------------
+# Gemini AI (used for email content extraction)
+# ---------------------------------------------------------------------------
+gemini_api_key_env: "GEMINI_API_KEY"  # Name of the env var holding your Gemini API key
+
+gemini_model: "gemini-2.5-flash"     # Gemini model to use for AI extraction
+
+gemini_rate_limit_rpm: 15            # Maximum Gemini API requests per minute
+
+# ---------------------------------------------------------------------------
+# Gmail API behaviour
+# ---------------------------------------------------------------------------
+gmail_rate_limit_rpm: 250   # Maximum Gmail API requests per minute
+                            # Default Google quota is 250; lower to be conservative
+
+retry_max_attempts: 3       # Number of retry attempts for failed API calls; must be > 0
+
+retry_base_delay_seconds: 1 # Initial delay in seconds before the first retry
+                            # Doubles on each subsequent attempt
+
+# ---------------------------------------------------------------------------
+# Collection
+# ---------------------------------------------------------------------------
+max_emails_per_run: 100     # Maximum emails to process per invocation; must be > 0
+
+clean_newsletters: true     # Options: true, false
+                            #   true  — Strip tracking pixels, social buttons, etc.
+                            #           (typically 50-70% size reduction)
+                            #   false — Keep email HTML/text as-is
+
+decision_cache_ttl: 3600    # Seconds to cache AI extraction decisions; must be >= 0
+                            # Set to 0 to disable caching
+
+# ---------------------------------------------------------------------------
+# Output
+# ---------------------------------------------------------------------------
+output_dir: "data/gmail/export/"  # Directory where exported markdown files are written
+
+generate_llms_files: false  # Options: true, false
+                            #   true  — Generate .llms.txt and .llms-full.txt aggregate files
+                            #   false — Only generate individual email files
+
+flat_output: false          # Options: true, false
+                            #   true  — Write all files into a single flat directory
+                            #   false — Organize files into subdirectories by rule name
+
+# ---------------------------------------------------------------------------
+# Rules
+# Each rule defines a Gmail query, optional AI extraction, and post-actions.
+# ---------------------------------------------------------------------------
+rules:
+  - name: "newsletters"              # Unique rule name (no slashes, no leading dot)
+    query: "label:newsletter"         # Gmail search query (standard Gmail search syntax)
+    ai_instructions: "Extract the main content and key takeaways. Ignore promotional sections."
+                                      # Options:
+                                      #   "..." — A prompt sent to Gemini for content extraction
+                                      #   null  — Skip AI extraction (useful for forward-only rules)
+    actions:                          # Post-collection actions, executed in order
+      - archive                       # Valid actions:
+                                      #   archive              — Remove from inbox
+                                      #   mark_read            — Mark the email as read
+                                      #   trash                — Move to trash
+                                      #   delete               — Permanently delete (requires full scope)
+                                      #   label:{name}         — Apply a Gmail label, e.g. "label:Processed"
+                                      #   remove_label:{name}  — Remove a Gmail label, e.g. "remove_label:Unread"
+                                      #   forward:{address}    — Forward to an email address, e.g.
+                                      #                          "forward:digest@example.com"
+      - label:Processed
+    append_mode: true                 # Options: true, false
+                                      #   true  — Append to existing output file for this rule
+                                      #   false — Create a new file for each collection run
+
+  - name: "receipts"
+    query: "subject:receipt OR subject:invoice newer_than:7d"
+    ai_instructions: "Extract order number, total, merchant, and item list."
+    actions:
+      - archive
+      - label:Receipts
+    append_mode: false
+
+  - name: "readwise"
+    query: "label:newsletter -label:Forwarded newer_than:7d"
+    ai_instructions: null             # No AI extraction — forward only
+    actions:
+      - forward:yourname@feed.readwise.io
+      - label:Forwarded
+      - archive
+    append_mode: false

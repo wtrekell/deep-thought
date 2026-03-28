@@ -1,0 +1,91 @@
+# =============================================================================
+# Todoist Tool — Example Configuration
+# All settings shown with every valid option documented.
+# Copy to src/config/todoist_configuration.yaml and customize.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Todoist API
+# ---------------------------------------------------------------------------
+todoist:
+  api_token_env: "TODOIST_API_TOKEN"  # Name of the env var holding your Todoist API token
+
+# ---------------------------------------------------------------------------
+# Projects to sync (opt-in list)
+# Only projects listed here will be pulled/pushed.
+# ---------------------------------------------------------------------------
+projects:
+  - name: "Inbox"                     # Each entry must have a "name" matching the
+  - name: "Work"                      # exact Todoist project name
+  - name: "Personal"
+
+# ---------------------------------------------------------------------------
+# Filter rules for pull and push operations
+# ---------------------------------------------------------------------------
+filters:
+  pull:
+    labels:
+      include: []                     # Only pull tasks with these labels
+                                      # Empty list = no label filter (all labels pass)
+      exclude: []                     # Skip tasks with any of these labels
+
+    projects:
+      include: []                     # Only pull from these project names
+                                      # Empty list = use the top-level projects list
+
+    sections:
+      include: []                     # Only pull tasks in these sections
+                                      # Empty list = all sections
+      exclude: []                     # Skip tasks in these sections
+
+    assignee:
+      include: []                     # Only pull tasks assigned to these user names/IDs
+                                      # Empty list = all assignees
+
+    due:
+      has_due_date: null              # Options: null, true, false
+                                      #   null  — Pull all tasks regardless of due date
+                                      #   true  — Only pull tasks that have a due date
+                                      #   false — Only pull tasks without a due date
+
+  push:
+    labels:
+      include: []                     # Only push tasks with these labels
+      exclude: []                     # Skip tasks with these labels when pushing
+
+    assignee:
+      include: []                     # Only push tasks assigned to these users
+
+    conflict_resolution: "prompt"     # Options: "prompt", "remote_wins", "local_wins"
+                                      #   prompt      — Ask the user to resolve each conflict
+                                      #   remote_wins — Remote (Todoist) version always wins
+                                      #   local_wins  — Local (database) version always wins
+
+    require_confirmation: true        # Options: true, false
+                                      #   true  — Prompt for confirmation before pushing changes
+                                      #   false — Push changes without prompting
+
+# ---------------------------------------------------------------------------
+# Comment sync settings
+# ---------------------------------------------------------------------------
+comments:
+  sync: true                          # Options: true, false
+                                      #   true  — Sync task comments from Todoist
+                                      #   false — Skip comment sync entirely
+
+  include_attachments: false          # Options: true, false
+                                      #   true  — Include attachment metadata in synced comments
+                                      #   false — Ignore attachments in comments
+
+# ---------------------------------------------------------------------------
+# Claude involvement markers
+# Used to identify tasks assigned to Claude and link them to a repository.
+# ---------------------------------------------------------------------------
+claude:
+  label: "claude-code"                # Todoist label that marks tasks for Claude to handle
+
+  role:
+    repo: "deep-thought"              # Repository name where Claude should work on the task
+                                      # Should be set when claude.label is configured
+
+    branch: "main"                    # Git branch to target for Claude's work

@@ -175,21 +175,25 @@ class TestLoadConfigFromArgs:
 
 
 class TestCmdInit:
-    def test_creates_directories_and_prints_paths(
+    def test_prints_confirmation_and_paths(
         self,
         args_base: argparse.Namespace,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """init must create snapshots/export dirs and print setup instructions."""
-        fake_db_path = tmp_path / "todoist.db"
-        fake_config_path = tmp_path / "todoist_configuration.yaml"
+        """init must print a success message and the paths it created."""
+        monkeypatch.chdir(tmp_path)
+        bundled = tmp_path / "bundled.yaml"
+        bundled.write_text("# bundled config\n", encoding="utf-8")
+
+        fake_db_path = tmp_path / "data" / "todoist" / "todoist.db"
         mock_conn = MagicMock()
 
         with (
+            patch("deep_thought.todoist.cli.get_bundled_config_path", return_value=bundled),
             patch("deep_thought.todoist.cli.get_database_path", return_value=fake_db_path),
             patch("deep_thought.todoist.cli.initialize_database", return_value=mock_conn),
-            patch("deep_thought.todoist.cli.get_default_config_path", return_value=fake_config_path),
         ):
             cmd_init(args_base)
 
@@ -198,6 +202,104 @@ class TestCmdInit:
         assert str(fake_db_path) in captured_output
         assert "TODOIST_API_TOKEN" in captured_output
         mock_conn.close.assert_called_once()
+
+    def test_copies_config_to_project_when_missing(
+        self,
+        args_base: argparse.Namespace,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """init must copy the bundled config template to src/config/ when absent."""
+        monkeypatch.chdir(tmp_path)
+        bundled = tmp_path / "bundled.yaml"
+        bundled.write_text("# bundled default\napi_token_env: TODOIST_API_TOKEN\n", encoding="utf-8")
+
+        fake_db_path = tmp_path / "data" / "todoist" / "todoist.db"
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.todoist.cli.get_bundled_config_path", return_value=bundled),
+            patch("deep_thought.todoist.cli.get_database_path", return_value=fake_db_path),
+            patch("deep_thought.todoist.cli.initialize_database", return_value=mock_conn),
+        ):
+            cmd_init(args_base)
+
+        project_config = tmp_path / "src" / "config" / "todoist_configuration.yaml"
+        assert project_config.exists()
+        assert project_config.read_text() == "# bundled default\napi_token_env: TODOIST_API_TOKEN\n"
+
+    def test_skips_config_copy_when_already_exists(
+        self,
+        args_base: argparse.Namespace,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """init must not overwrite an existing project-level config file."""
+        monkeypatch.chdir(tmp_path)
+        bundled = tmp_path / "bundled.yaml"
+        bundled.write_text("# new content\n", encoding="utf-8")
+
+        project_config = tmp_path / "src" / "config" / "todoist_configuration.yaml"
+        project_config.parent.mkdir(parents=True)
+        project_config.write_text("# existing content\n", encoding="utf-8")
+
+        fake_db_path = tmp_path / "data" / "todoist" / "todoist.db"
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.todoist.cli.get_bundled_config_path", return_value=bundled),
+            patch("deep_thought.todoist.cli.get_database_path", return_value=fake_db_path),
+            patch("deep_thought.todoist.cli.initialize_database", return_value=mock_conn),
+        ):
+            cmd_init(args_base)
+
+        assert project_config.read_text() == "# existing content\n"
+        captured_output = capsys.readouterr().out
+        assert "already exists" in captured_output
+
+    def test_creates_snapshots_and_export_directories(
+        self,
+        args_base: argparse.Namespace,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """init must create the snapshots and export directories next to the database."""
+        monkeypatch.chdir(tmp_path)
+        bundled = tmp_path / "bundled.yaml"
+        bundled.write_text("# config\n", encoding="utf-8")
+
+        data_dir = tmp_path / "data" / "todoist"
+        fake_db_path = data_dir / "todoist.db"
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.todoist.cli.get_bundled_config_path", return_value=bundled),
+            patch("deep_thought.todoist.cli.get_database_path", return_value=fake_db_path),
+            patch("deep_thought.todoist.cli.initialize_database", return_value=mock_conn),
+        ):
+            cmd_init(args_base)
+
+        assert (data_dir / "snapshots").exists()
+        assert (data_dir / "export").exists()
+
+    def test_exits_with_code_1_when_bundled_config_missing(
+        self,
+        args_base: argparse.Namespace,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """init must exit with code 1 if the bundled config template is not found."""
+        monkeypatch.chdir(tmp_path)
+        missing_bundled = tmp_path / "nonexistent.yaml"
+
+        with (
+            patch("deep_thought.todoist.cli.get_bundled_config_path", return_value=missing_bundled),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            cmd_init(args_base)
+
+        assert exc_info.value.code == 1
 
 
 # ---------------------------------------------------------------------------

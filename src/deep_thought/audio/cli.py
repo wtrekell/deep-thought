@@ -23,9 +23,9 @@ from typing import Any
 
 from deep_thought.audio.config import (
     AudioConfig,
+    get_bundled_config_path,
     get_default_config_path,
     load_config,
-    save_default_config,
     validate_config,
 )
 
@@ -306,38 +306,52 @@ def cmd_config(args: argparse.Namespace) -> None:
 
 
 def cmd_init(args: argparse.Namespace) -> None:
-    """Create configuration file, output directory, and database.
+    """Bootstrap the audio tool for first use in the calling repo.
 
-    Writes the bundled default config to the standard location (or --save-config
-    path), creates the output directory, and initialises the SQLite database.
+    Copies the bundled default config template from the package to
+    ``src/config/audio-configuration.yaml`` (relative to cwd), creates the
+    data and output directories, and initialises the SQLite database.
+
+    Never attempts to load the project-level config — it does not exist yet.
 
     Args:
         args: Parsed argparse namespace.
     """
-    destination_path: Path = Path(args.save_config) if args.save_config else get_default_config_path()
+    import os
+    import shutil
 
-    try:
-        save_default_config(destination_path)
-        print(f"Configuration written to: {destination_path}")
-    except FileExistsError:
-        print(f"Configuration already exists at: {destination_path}")
+    bundled_config = get_bundled_config_path()
+    project_config: Path = Path(args.save_config) if args.save_config else get_default_config_path()
+    data_root = Path(os.environ.get("DEEP_THOUGHT_DATA_DIR", "data"))
+    output_dir = data_root / "audio" / "export"
 
-    config = load_config(destination_path)
-    output_dir = Path(config.output.output_dir)
+    if not bundled_config.exists():
+        print(f"ERROR: Bundled config template not found at {bundled_config}.", file=sys.stderr)
+        sys.exit(1)
+
+    created_items: list[str] = []
+
+    if project_config.exists():
+        print(f"  Configuration file already exists: {project_config}")
+    else:
+        project_config.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(bundled_config, project_config)
+        created_items.append(f"  Configuration file: {project_config}")
+
     output_dir.mkdir(parents=True, exist_ok=True)
-    print(f"Output directory ready:   {output_dir}")
+    created_items.append(f"  Output directory: {output_dir}")
 
     # Initialize database
     from deep_thought.audio.db.schema import get_data_dir, initialize_database
 
     db_conn = initialize_database()
     db_conn.close()
-    print(f"Database initialized:     {get_data_dir() / 'audio.db'}")
+    created_items.append(f"  Database: {get_data_dir() / 'audio.db'}")
 
+    print("Audio Tool initialised successfully.")
     print()
-    print("Next steps:")
-    print(f"  1. Review configuration:  {destination_path}")
-    print("  2. Run: audio --input <path-to-audio-files>")
+    for created_item in created_items:
+        print(created_item)
 
 
 # ---------------------------------------------------------------------------

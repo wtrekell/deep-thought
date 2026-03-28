@@ -1,0 +1,81 @@
+# =============================================================================
+# Reddit Tool — Example Configuration
+# All settings shown with every valid option documented.
+# Copy to src/config/reddit-configuration.yaml and customize.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# API credentials
+# Set the actual values in your .env file, not here.
+# ---------------------------------------------------------------------------
+client_id_env: "REDDIT_CLIENT_ID"         # Name of env var holding your Reddit app client ID
+client_secret_env: "REDDIT_CLIENT_SECRET"  # Name of env var holding your Reddit app client secret
+user_agent_env: "REDDIT_USER_AGENT"        # Name of env var holding your Reddit user agent string
+                                           # Note: PRAW manages Reddit API rate limiting internally
+                                           # (60 requests/minute)
+
+# ---------------------------------------------------------------------------
+# Collection
+# ---------------------------------------------------------------------------
+max_posts_per_run: 500      # Global cap on total posts collected across all rules
+                            # per invocation; must be > 0
+
+# ---------------------------------------------------------------------------
+# Output
+# ---------------------------------------------------------------------------
+output_dir: "data/reddit/export/"  # Directory where collected posts are written
+
+generate_llms_files: false  # Options: true, false
+                            #   true  — Generate .llms.txt and .llms-full.txt per rule
+                            #   false — Only generate individual post files
+
+# ---------------------------------------------------------------------------
+# Rules
+# Each rule targets one subreddit with its own filters and limits.
+# ---------------------------------------------------------------------------
+rules:
+  - name: "python_top_week"           # Unique rule name (used for output subdirectory)
+    subreddit: "python"               # Subreddit name (without the r/ prefix)
+
+    sort: "top"                       # Options: "new", "hot", "top", "rising"
+                                      #   new    — Most recent posts
+                                      #   hot    — Currently trending posts
+                                      #   top    — Highest-scoring posts (requires time_filter)
+                                      #   rising — Posts gaining momentum
+
+    time_filter: "week"               # Options: "hour", "day", "week", "month", "year", "all"
+                                      # Only used when sort is "top"; ignored otherwise
+
+    limit: 25                         # Maximum posts to fetch from Reddit for this rule; must be > 0
+
+    min_score: 50                     # Minimum upvote score to include a post (0 = no minimum)
+
+    min_comments: 5                   # Minimum comment count to include a post (0 = no minimum)
+
+    max_age_days: 7                   # Exclude posts older than this many days; must be > 0
+
+    include_keywords:                 # Post title/body must match at least one keyword
+      - "python 3*"                   # Glob wildcards supported
+      - "asyncio"                     # Empty list = no keyword filtering (all posts pass)
+
+    exclude_keywords:                 # Posts matching any of these keywords are skipped
+      - "hiring"
+
+    include_flair:                    # Only collect posts with one of these flair values
+      []                              # Empty list = all flair values accepted
+
+    exclude_flair:                    # Skip posts with any of these flair values
+      - "Meme"
+
+    search_comments: false            # Options: true, false
+                                      #   true  — Also match include/exclude keywords in comments
+                                      #   false — Only match keywords in post title and body
+
+    max_comment_depth: 3              # Maximum reply depth to collect (0 = top-level only);
+                                      # must be >= 0
+
+    max_comments: 200                 # Maximum comments to collect per post; must be > 0
+
+    include_images: true              # Options: true, false
+                                      #   true  — Include image URLs in output
+                                      #   false — Skip image references

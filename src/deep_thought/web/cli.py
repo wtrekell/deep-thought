@@ -24,6 +24,8 @@ from deep_thought.web.config import (
     CrawlConfig,
     WebConfig,
     copy_default_templates,
+    get_batch_config_dir,
+    get_bundled_config_path,
     get_default_config_path,
     load_config,
     save_default_config,
@@ -210,7 +212,7 @@ def cmd_crawl(args: argparse.Namespace) -> None:
     total_skipped = 0
 
     if batch_mode:
-        batch_configs_dir = get_default_config_path().parent / "web"
+        batch_configs_dir = get_batch_config_dir()
         if not batch_configs_dir.exists():
             print(f"ERROR: Batch config directory not found: {batch_configs_dir}", file=sys.stderr)
             sys.exit(1)
@@ -319,25 +321,36 @@ def cmd_config(args: argparse.Namespace) -> None:
 
 
 def cmd_init(args: argparse.Namespace) -> None:
-    """Scaffold the web tool workspace.
+    """Bootstrap the web tool for first use in the calling repo.
 
-    Creates the default configuration file, copies starter batch configs
-    from templates, creates output directories for both article and
-    documentation modes, and initializes the SQLite database.
+    Copies the bundled default config template from the package to
+    ``src/config/web-configuration.yaml`` (relative to cwd), copies batch
+    config templates to ``src/config/web/``, creates output directories,
+    and initializes the SQLite database.
 
+    Never attempts to load the project-level config — it may not exist yet.
     Safe to re-run — existing files are never overwritten.
 
     Args:
         args: Parsed argparse namespace.
     """
-    # 1. Default configuration file
-    destination_path: Path = Path(args.save_config) if args.save_config else get_default_config_path()
+    import os
+    import shutil
 
-    try:
-        save_default_config(destination_path)
-        print(f"Configuration written to:     {destination_path}")
-    except FileExistsError:
-        print(f"Configuration already exists:  {destination_path}")
+    bundled_config_path = get_bundled_config_path()
+    project_config_path: Path = Path(args.save_config) if args.save_config else get_default_config_path()
+
+    if not bundled_config_path.exists():
+        print(f"ERROR: Bundled config template not found at {bundled_config_path}.", file=sys.stderr)
+        sys.exit(1)
+
+    # 1. Default configuration file
+    if project_config_path.exists():
+        print(f"Configuration already exists:  {project_config_path}")
+    else:
+        project_config_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(bundled_config_path, project_config_path)
+        print(f"Configuration written to:      {project_config_path}")
 
     # 2. Batch configs from templates
     template_results = copy_default_templates()
@@ -358,7 +371,8 @@ def cmd_init(args: argparse.Namespace) -> None:
     print(f"Output directory ready:        {docs_output_dir}")
 
     # 4. Database
-    database_path = get_data_dir() / "web.db"
+    data_root = Path(os.environ.get("DEEP_THOUGHT_DATA_DIR", "data"))
+    database_path = data_root / "web" / "web.db"
     initialize_database(database_path)
     print(f"Database initialized:          {database_path}")
 
@@ -534,7 +548,7 @@ def _add_crawl_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--stealth",
         action="store_true",
-        default=False,
+        default=None,
         help="Enable stealth mode (random user-agent and viewport).",
     )
     parser.add_argument(
@@ -572,7 +586,7 @@ def _add_crawl_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--extract-images",
         action="store_true",
-        default=False,
+        default=None,
         dest="extract_images",
         help="Download images found on crawled pages.",
     )

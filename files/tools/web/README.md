@@ -28,28 +28,29 @@ web crawl --batch [flags]
 
 Running `web` with no arguments also triggers a crawl (same as `web crawl`).
 
-| Flag | Description |
-| --- | --- |
-| `--input URL` | Root URL for documentation/blog mode |
-| `--input-file PATH` | Text file of URLs, one per line (direct mode) |
-| `--mode [documentation\|blog\|direct]` | Crawl mode (default: `blog`) |
-| `--output PATH` | Output directory (default: `output/web/` for blog/direct, `docs/` for documentation) |
-| `--config PATH` | Override default config file path |
-| `--max-depth INT` | Max link-following depth (documentation mode; default: 3) |
-| `--max-pages INT` | Max pages per run (default: 100) |
-| `--js-wait FLOAT` | Seconds to wait for JS to render (default: 1.0) |
-| `--browser-channel TEXT` | Chromium channel for WAF bypass (e.g., `chrome`) |
-| `--stealth` | Randomize user-agent, viewport, and inter-request delays |
-| `--include-pattern REGEX` | Only crawl URLs matching this pattern (repeatable) |
-| `--exclude-pattern REGEX` | Skip URLs matching this pattern (repeatable) |
-| `--retry-attempts INT` | Max retries per URL (default: 2) |
-| `--retry-delay FLOAT` | Seconds between retries (default: 5.0) |
-| `--extract-images` | Extract images found on crawled pages |
-| `--batch` | Auto-discover and run all `src/config/web/*.yaml` |
-| `--dry-run` | Preview without fetching |
-| `--verbose`, `-v` | Detailed logging |
-| `--force` | Clear state and recrawl |
-| `--version` | Show version and exit |
+| Flag                                   | Description                                                                          |
+| -------------------------------------- | ------------------------------------------------------------------------------------ |
+| `--input URL`                          | Root URL for documentation/blog mode                                                 |
+| `--input-file PATH`                    | Text file of URLs, one per line (direct mode)                                        |
+| `--mode [documentation\|blog\|direct]` | Crawl mode (default: `blog`)                                                         |
+| `--output PATH`                        | Output directory (default: `output/web/` for blog/direct, `docs/` for documentation) |
+| `--config PATH`                        | Override default config file path                                                    |
+| `--max-depth INT`                      | Max link-following depth (documentation mode; default: 3)                            |
+| `--max-pages INT`                      | Max pages per run (default: 100)                                                     |
+| `--js-wait FLOAT`                      | Seconds to wait for JS to render (default: 1.0)                                      |
+| `--browser-channel TEXT`               | Chromium channel for WAF bypass (e.g., `chrome`)                                     |
+| `--stealth`                            | Randomize user-agent, viewport, and inter-request delays                             |
+| `--include-pattern REGEX`              | Only crawl URLs matching this pattern (repeatable)                                   |
+| `--exclude-pattern REGEX`              | Skip URLs matching this pattern (repeatable)                                         |
+| `--retry-attempts INT`                 | Max retries per URL (default: 2)                                                     |
+| `--retry-delay FLOAT`                  | Seconds between retries (default: 5.0)                                               |
+| `--extract-images`                     | Extract images found on crawled pages                                                |
+| `--batch`                              | Auto-discover and run all `src/config/web/*.yaml`                                    |
+| `--dry-run`                            | Preview without fetching                                                             |
+| `--verbose`, `-v`                      | Detailed logging                                                                     |
+| `--force`                              | Clear state and recrawl                                                              |
+| `--save-config PATH`                   | Save resolved configuration to a YAML file and exit                                  |
+| `--version`                            | Show version and exit                                                                |
 
 ### `web config` — Validate and display configuration
 
@@ -76,12 +77,12 @@ Safe to re-run — existing files are never overwritten.
 
 ## Crawl Modes
 
-| Mode | Behavior |
-| --- | --- |
-| `blog` | Fetches a root URL, follows listing links `index_depth` levels deep, then captures articles. Typical: depth=1 (root → articles), depth=2 (root → categories → articles). |
-| `documentation` | BFS link-following from a root URL up to `max_depth`. Optional `changelog_url` enables incremental re-crawls — only pages linked from the changelog are re-fetched. |
-| `direct` | Fetches a specific list of URLs from a text file; no link-following. |
-| `batch` | Auto-discovers all `src/config/web/*.yaml` files and runs each in sequence. |
+| Mode            | Behavior                                                                                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `blog`          | Fetches a root URL, follows listing links `index_depth` levels deep, then captures articles. Typical: depth=1 (root → articles), depth=2 (root → categories → articles). |
+| `documentation` | BFS link-following from a root URL up to `max_depth`. Optional `changelog_url` enables incremental re-crawls — only pages linked from the changelog are re-fetched.      |
+| `direct`        | Fetches a specific list of URLs from a text file; no link-following.                                                                                                     |
+| `batch`         | Auto-discovers all `src/config/web/*.yaml` files and runs each in sequence.                                                                                              |
 
 ## Configuration
 
@@ -95,21 +96,25 @@ max_pages: 100
 
 # Rendering
 js_wait: 1.0
-browser_channel: null         # e.g., 'chrome' to bypass WAF fingerprinting
+browser_channel: null # e.g., 'chrome' to bypass WAF fingerprinting
 
-# Stealth
-stealth: false                # Randomize user-agent, viewport, delays
+# Browser
+headless: true # Run the browser without a visible window
+stealth: false # Randomize user-agent, viewport, delays
 
 # Index structure
-index_depth: 1                # Levels of listing/nav pages before article content
-min_article_words: 200        # Pages below this word count are treated as index pages
-changelog_url: null           # Documentation mode only: URL of changelog for incremental re-crawls
+index_depth: 1 # Levels of listing/nav pages before article content
+min_article_words: 200 # Pages below this word count are treated as index pages
+changelog_url: null # Documentation mode only: URL of changelog for incremental re-crawls
 
 # URL filtering
 include_patterns: []
 exclude_patterns:
   - '.*\.pdf$'
-  - '.*login.*'
+  - ".*login.*"
+
+# Content stripping
+strip_boilerplate: [] # Regex patterns to remove from converted markdown
 
 # Retry
 retry_attempts: 2
@@ -119,6 +124,9 @@ retry_delay: 5.0
 output_dir: "output/web/"
 extract_images: false
 generate_llms_files: true
+llms_lookback_days: 30 # 0 = current run only, N = include pages from last N days
+strip_path_prefix: null # Strip this URL path prefix from output file paths
+strip_domain: false # Omit the domain directory from output file paths
 ```
 
 ### Per-site batch configs
@@ -140,7 +148,17 @@ Place YAML files in `src/config/web/` for use with `--batch`. Each file is one c
 
 **`changelog_url`** — documentation mode only. If set, subsequent runs fetch this URL first and only re-crawl pages linked from it. Pages not mentioned in the changelog are skipped. Set to `null` to force a full re-crawl.
 
+**`headless`** — when `true` (default), runs the browser without a visible window. Set to `false` to show the browser window during crawling, which can help with debugging or sites that detect headless browsers.
+
 **`stealth`** — when `true`, randomizes the user-agent string, browser viewport, and inter-request delays to reduce the chance of bot detection. Can be set in the YAML config so it applies automatically without passing `--stealth` on every run.
+
+**`llms_lookback_days`** — controls how much history is included in `llms-full.txt` and `llms.txt`. Set to `30` (default) to include all successfully crawled pages from the last 30 days, regardless of whether they were fetched in the current run. Set to `0` to only include pages from the current run.
+
+**`strip_path_prefix`** — removes a URL path prefix when computing output file paths. For example, setting `strip_path_prefix: "/docs/en"` turns `https://example.com/docs/en/guide/setup` into `example.com/guide/setup.md` instead of `example.com/docs/en/guide/setup.md`.
+
+**`strip_domain`** — when `true`, omits the domain directory from output file paths. For example, `example.com/guide/setup.md` becomes `guide/setup.md`.
+
+**`strip_boilerplate`** — a list of regex patterns applied to the converted markdown before saving. Matches are removed before word counting, so boilerplate text (nav menus, cookie banners, "Subscribe" blocks, footer links) doesn't inflate word counts or trigger the `min_article_words` quality gate. Patterns use `re.DOTALL`, so `.` matches newlines for multi-line blocks. Use `[^\n]*` instead of `.*` to match within a single line only.
 
 ## Output
 
@@ -177,6 +195,8 @@ Two files are written to the export root per run:
 
 - **`llms-full.txt`** — all page content concatenated, frontmatter stripped, separated by `---` delimiters
 - **`llms.txt`** — index of all pages with URLs and word counts, following the [llmstxt.org](https://llmstxt.org) convention
+
+When `llms_lookback_days` is set to a value greater than 0 (default: 30), these files include all successfully crawled pages from the database within that time window — not just pages fetched in the current run. Pages from the current run take precedence over historical versions when the same URL appears in both. Set to `0` to only include pages from the current run.
 
 ## State Database
 

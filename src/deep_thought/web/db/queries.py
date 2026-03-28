@@ -162,3 +162,25 @@ def get_crawled_pages_by_status(conn: sqlite3.Connection, status: str) -> list[d
     )
     rows: list[sqlite3.Row] = cursor.fetchall()
     return _rows_to_dicts(rows)
+
+
+def get_successful_pages_since(conn: sqlite3.Connection, since_iso: str) -> list[dict[str, Any]]:
+    """Return all successful crawled_pages rows updated at or after *since_iso*.
+
+    Uses ``updated_at`` so that re-crawled pages remain in the window even if
+    they were originally created outside it.
+
+    Args:
+        conn: An open SQLite connection.
+        since_iso: ISO-8601 timestamp string.  Only rows with ``updated_at``
+            at or after this value are returned.
+
+    Returns:
+        A list of dicts for all matching rows, ordered by URL.
+    """
+    cursor = conn.execute(
+        "SELECT * FROM crawled_pages WHERE status = 'success' AND updated_at >= ? ORDER BY url;",
+        (since_iso,),
+    )
+    rows: list[sqlite3.Row] = cursor.fetchall()
+    return _rows_to_dicts(rows)

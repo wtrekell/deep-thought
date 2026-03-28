@@ -37,7 +37,12 @@ def slugify(text: str) -> str:
     return stripped[:100]
 
 
-def url_to_output_path(url: str, output_root: Path) -> Path:
+def url_to_output_path(
+    url: str,
+    output_root: Path,
+    strip_path_prefix: str | None = None,
+    strip_domain: bool = False,
+) -> Path:
     """Derive an output file path from a URL.
 
     The URL's domain becomes the first directory; the URL's path segments
@@ -51,6 +56,11 @@ def url_to_output_path(url: str, output_root: Path) -> Path:
     Args:
         url: The source URL to derive a path from.
         output_root: The root directory under which all output files are written.
+        strip_path_prefix: If provided, this prefix is stripped from the URL
+            path before deriving directory names. Leading and trailing slashes
+            are normalized before comparison.
+        strip_domain: If True, the domain directory is omitted from the output
+            path. Files are written directly under output_root.
 
     Returns:
         The target output Path, including the .md extension.
@@ -59,6 +69,12 @@ def url_to_output_path(url: str, output_root: Path) -> Path:
     domain = parsed.netloc or "unknown"
 
     raw_path = parsed.path.strip("/")
+
+    if strip_path_prefix is not None:
+        normalized_prefix = strip_path_prefix.strip("/")
+        if raw_path == normalized_prefix or raw_path.startswith(normalized_prefix + "/"):
+            raw_path = raw_path[len(normalized_prefix) :].lstrip("/")
+
     path_parts = [part for part in raw_path.split("/") if part]
 
     if not path_parts:
@@ -69,7 +85,7 @@ def url_to_output_path(url: str, output_root: Path) -> Path:
         filename_slug = slugify(last_segment) or "index"
         directory_parts = path_parts[:-1]
 
-    output_path = output_root / domain
+    output_path = output_root if strip_domain else output_root / domain
     for directory_segment in directory_parts:
         output_path = output_path / directory_segment
 
@@ -131,6 +147,8 @@ def write_page(
     title: str | None,
     word_count: int,
     output_root: Path,
+    strip_path_prefix: str | None = None,
+    strip_domain: bool = False,
 ) -> Path:
     """Write a crawled page's markdown to disk with YAML frontmatter.
 
@@ -144,11 +162,17 @@ def write_page(
         title: The page title, or None if not available.
         word_count: Approximate word count of markdown_text.
         output_root: Root directory under which per-page files are written.
+        strip_path_prefix: If provided, passed to url_to_output_path to strip
+            this prefix from the URL path before computing the output file path.
+        strip_domain: If True, passed to url_to_output_path to omit the domain
+            directory from the output path.
 
     Returns:
         The Path to the written markdown file.
     """
-    output_file_path = url_to_output_path(url, output_root)
+    output_file_path = url_to_output_path(
+        url, output_root, strip_path_prefix=strip_path_prefix, strip_domain=strip_domain
+    )
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
     frontmatter_block = _build_frontmatter(url=url, mode=mode, title=title, word_count=word_count)

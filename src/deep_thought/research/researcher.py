@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 _PERPLEXITY_BASE_URL = "https://api.perplexity.ai"
 _SYNC_ENDPOINT = "/chat/completions"
-_ASYNC_SUBMIT_ENDPOINT = "/async/chat/completions"
+_ASYNC_SUBMIT_ENDPOINT = "/v1/async/sonar"
+_ASYNC_POLL_ENDPOINT = "/async/chat/completions"
 _ASYNC_POLL_INTERVAL_SECONDS = 5
 _ASYNC_TIMEOUT_SECONDS = 600  # 10 minutes
 
@@ -161,15 +162,17 @@ class PerplexityClient:
             resolved_domains,
         )
 
+        async_body: dict[str, Any] = {"request": request_body}
+
         logger.debug("Submitting deep research job to %s", _ASYNC_SUBMIT_ENDPOINT)
-        submit_response = self._execute_with_retry("POST", _ASYNC_SUBMIT_ENDPOINT, json=request_body)
+        submit_response = self._execute_with_retry("POST", _ASYNC_SUBMIT_ENDPOINT, json=async_body)
         if "id" not in submit_response:
             response_keys = list(submit_response.keys())
             raise ValueError(f"Async job submission failed: no job ID in API response. Response keys: {response_keys}")
         job_id: str = submit_response["id"]
         logger.debug("Deep research job submitted with ID: %s", job_id)
 
-        poll_url = f"{_ASYNC_SUBMIT_ENDPOINT}/{job_id}"
+        poll_url = f"{_ASYNC_POLL_ENDPOINT}/{job_id}"
         elapsed_start = time.monotonic()
         completed_response: dict[str, Any] | None = None
 
@@ -181,8 +184,8 @@ class PerplexityClient:
             logger.debug("Polling job %s (%.0fs elapsed)", job_id, elapsed_seconds)
             poll_response = self._execute_with_retry("GET", poll_url)
 
-            if poll_response.get("status") == "completed":
-                completed_response = poll_response
+            if poll_response.get("status") == "COMPLETED":
+                completed_response = poll_response.get("response", poll_response)
                 break
 
             time.sleep(_ASYNC_POLL_INTERVAL_SECONDS)

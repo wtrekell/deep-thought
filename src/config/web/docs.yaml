@@ -4,8 +4,7 @@ input_url: "https://docs.example.com"
 
 # Changelog URL for incremental re-crawls: if set, only pages linked from the
 # changelog are re-fetched on subsequent runs. Omit or set to null for full re-crawls.
-changelog_url:
-  null
+changelog_url: null
   # changelog_url: "https://docs.example.com/changelog"
 
 # Index depth for documentation sites.
@@ -19,27 +18,20 @@ max_depth: 4
 max_pages: 500
 js_wait: 1.0
 browser_channel: null
-headless: true
 stealth: false
 
 include_patterns: []
 
 exclude_patterns:
   - '.*\.pdf$'
-  - ".*#.*"
-  - ".*login.*"
+  - '.*#.*'
+  - '.*login.*'
   - '.*\?.*'
-
-# Regex patterns to remove from converted markdown (e.g., nav menus, footers, cookie banners).
-strip_boilerplate: []
-  # - 'Was this page helpful\?.*?(?=\n\n|\Z)'
-  # - 'Previous\s*\|.*?Next'
 
 retry_attempts: 2
 retry_delay: 5.0
 output_dir: "docs/"
 extract_images: false
 generate_llms_files: true
-llms_lookback_days: 30 # days of history to include in llms.txt / llms-full.txt (0 = current run only)
 strip_path_prefix: null # strip this prefix from URL paths when computing output file paths
-strip_domain: false # omit the domain directory from output file paths
+strip_domain: false     # omit the domain directory from output file paths

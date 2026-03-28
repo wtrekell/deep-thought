@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 from deep_thought.reddit.client import RedditClient
 from deep_thought.reddit.config import (
     RedditConfig,
+    get_bundled_config_path,
     get_credentials,
     get_default_config_path,
     load_config,
@@ -93,9 +94,16 @@ def _make_client_from_config(config: RedditConfig) -> RedditClient:
 
 
 def cmd_init(args: argparse.Namespace) -> None:
-    """Create the database, required directories, and print setup instructions.
+    """Bootstrap the Reddit tool for first use in the calling repo.
+
+    Copies the bundled default config template from the package to
+    ``src/config/reddit-configuration.yaml`` (relative to cwd), creates
+    the database and required data directories, and prints a summary.
+
+    Never attempts to load the project-level config — it does not exist yet.
 
     Creates:
+    - ``src/config/reddit-configuration.yaml`` (skipped if already present)
     - The SQLite database at <data_dir>/reddit.db
     - <data_dir>/snapshots/ for raw JSON backups per collection run
     - <data_dir>/export/ for generated markdown files
@@ -106,27 +114,50 @@ def cmd_init(args: argparse.Namespace) -> None:
     Args:
         args: Parsed argparse namespace (no subcommand-specific flags).
     """
+    import os
+    import shutil
+
+    bundled_config = get_bundled_config_path()
+    project_config = get_default_config_path()
+
+    if not bundled_config.exists():
+        print(f"ERROR: Bundled config template not found at {bundled_config}.", file=sys.stderr)
+        sys.exit(1)
+
+    created_items: list[str] = []
+
+    if project_config.exists():
+        print(f"  Configuration file already exists: {project_config}")
+    else:
+        project_config.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(bundled_config, project_config)
+        created_items.append(f"  Configuration file: {project_config}")
+
+    data_root = Path(os.environ.get("DEEP_THOUGHT_DATA_DIR", "data"))
+    data_dir = data_root / "reddit"
+
     database_path = get_database_path()
     connection = initialize_database(database_path)
     connection.close()
     logger.debug("Database initialised at: %s", database_path)
+    created_items.append(f"  Database: {database_path}")
 
-    snapshots_directory = database_path.parent / "snapshots"
-    export_directory = database_path.parent / "export"
+    snapshots_directory = data_dir / "snapshots"
+    export_directory = data_dir / "export"
 
     snapshots_directory.mkdir(parents=True, exist_ok=True)
-    export_directory.mkdir(parents=True, exist_ok=True)
+    created_items.append(f"  Snapshots: {snapshots_directory}")
 
-    default_config_path = get_default_config_path()
+    export_directory.mkdir(parents=True, exist_ok=True)
+    created_items.append(f"  Export: {export_directory}")
 
     print("Reddit Tool initialised successfully.")
     print()
-    print(f"  Database:  {database_path}")
-    print(f"  Snapshots: {snapshots_directory}")
-    print(f"  Export:    {export_directory}")
+    for item in created_items:
+        print(item)
     print()
     print("Next steps:")
-    print(f"  1. Edit the configuration file:  {default_config_path}")
+    print(f"  1. Edit the configuration file:  {project_config}")
     print("  2. Add your Reddit API credentials to a .env file at the project root:")
     print("       REDDIT_CLIENT_ID=your_client_id_here")
     print("       REDDIT_CLIENT_SECRET=your_client_secret_here")
@@ -355,7 +386,7 @@ def _handle_save_config(destination_path_str: str) -> None:
         destination_path_str: String path where the default config should be written.
     """
     destination_path = Path(destination_path_str)
-    source_path = get_default_config_path()
+    source_path = get_bundled_config_path()
 
     if not source_path.exists():
         print(f"ERROR: Default config template not found at {source_path}.", file=sys.stderr)

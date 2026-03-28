@@ -13,6 +13,7 @@ min_article_words: 200
 max_pages: 100
 js_wait: 1.0
 browser_channel: null
+headless: true
 stealth: false
 
 # Restrict crawling to the blog section and skip common non-article pages.
@@ -21,15 +22,23 @@ include_patterns: []
 
 exclude_patterns:
   - '.*\?.*'
-  - '.*/tag/.*'
-  - '.*/category/.*'
+  - ".*/tag/.*"
+  - ".*/category/.*"
   - '.*/page/\d+'
-  - '.*#.*'
-  - '.*login.*'
+  - ".*#.*"
+  - ".*login.*"
   - '.*\.pdf$'
+
+# Regex patterns to remove from converted markdown (e.g., nav menus, footers, cookie banners).
+strip_boilerplate: []
+  # - 'Subscribe to our newsletter.*?(?=\n\n|\Z)'
+  # - 'Related Posts.*?(?=\n\n|\Z)'
 
 retry_attempts: 2
 retry_delay: 5.0
 output_dir: "output/web/"
 extract_images: false
 generate_llms_files: true
+llms_lookback_days: 30 # days of history to include in llms.txt / llms-full.txt (0 = current run only)
+strip_path_prefix: null # strip this prefix from URL paths when computing output file paths
+strip_domain: false # omit the domain directory from output file paths

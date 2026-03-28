@@ -1,0 +1,41 @@
+# =============================================================================
+# Research Tool — Example Configuration
+# All settings shown with every valid option documented.
+# Copy to src/config/research-configuration.yaml and customize.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# API
+# ---------------------------------------------------------------------------
+api_key_env: "PERPLEXITY_API_KEY"   # Name of the env var holding your Perplexity API key
+
+retry_max_attempts: 3               # Number of retry attempts for failed API calls; must be > 0
+                                    # Uses exponential backoff
+
+retry_base_delay_seconds: 1         # Initial delay in seconds before the first retry
+                                    # Doubles on each subsequent attempt; must be > 0
+
+# ---------------------------------------------------------------------------
+# Models
+# ---------------------------------------------------------------------------
+search_model: "sonar"               # Model used by the `search` command (fast lookups)
+
+research_model: "sonar-deep-research"  # Model used by the `research` command
+                                       # (deep research with async polling)
+
+# ---------------------------------------------------------------------------
+# Defaults
+# ---------------------------------------------------------------------------
+default_recency: null               # Options: null, "hour", "day", "week", "month", "year"
+                                    #   null   — No recency filter (all time)
+                                    #   "hour"  — Results from the last hour only
+                                    #   "day"   — Results from the last 24 hours
+                                    #   "week"  — Results from the last 7 days
+                                    #   "month" — Results from the last 30 days
+                                    #   "year"  — Results from the last 365 days
+                                    # Can be overridden per query via the --recency CLI flag
+
+# ---------------------------------------------------------------------------
+# Output
+# ---------------------------------------------------------------------------
+output_dir: "data/research/export/"  # Directory where research results are written

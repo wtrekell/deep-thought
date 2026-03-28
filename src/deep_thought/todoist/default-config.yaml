@@ -1,0 +1,46 @@
+# Todoist Tool Configuration
+
+# Todoist API
+todoist:
+  api_token_env: "TODOIST_API_TOKEN"
+
+# Projects to sync (opt-in list)
+projects:
+  - name: "Inbox"
+  - name: "Quiet Evolution"
+
+# Meta class filter rules for pull and push
+filters:
+  pull:
+    labels:
+      include: []
+      exclude: []
+    projects:
+      include: []
+    sections:
+      include: []
+      exclude: []
+    assignee:
+      include: []
+    due:
+      has_due_date: null
+  push:
+    labels:
+      include: []
+      exclude: []
+    assignee:
+      include: []
+    conflict_resolution: "prompt"
+    require_confirmation: true
+
+# Comment sync settings
+comments:
+  sync: true
+  include_attachments: false
+
+# Claude involvement markers
+claude:
+  label: "claude-code"
+  role:
+    repo: "deep-thought"
+    branch: "main"

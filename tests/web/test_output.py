@@ -91,6 +91,84 @@ class TestUrlToOutputPath:
         output_path = url_to_output_path(url, tmp_path)
         assert "my-page-title" in output_path.name or output_path.name == "my-page-title.md"
 
+    def test_strip_path_prefix_removes_prefix(self, tmp_path: Path) -> None:
+        """A matching prefix must be stripped from the URL path."""
+        url = "https://code.claude.com/docs/en/overview"
+        output_path = url_to_output_path(url, tmp_path, strip_path_prefix="/docs/en")
+        assert output_path == tmp_path / "code.claude.com" / "overview.md"
+
+    def test_strip_path_prefix_preserves_hierarchy_below_prefix(self, tmp_path: Path) -> None:
+        """Path segments after the stripped prefix must be preserved."""
+        url = "https://code.claude.com/docs/en/guides/setup"
+        output_path = url_to_output_path(url, tmp_path, strip_path_prefix="/docs/en")
+        assert output_path == tmp_path / "code.claude.com" / "guides" / "setup.md"
+
+    def test_strip_path_prefix_no_match_passes_through(self, tmp_path: Path) -> None:
+        """When the URL path does not start with the prefix, no stripping occurs."""
+        url = "https://example.com/other/page"
+        output_path = url_to_output_path(url, tmp_path, strip_path_prefix="/docs/en")
+        assert output_path == tmp_path / "example.com" / "other" / "page.md"
+
+    def test_strip_path_prefix_none_is_noop(self, tmp_path: Path) -> None:
+        """When strip_path_prefix is None, the output path is unchanged."""
+        url = "https://example.com/docs/en/overview"
+        output_path = url_to_output_path(url, tmp_path, strip_path_prefix=None)
+        assert output_path == tmp_path / "example.com" / "docs" / "en" / "overview.md"
+
+    def test_strip_path_prefix_exact_match_returns_index(self, tmp_path: Path) -> None:
+        """When the entire URL path equals the prefix, the result must be index.md."""
+        url = "https://example.com/docs/en"
+        output_path = url_to_output_path(url, tmp_path, strip_path_prefix="/docs/en")
+        assert output_path == tmp_path / "example.com" / "index.md"
+
+    def test_strip_path_prefix_partial_segment_no_strip(self, tmp_path: Path) -> None:
+        """A prefix that partially matches a segment must NOT be stripped."""
+        url = "https://example.com/docs/english/page"
+        output_path = url_to_output_path(url, tmp_path, strip_path_prefix="/docs/en")
+        assert output_path == tmp_path / "example.com" / "docs" / "english" / "page.md"
+
+    def test_strip_path_prefix_trailing_slash_normalized(self, tmp_path: Path) -> None:
+        """A prefix with a trailing slash must work the same as without."""
+        url = "https://code.claude.com/docs/en/overview"
+        output_path = url_to_output_path(url, tmp_path, strip_path_prefix="/docs/en/")
+        assert output_path == tmp_path / "code.claude.com" / "overview.md"
+
+    def test_strip_path_prefix_without_leading_slash(self, tmp_path: Path) -> None:
+        """A prefix without a leading slash must work the same as with one."""
+        url = "https://code.claude.com/docs/en/overview"
+        output_path = url_to_output_path(url, tmp_path, strip_path_prefix="docs/en")
+        assert output_path == tmp_path / "code.claude.com" / "overview.md"
+
+    def test_strip_domain_omits_domain_directory(self, tmp_path: Path) -> None:
+        """When strip_domain is True, the domain directory must be omitted."""
+        url = "https://example.com/blog/my-post"
+        output_path = url_to_output_path(url, tmp_path, strip_domain=True)
+        assert output_path == tmp_path / "blog" / "my-post.md"
+
+    def test_strip_domain_false_includes_domain(self, tmp_path: Path) -> None:
+        """When strip_domain is False, the domain directory must be present."""
+        url = "https://example.com/blog/my-post"
+        output_path = url_to_output_path(url, tmp_path, strip_domain=False)
+        assert output_path == tmp_path / "example.com" / "blog" / "my-post.md"
+
+    def test_strip_domain_root_url_returns_index(self, tmp_path: Path) -> None:
+        """A root URL with strip_domain must produce index.md directly in output_root."""
+        url = "https://example.com/"
+        output_path = url_to_output_path(url, tmp_path, strip_domain=True)
+        assert output_path == tmp_path / "index.md"
+
+    def test_strip_domain_combined_with_strip_path_prefix(self, tmp_path: Path) -> None:
+        """strip_domain and strip_path_prefix must work together."""
+        url = "https://code.claude.com/docs/en/overview"
+        output_path = url_to_output_path(url, tmp_path, strip_path_prefix="/docs/en", strip_domain=True)
+        assert output_path == tmp_path / "overview.md"
+
+    def test_strip_domain_preserves_path_hierarchy(self, tmp_path: Path) -> None:
+        """With strip_domain, path segments must still form subdirectories."""
+        url = "https://example.com/guides/setup/install"
+        output_path = url_to_output_path(url, tmp_path, strip_domain=True)
+        assert output_path == tmp_path / "guides" / "setup" / "install.md"
+
 
 # ---------------------------------------------------------------------------
 # TestWritePage
