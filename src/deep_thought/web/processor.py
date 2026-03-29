@@ -17,7 +17,7 @@ from pathlib import Path  # noqa: TC003
 from playwright.sync_api import Error as PlaywrightError
 
 from deep_thought.web.config import WebConfig  # noqa: TC001
-from deep_thought.web.converter import apply_boilerplate_patterns, convert_html_to_markdown, count_words, extract_title
+from deep_thought.web.converter import apply_boilerplate_patterns, convert_html_to_markdown, count_words, extract_title, unwrap_html_tags
 from deep_thought.web.crawler import CrawlerConfig, PageResult, WebCrawler
 from deep_thought.web.db import queries
 from deep_thought.web.filters import extract_internal_links, is_url_allowed
@@ -122,7 +122,10 @@ def _process_page(
     now_iso = _now_iso()
 
     html_title = extract_title(page_result.html) or page_result.title
-    markdown_text = convert_html_to_markdown(page_result.html, base_url=page_result.url)
+    page_html = page_result.html
+    if config.crawl.unwrap_tags:
+        page_html = unwrap_html_tags(page_html, config.crawl.unwrap_tags)
+    markdown_text = convert_html_to_markdown(page_html, base_url=page_result.url)
     if config.crawl.strip_boilerplate:
         markdown_text = apply_boilerplate_patterns(markdown_text, config.crawl.strip_boilerplate)
     word_count = count_words(markdown_text)

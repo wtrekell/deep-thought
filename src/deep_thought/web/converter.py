@@ -135,6 +135,44 @@ def apply_boilerplate_patterns(markdown_text: str, patterns: list[str]) -> str:
     return cleaned_text.strip()
 
 
+def unwrap_html_tags(html: str, tag_patterns: list[str]) -> str:
+    """Remove HTML tag wrappers while preserving their text content.
+
+    Each pattern is a CSS-like selector in the form ``tag.class`` (e.g.
+    ``div.word``).  Matching opening and closing tags are stripped, but the
+    text content they contain is kept in place.
+
+    This is useful for sites that wrap every word in animation ``<div>``
+    elements, which html2text would otherwise treat as block elements and
+    render as one word per line.
+
+    Args:
+        html: Raw HTML content.
+        tag_patterns: List of ``tag.class`` patterns to unwrap.
+
+    Returns:
+        HTML with matching wrapper tags removed and content preserved.
+    """
+    if not tag_patterns:
+        return html
+
+    cleaned_html = html
+    for pattern in tag_patterns:
+        parts = pattern.split(".", 1)
+        tag_name = parts[0]
+        class_name = parts[1] if len(parts) > 1 else None
+
+        if class_name:
+            # Match <tag ... class="word" ...>content</tag>
+            opening_pattern = rf'<{tag_name}[^>]*\bclass="[^"]*\b{re.escape(class_name)}\b[^"]*"[^>]*>(.*?)</{tag_name}>'
+        else:
+            opening_pattern = rf"<{tag_name}[^>]*>(.*?)</{tag_name}>"
+
+        cleaned_html = re.sub(opening_pattern, r"\1", cleaned_html, flags=re.DOTALL)
+
+    return cleaned_html
+
+
 def count_words(markdown_text: str) -> int:
     """Return an approximate word count for a markdown string.
 
