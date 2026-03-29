@@ -1,22 +1,22 @@
-# Marker (PDF)
-force_ocr: false
-torch_device: "mps" # 'mps', 'cuda', or 'cpu'
+# Marker (PDF conversion engine)
+force_ocr: false # Force OCR even if text is extractable
+torch_device: "mps" # Hardware device: 'mps' (Apple Silicon), 'cuda' (NVIDIA), 'cpu'
 
-# Email
-prefer_html: false
-full_headers: false
-include_attachments: true
+# Email (.eml/.msg) extraction
+prefer_html: false # Prefer HTML parts over plain text when both exist
+full_headers: false # Include all MIME headers in output
+include_attachments: true # List attachments in email conversion output
 
 # Output
-output_dir: "output/"
-include_page_numbers: false
-extract_images: true
+output_dir: "output/" # Directory for converted markdown files
+include_page_numbers: false # Retain page number markers in PDF output
+extract_images: true # Extract and save images to subdirectories
 
 # Limits
-max_file_size_mb: 200
+max_file_size_mb: 200 # Skip files larger than this (must be > 0)
 
 # File filter
-allowed_extensions:
+allowed_extensions: # Extensions to process (at least one required)
   - ".pdf"
   - ".docx"
   - ".pptx"
@@ -25,6 +25,6 @@ allowed_extensions:
   - ".htm"
   - ".eml"
   - ".msg"
-exclude_patterns:
+exclude_patterns: # Glob patterns for files to skip
   - "~$*"
   - ".*"

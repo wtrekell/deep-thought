@@ -1,14 +1,14 @@
 # API
-api_key_env: "PERPLEXITY_API_KEY"
-retry_max_attempts: 3 # Retry failed API calls with exponential backoff
-retry_base_delay_seconds: 1 # Initial delay doubles on each retry
+api_key_env: "PERPLEXITY_API_KEY" # Env var holding the Perplexity API key
+retry_max_attempts: 3 # Retries on failed API calls (must be > 0)
+retry_base_delay_seconds: 1 # Initial retry delay in seconds; doubles on each retry
 
 # Models
 search_model: "sonar" # Model used by the search command
 research_model: "sonar-deep-research" # Model used by the research command
 
 # Defaults
-default_recency: null # null, "hour", "day", "week", "month", "year" (optional)
+default_recency: null # Recency filter: 'hour', 'day', 'week', 'month', 'year', or null (disabled)
 
 # Output
-output_dir: "data/research/export/"
+output_dir: "data/research/export/" # Directory for research output markdown files

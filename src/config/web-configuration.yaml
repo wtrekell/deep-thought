@@ -1,39 +1,38 @@
 # Web Tool Configuration
-# Mode: 'blog', 'documentation', or 'direct'
-mode: "blog"
-max_depth: 3
-max_pages: 100
+mode: "blog" # Crawl mode: 'blog', 'documentation', or 'direct'
+max_depth: 3 # Maximum link recursion depth (0+)
+max_pages: 100 # Maximum pages to crawl (0 = unlimited)
 
 # Rendering
-js_wait: 1.0
-browser_channel: null
+js_wait: 1.0 # Seconds to wait after page render for JS content (0+)
+browser_channel: null # Playwright channel: 'chrome', 'msedge', etc. (null = default)
 
 # Browser
-headless: true
-stealth: false
+headless: true # Run browser without visible window
+stealth: false # Enable stealth mode to avoid bot detection
 
-# URL filtering
-include_patterns: []
-exclude_patterns:
+# URL filtering (regex patterns)
+include_patterns: [] # URLs must match at least one to be crawled (empty = all)
+exclude_patterns: # URLs matching any of these are skipped
   - '.*\.pdf$'
   - ".*login.*"
 
 # Retry
-retry_attempts: 2
-retry_delay: 5.0
+retry_attempts: 2 # Retry attempts on network failures (0+)
+retry_delay: 5.0 # Seconds between retries (0+)
 
 # Output
-output_dir: "output/web/"
-extract_images: false
-generate_llms_files: true
-llms_lookback_days: 30 # days of history to include in llms.txt / llms-full.txt (0 = current run only)
-strip_path_prefix: null # strip this prefix from URL paths when computing output file paths
-strip_domain: false # omit the domain directory from output file paths
+output_dir: "output/web/" # Directory for crawled pages and metadata
+extract_images: false # Download and save images from crawled pages
+generate_llms_files: true # Generate llms.txt and llms-full.txt indexes
+llms_lookback_days: 30 # Days of history in llms files (0 = current run only)
+strip_path_prefix: null # Strip this prefix from URL paths for output file paths
+strip_domain: false # Omit domain directory from output file paths
 
 # Content stripping
-strip_boilerplate: [] # regex patterns to remove from converted markdown (e.g., nav menus, footers)
+strip_boilerplate: [] # Regex patterns to remove from markdown (e.g., nav menus, footers)
 
 # Content quality
-index_depth: 1 # levels of index/listing pages before article pages
-min_article_words: 200 # pages below this word count are skipped as index pages
-changelog_url: null # documentation only: URL of changelog for incremental re-crawls
+index_depth: 1 # Levels of index/listing pages before articles (must be >= 1)
+min_article_words: 200 # Pages below this word count are skipped (must be > 0)
+changelog_url: null # Documentation mode only: changelog URL for incremental re-crawls

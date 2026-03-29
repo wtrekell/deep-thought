@@ -1,37 +1,38 @@
 # Gmail Tool Configuration
 # See files/tools/gmail/260323-requirements.md for full documentation.
 
-# Auth
-credentials_path: "src/config/gmail/credentials.json"
-token_path: "data/gmail/token.json"
+# Auth (OAuth 2.0)
+credentials_path: "src/config/gmail/credentials.json" # Path to OAuth credentials JSON
+token_path: "data/gmail/token.json" # Path to store/load OAuth token
 scopes:
-  - "https://mail.google.com/" # Use 'gmail.modify' if permanent delete is not needed
+  - "https://mail.google.com/" # Full access; use 'gmail.modify' if permanent delete not needed
 
-# Gemini AI
-gemini_api_key_env: "GEMINI_API_KEY"
-gemini_model: "gemini-2.5-flash"
-gemini_rate_limit_rpm: 15
+# Gemini AI (for AI-powered extraction)
+gemini_api_key_env: "GEMINI_API_KEY" # Env var holding Gemini API key
+gemini_model: "gemini-2.5-flash" # Gemini model identifier
+gemini_rate_limit_rpm: 15 # Gemini API rate limit in requests per minute
 
 # Gmail API
-gmail_rate_limit_rpm: 250 # Gmail API default quota; lower to be conservative
-retry_max_attempts: 3 # Retry failed Gmail API calls with exponential backoff
-retry_base_delay_seconds: 1 # Initial delay doubles on each retry
+gmail_rate_limit_rpm: 250 # Gmail API rate limit (Google max: 250)
+retry_max_attempts: 3 # Retries on failed API calls (must be > 0)
+retry_base_delay_seconds: 1 # Initial retry delay in seconds; doubles on each retry
 
 # Collection
-max_emails_per_run: 100
-clean_newsletters: true # Strip tracking pixels, social buttons (50-70% reduction)
-decision_cache_ttl: 3600 # Seconds to cache AI extraction decisions
+max_emails_per_run: 100 # Maximum emails to process per run (must be > 0)
+clean_newsletters: true # Strip tracking pixels, social buttons from HTML emails
+decision_cache_ttl: 3600 # Seconds to cache AI extraction decisions (0 = no cache)
 
 # Output
-output_dir: "data/gmail/export/"
-generate_llms_files: false # Set true to generate .llms.txt / .llms-full.txt files
-flat_output: false # true = all files in one directory
+output_dir: "data/gmail/export/" # Directory for exported markdown files
+generate_llms_files: false # Generate .llms.txt / .llms-full.txt aggregate files
+flat_output: false # Flat directory structure instead of nested by rule
 
+# Collection rules
 rules:
-  - name: "newsletters"
-    query: "label:newsletter"
+  - name: "newsletters" # Rule name; used as output subdirectory (must be unique)
+    query: "label:newsletter" # Gmail search query syntax
     ai_instructions: "Extract the main content and key takeaways. Ignore promotional sections."
-    actions:
+    actions: # Post-collection actions: 'archive', 'label:<name>', 'forward:<email>', 'delete'
       - archive
       - label:Processed
     append_mode: true # Append to existing file rather than create new
@@ -46,7 +47,7 @@ rules:
 
   - name: "readwise"
     query: "label:newsletter -label:Forwarded newer_than:7d"
-    ai_instructions: null # No AI extraction — forward only
+    ai_instructions: null # null = no AI extraction (forward only)
     actions:
       - forward:yourname@feed.readwise.io
       - label:Forwarded

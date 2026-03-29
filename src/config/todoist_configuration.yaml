@@ -2,45 +2,47 @@
 
 # Todoist API
 todoist:
-  api_token_env: "TODOIST_API_TOKEN"
+  api_token_env: "TODOIST_API_TOKEN" # Env var holding your Todoist API token
 
-# Projects to sync (opt-in list)
+# Projects to sync (opt-in list; empty = all projects)
 projects:
   - name: "Inbox"
   - name: "Quiet Evolution"
 
 # Meta class filter rules for pull and push
 filters:
+  # Rules applied when pulling tasks from Todoist to local DB
   pull:
     labels:
-      include: []
-      exclude: []
+      include: [] # Task must have at least one of these labels (empty = no filter)
+      exclude: [] # Task must not have any of these labels
     projects:
-      include: []
+      include: [] # Task must belong to one of these projects (empty = no filter)
     sections:
-      include: []
-      exclude: []
+      include: [] # Task's section_id must be in this list (empty = no filter)
+      exclude: [] # Task's section_id must not be in this list
     assignee:
-      include: []
+      include: [] # Task's assignee_id must be in this list (empty = no filter)
     due:
-      has_due_date: null
+      has_due_date: null # null = all, true = only with due date, false = only without
+  # Rules applied when pushing local changes back to Todoist
   push:
     labels:
-      include: []
-      exclude: []
+      include: [] # Task must have at least one of these labels (empty = no filter)
+      exclude: [] # Task must not have any of these labels
     assignee:
-      include: []
-    conflict_resolution: "prompt"
-    require_confirmation: true
+      include: [] # Task's assignee_id must be in this list (empty = no filter)
+    conflict_resolution: "prompt" # 'prompt' (ask user), 'remote_wins', or 'local_wins'
+    require_confirmation: true # Prompt for confirmation before pushing changes
 
 # Comment sync settings
 comments:
-  sync: true
-  include_attachments: false
+  sync: true # Fetch and store task comments
+  include_attachments: false # Include comment attachments
 
 # Claude involvement markers
 claude:
-  label: "claude-code"
+  label: "claude-code" # Label name for Claude-involved tasks (empty string to disable)
   role:
-    repo: "deep-thought"
-    branch: "main"
+    repo: "deep-thought" # Repository name for Claude task context
+    branch: "main" # Branch name for Claude task context

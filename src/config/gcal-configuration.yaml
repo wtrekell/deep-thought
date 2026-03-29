@@ -1,26 +1,26 @@
 # GCal Tool Configuration
 # See files/tools/gcal/260323-requirements.md for full documentation.
 
-# Auth
-credentials_path: "src/config/gmail/credentials.json" # Shared with Gmail
-token_path: "data/gcal/token.json"
+# Auth (OAuth 2.0)
+credentials_path: "src/config/gmail/credentials.json" # OAuth credentials JSON (shared with Gmail)
+token_path: "data/gcal/token.json" # Path to store/load OAuth token
 scopes:
-  - "https://www.googleapis.com/auth/calendar"
+  - "https://www.googleapis.com/auth/calendar" # Full calendar access scope
 
 # Calendar API
-api_rate_limit_rpm: 250
-retry_max_attempts: 3
-retry_base_delay_seconds: 1
+api_rate_limit_rpm: 250 # Requests per minute (Google default: 250)
+retry_max_attempts: 3 # Retries on failed API calls (must be > 0)
+retry_base_delay_seconds: 1 # Initial retry delay in seconds; doubles on each retry
 
-# Pull
+# Pull configuration
 calendars:
-  - "primary"
-lookback_days: 7
-lookahead_days: 30
-include_cancelled: false
-single_events: true
+  - "primary" # Calendar IDs to sync; 'primary' = user's default calendar
+lookback_days: 7 # Days to look back for events (must be >= 0)
+lookahead_days: 30 # Days to look ahead for events (must be >= 0)
+include_cancelled: false # Include cancelled events
+single_events: true # Expand recurring events into individual occurrences
 
 # Output
-output_dir: "data/gcal/export/"
-generate_llms_files: false
-flat_output: false
+output_dir: "data/gcal/export/" # Directory for exported markdown files
+generate_llms_files: false # Generate aggregated .llms.txt / .llms-full.txt files
+flat_output: false # Flat directory structure instead of nested by calendar

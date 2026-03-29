@@ -1,35 +1,35 @@
 # Reddit Tool Configuration
 # API credentials — set these in your .env file, not here
-client_id_env: "REDDIT_CLIENT_ID"
-client_secret_env: "REDDIT_CLIENT_SECRET"
-user_agent_env: "REDDIT_USER_AGENT"
+client_id_env: "REDDIT_CLIENT_ID" # Env var holding Reddit app client ID
+client_secret_env: "REDDIT_CLIENT_SECRET" # Env var holding Reddit app client secret
+user_agent_env: "REDDIT_USER_AGENT" # Env var holding user agent string
 # Note: PRAW manages Reddit API rate limiting internally (60 requests/minute)
 
 # Collection
-max_posts_per_run: 500 # Global cap across all rules per invocation
+max_posts_per_run: 500 # Global cap across all rules per invocation (must be > 0)
 
 # Output
-output_dir: "data/reddit/export/"
-generate_llms_files: false # Set true to generate .llms.txt / .llms-full.txt per rule
+output_dir: "data/reddit/export/" # Directory for exported markdown files
+generate_llms_files: false # Generate .llms.txt / .llms-full.txt per rule
 
 rules:
-  - name: "python_top_week"
-    subreddit: "python"
+  - name: "python_top_week" # Rule name; used as output subdirectory (must be unique)
+    subreddit: "python" # Subreddit name without r/ prefix
     sort: "top" # 'new', 'hot', 'top', 'rising'
-    time_filter: "week" # For 'top': 'hour', 'day', 'week', 'month', 'year', 'all'
-    limit: 25
-    min_score: 50
-    min_comments: 5
-    max_age_days: 7
-    include_keywords: # Post must match at least one (glob wildcards supported)
+    time_filter: "week" # For 'top' sort only: 'hour', 'day', 'week', 'month', 'year', 'all'
+    limit: 25 # Submissions to fetch per rule (must be > 0)
+    min_score: 50 # Minimum upvote score threshold
+    min_comments: 5 # Minimum comment count threshold
+    max_age_days: 7 # Maximum post age in days (must be > 0)
+    include_keywords: # Post must match at least one (glob wildcards: *, ?)
       - "python 3*"
       - "asyncio"
-    exclude_keywords:
+    exclude_keywords: # Post must not match any of these
       - "hiring"
-    include_flair: [] # Only collect posts with these flair values (empty = all)
-    exclude_flair:
+    include_flair: [] # Only collect these flair values (empty = all)
+    exclude_flair: # Skip posts with these flair values
       - "Meme"
     search_comments: false # Also match keywords in comment bodies
-    max_comment_depth: 3
-    max_comments: 200 # Max comments to collect per post (default: 200)
-    include_images: true # Include image URLs in output
+    max_comment_depth: 3 # Maximum comment nesting depth (must be >= 0)
+    max_comments: 200 # Max comments to collect per post (must be > 0)
+    include_images: true # Include image URLs in markdown output

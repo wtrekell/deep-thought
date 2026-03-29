@@ -42,6 +42,7 @@ class CrawlConfig:
     strip_domain: bool
     llms_lookback_days: int
     strip_boilerplate: list[str]
+    unwrap_tags: list[str]
 
 
 @dataclass
@@ -205,6 +206,9 @@ def _parse_crawl_config(raw: dict[str, Any]) -> CrawlConfig:
     raw_boilerplate = raw.get("strip_boilerplate")
     strip_boilerplate: list[str] = list(raw_boilerplate) if isinstance(raw_boilerplate, list) else []
 
+    raw_unwrap = raw.get("unwrap_tags")
+    unwrap_tags: list[str] = list(raw_unwrap) if isinstance(raw_unwrap, list) else []
+
     return CrawlConfig(
         mode=mode,
         input_url=input_url,
@@ -228,6 +232,7 @@ def _parse_crawl_config(raw: dict[str, Any]) -> CrawlConfig:
         strip_domain=strip_domain,
         llms_lookback_days=llms_lookback_days,
         strip_boilerplate=strip_boilerplate,
+        unwrap_tags=unwrap_tags,
     )
 
 
