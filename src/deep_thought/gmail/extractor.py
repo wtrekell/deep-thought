@@ -85,6 +85,13 @@ class GeminiExtractor:
             response: Any = self._model.generate_content(prompt)
             extracted_text: str = response.text
             return extracted_text
-        except Exception as extraction_error:
-            logger.warning("Gemini extraction failed: %s", extraction_error)
+        except (ValueError, AttributeError, RuntimeError, OSError) as expected_error:
+            # Expected generation errors: invalid input, empty response, API errors,
+            # rate limit exceeded, network failure.
+            logger.warning("Gemini extraction failed: %s", expected_error)
             return ""
+        except Exception:
+            # Unexpected exceptions (e.g., auth failure, internal SDK bug) should
+            # surface to the caller rather than being silently swallowed.
+            logger.exception("Unexpected error during Gemini extraction — re-raising.")
+            raise

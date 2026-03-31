@@ -1,5 +1,11 @@
 # GCal Tool — Changelog
 
+## 0.1.1 — 2026-03-30
+
+### Changed
+
+- Standardized export filename date prefix from `YYYY-MM-DD_` to `YYMMDD-` (e.g., `260324-team-standup.md`).
+
 ## 0.1.0 — 2026-03-23
 
 ### Added

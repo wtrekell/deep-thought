@@ -193,9 +193,14 @@ def load_config(config_path: Path | None = None) -> GmailConfig:
     raw_scopes = raw_dict.get("scopes")
     scopes: list[str] = list(raw_scopes) if isinstance(raw_scopes, list) else ["https://mail.google.com/"]
 
+    def _resolve_path(raw_value: object, default: str) -> str:
+        """Return an absolute path string, resolving relative paths against CWD."""
+        path = Path(str(raw_value)) if raw_value else Path(default)
+        return str(path if path.is_absolute() else Path.cwd() / path)
+
     return GmailConfig(
-        credentials_path=str(raw_dict.get("credentials_path", "src/config/gmail/credentials.json")),
-        token_path=str(raw_dict.get("token_path", "data/gmail/token.json")),
+        credentials_path=_resolve_path(raw_dict.get("credentials_path"), "src/config/gmail/credentials.json"),
+        token_path=_resolve_path(raw_dict.get("token_path"), "data/gmail/token.json"),
         scopes=scopes,
         gemini_api_key_env=str(raw_dict.get("gemini_api_key_env", "GEMINI_API_KEY")),
         gemini_model=str(raw_dict.get("gemini_model", "gemini-2.5-flash")),

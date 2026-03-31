@@ -26,6 +26,7 @@ from deep_thought.todoist.db.queries import (
     get_task_by_id,
     get_tasks_by_project,
     get_tasks_by_section,
+    mark_task_completed,
     mark_task_synced,
     set_sync_value,
     set_task_labels,
@@ -208,6 +209,20 @@ class TestProjectQueries:
         assert row is not None
         assert row["synced_at"] is not None
 
+    def test_upsert_project_preserves_created_at_on_re_upsert(self, in_memory_db: Any) -> None:
+        """Re-upserting a project must NOT overwrite the original created_at value."""
+        original_created_at = "2025-01-01T00:00:00"
+        upsert_project(in_memory_db, {**_project_data(), "created_at": original_created_at})
+
+        # Simulate a subsequent pull with a different (newer) created_at coming from the API
+        later_created_at = "2026-06-01T00:00:00"
+        upsert_project(in_memory_db, {**_project_data(), "name": "Updated Work", "created_at": later_created_at})
+
+        row = get_project_by_id(in_memory_db, "proj-1")
+        assert row is not None
+        assert row["name"] == "Updated Work"  # mutable fields are updated
+        assert row["created_at"] == original_created_at  # created_at is never overwritten
+
 
 # ---------------------------------------------------------------------------
 # Sections CRUD
@@ -271,6 +286,20 @@ class TestTaskQueries:
         delete_task(in_memory_db, "task-1")
         assert get_task_by_id(in_memory_db, "task-1") is None
 
+    def test_upsert_task_preserves_created_at_on_re_upsert(self, in_memory_db: Any) -> None:
+        """Re-upserting a task must NOT overwrite the original created_at value."""
+        original_created_at = "2025-01-01T00:00:00"
+        upsert_project(in_memory_db, _project_data())
+        upsert_task(in_memory_db, {**_task_data(), "created_at": original_created_at})
+
+        later_created_at = "2026-06-01T00:00:00"
+        upsert_task(in_memory_db, {**_task_data(), "content": "Updated content", "created_at": later_created_at})
+
+        task = get_task_by_id(in_memory_db, "task-1")
+        assert task is not None
+        assert task["content"] == "Updated content"  # mutable fields are updated
+        assert task["created_at"] == original_created_at  # created_at is never overwritten
+
 
 # ---------------------------------------------------------------------------
 # get_modified_tasks and mark_task_synced
@@ -327,6 +356,46 @@ class TestModifiedTasks:
         task = get_task_by_id(in_memory_db, "task-1")
         assert task is not None
         assert task["synced_at"] >= task["updated_at"]
+
+
+# ---------------------------------------------------------------------------
+# mark_task_completed
+# ---------------------------------------------------------------------------
+
+
+class TestMarkTaskCompleted:
+    def test_sets_is_completed_flag(self, in_memory_db: Any) -> None:
+        """After mark_task_completed, is_completed must be truthy."""
+        insert_project(in_memory_db)
+        insert_task(in_memory_db)
+        mark_task_completed(in_memory_db, "task-1")
+        in_memory_db.commit()
+        task = get_task_by_id(in_memory_db, "task-1")
+        assert task is not None
+        assert bool(task["is_completed"])
+
+    def test_sets_completed_at_to_a_timestamp(self, in_memory_db: Any) -> None:
+        """After mark_task_completed, completed_at must be a non-null timestamp string."""
+        insert_project(in_memory_db)
+        insert_task(in_memory_db)
+        mark_task_completed(in_memory_db, "task-1")
+        in_memory_db.commit()
+        task = get_task_by_id(in_memory_db, "task-1")
+        assert task is not None
+        assert task["completed_at"] is not None
+
+    def test_task_does_not_appear_modified_after_completion(self, in_memory_db: Any) -> None:
+        """After mark_task_completed, updated_at == synced_at so task is not in modified list."""
+        insert_project(in_memory_db)
+        insert_task(
+            in_memory_db,
+            updated_at="2026-03-01T12:00:00",
+            synced_at="2026-01-01T00:00:00",
+        )
+        mark_task_completed(in_memory_db, "task-1")
+        in_memory_db.commit()
+        modified = get_modified_tasks(in_memory_db)
+        assert modified == []
 
 
 # ---------------------------------------------------------------------------

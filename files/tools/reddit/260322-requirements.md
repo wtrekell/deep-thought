@@ -79,7 +79,7 @@ Running `reddit` with no arguments shows help. Collect is the default operation 
 
 ```
 files/tools/reddit/
-├── requirements.md              # This document
+├── 260322-requirements.md       # This document
 ├── api-model.md                 # PRAW SDK model reference (Submission, Comment, Subreddit)
 └── CHANGELOG.md                 # Release history
 
@@ -127,7 +127,7 @@ max_posts_per_run: 500 # Global cap across all rules per invocation
 
 # Output
 output_dir: "data/reddit/export/"
-generate_llms_files: false          # Set true to generate .llms.txt / .llms-full.txt per rule
+generate_llms_files: false # Set true to generate .llms.txt / .llms-full.txt per rule
 
 rules:
   - name: "python_top_week"
@@ -176,10 +176,10 @@ rules:
 
 ```
 data/reddit/export/{rule_name}/
-├── {date}_{post_id}_{title_slug}.md
+├── {YYMMDD}-{post_id}_{title_slug}.md
 └── llm/
-    ├── {date}_{post_id}_{title_slug}.llms.txt
-    └── {date}_{post_id}_{title_slug}.llms-full.txt
+    ├── {YYMMDD}-{post_id}_{title_slug}.llms.txt
+    └── {YYMMDD}-{post_id}_{title_slug}.llms-full.txt
 ```
 
 ### Frontmatter Schema
@@ -258,8 +258,8 @@ Index file per rule in the export root, following the llmstxt.org convention:
 
 ## Posts
 
-- [{title_slug}.md]({rule_name}/{date}_{post_id}_{title_slug}.md): r/{subreddit}, score {score}, {word_count} words
-- [{title_slug}.md]({rule_name}/{date}_{post_id}_{title_slug}.md): r/{subreddit}, score {score}, {word_count} words
+- [{title_slug}.md]({rule_name}/{YYMMDD}-{post_id}_{title_slug}.md): r/{subreddit}, score {score}, {word_count} words
+- [{title_slug}.md]({rule_name}/{YYMMDD}-{post_id}_{title_slug}.md): r/{subreddit}, score {score}, {word_count} words
 ```
 
 ## Error Handling
@@ -282,4 +282,3 @@ Index file per rule in the export root, following the llmstxt.org convention:
 - Write docstrings on every test method.
 - Test directory: `tests/reddit/` with `conftest.py` for shared fixtures
 - Fixture data files stored in `tests/reddit/fixtures/`
-

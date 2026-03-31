@@ -12,7 +12,13 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Any
 
-from deep_thought.todoist.db.queries import get_modified_tasks, mark_task_synced, set_sync_value
+from deep_thought.progress import track_items
+from deep_thought.todoist.db.queries import (
+    get_modified_tasks,
+    get_project_ids_by_name,
+    mark_task_synced,
+    set_sync_value,
+)
 from deep_thought.todoist.filters import apply_push_filters
 from deep_thought.todoist.models import TaskLocal
 
@@ -69,7 +75,7 @@ def _task_dict_to_local_model(task_dict: dict[str, Any]) -> TaskLocal:
         priority=task_dict.get("priority", 1),
         due_date=task_dict.get("due_date"),
         due_string=task_dict.get("due_string"),
-        due_is_recurring=task_dict.get("due_is_recurring"),
+        due_is_recurring=task_dict.get("due_is_recurring", False),
         due_lang=task_dict.get("due_lang"),
         due_timezone=task_dict.get("due_timezone"),
         deadline_date=task_dict.get("deadline_date"),
@@ -218,8 +224,7 @@ def push(
     # Fetch the project name→ID map from what we already have in the DB.
     # ------------------------------------------------------------------
     if project_filter is not None:
-        project_rows = conn.execute("SELECT id FROM projects WHERE name = ?;", (project_filter,)).fetchall()
-        allowed_project_ids = {row["id"] for row in project_rows}
+        allowed_project_ids = set(get_project_ids_by_name(conn, project_filter))
         filtered_tasks = [task for task in filtered_tasks if task.project_id in allowed_project_ids]
 
         if verbose:
@@ -228,7 +233,12 @@ def push(
     # ------------------------------------------------------------------
     # Push each task
     # ------------------------------------------------------------------
-    for task in filtered_tasks:
+    tasks_iterable = (
+        filtered_tasks
+        if config.push_filters.require_confirmation
+        else track_items(filtered_tasks, description="Pushing tasks")
+    )
+    for task in tasks_iterable:
         if dry_run:
             if verbose or config.push_filters.require_confirmation:
                 print(f"[dry-run] Would push task {task.id}: {task.content}")

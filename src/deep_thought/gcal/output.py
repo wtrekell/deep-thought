@@ -7,6 +7,7 @@ Supports both calendar-organized and flat output directory modes.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -15,6 +16,8 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from deep_thought.gcal.models import EventLocal
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -102,8 +105,12 @@ def _build_event_frontmatter(event: EventLocal) -> str:
                     email = attendee.get("email", "") if isinstance(attendee, dict) else str(attendee)
                     if email:
                         lines.append(f'  - "{email}"')
-        except (json.JSONDecodeError, TypeError):
-            pass
+        except (json.JSONDecodeError, TypeError) as attendees_error:
+            logger.warning(
+                "Event %s: failed to deserialize attendees JSON — field omitted from output. Error: %s",
+                event.event_id,
+                attendees_error,
+            )
 
     if event.recurrence:
         try:
@@ -112,8 +119,12 @@ def _build_event_frontmatter(event: EventLocal) -> str:
                 lines.append("recurrence:")
                 for rule in recurrence_list:
                     lines.append(f'  - "{rule}"')
-        except (json.JSONDecodeError, TypeError):
-            pass
+        except (json.JSONDecodeError, TypeError) as recurrence_error:
+            logger.warning(
+                "Event %s: failed to deserialize recurrence JSON — field omitted from output. Error: %s",
+                event.event_id,
+                recurrence_error,
+            )
 
     if event.html_link:
         escaped_html_link = _escape_yaml_value(event.html_link)
@@ -153,7 +164,7 @@ def generate_event_markdown(event: EventLocal) -> str:
 def _build_filename(event: EventLocal) -> str:
     """Build a filename for an event's markdown file.
 
-    Format: {date}_{summary_slug}.md
+    Format: {YYMMDD}-{summary_slug}.md
 
     Args:
         event: An EventLocal dataclass instance.
@@ -161,10 +172,11 @@ def _build_filename(event: EventLocal) -> str:
     Returns:
         The filename string.
     """
-    # Extract date portion from start_time (handles both date and datetime formats)
-    date_str = event.start_time[:10]
+    # Extract date portion from start_time and convert YYYY-MM-DD to YYMMDD
+    raw_date = event.start_time[:10]  # "2026-03-24"
+    date_prefix = raw_date[2:4] + raw_date[5:7] + raw_date[8:10]  # "260324"
     summary_slug = _slugify(event.summary)
-    return f"{date_str}_{summary_slug}.md"
+    return f"{date_prefix}-{summary_slug}.md"
 
 
 def _get_calendar_dir_name(calendar_summary: str) -> str:

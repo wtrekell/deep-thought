@@ -14,7 +14,32 @@ from deep_thought.gcal.db.queries import get_calendar, upsert_event
 from deep_thought.gcal.models import CreateResult, EventLocal
 from deep_thought.gcal.output import generate_event_markdown, write_event_file
 
+# ---------------------------------------------------------------------------
+# Validation helpers
+# ---------------------------------------------------------------------------
+
+_DATETIME_COMPARISON_STRIP_TZ_RE = re.compile(r"[+-]\d{2}:\d{2}$|Z$")
+
 logger = logging.getLogger(__name__)
+
+
+def _validate_start_before_end(start_value: str, end_value: str) -> None:
+    """Raise ValueError if start_value is not strictly before end_value.
+
+    Compares the raw string values lexicographically, which is correct for
+    both ISO 8601 date-only (YYYY-MM-DD) and datetime strings that share the
+    same time zone representation.
+
+    Args:
+        start_value: The event start as an ISO 8601 string.
+        end_value: The event end as an ISO 8601 string.
+
+    Raises:
+        ValueError: If start_value >= end_value.
+    """
+    if start_value >= end_value:
+        raise ValueError(f"Event start must be before end. Got start='{start_value}', end='{end_value}'.")
+
 
 # ---------------------------------------------------------------------------
 # Frontmatter parsing
@@ -190,6 +215,13 @@ def run_create(
         or empty strings when dry_run is True.
     """
     frontmatter, body_text = parse_event_frontmatter(file_path)
+
+    # Validate start < end before calling the API so the user gets a clear
+    # local error rather than a cryptic API rejection.
+    start_value: str = str(frontmatter["start"])
+    end_value: str = str(frontmatter["end"])
+    _validate_start_before_end(start_value, end_value)
+
     event_api_body = _build_api_event_body(frontmatter, body_text)
 
     calendar_id: str = str(frontmatter.get("calendar_id", "primary"))
@@ -202,10 +234,9 @@ def run_create(
     api_response: dict[str, Any] = client.insert_event(calendar_id, event_api_body)
 
     event_local = EventLocal.from_api_response(api_response, calendar_id)
-    upsert_event(db_conn, event_local.to_dict())
-    db_conn.commit()
 
     # Resolve the calendar display name for the output directory structure
+    # before the DB write so the commit only happens after all I/O succeeds.
     calendar_row = get_calendar(db_conn, calendar_id)
     calendar_display_name: str = calendar_row["summary"] if calendar_row else calendar_id
 
@@ -220,6 +251,10 @@ def run_create(
         event=event_local,
         flat_output=flat_output,
     )
+
+    # Write to the DB only after the file has been successfully created.
+    # The caller (cli.py) is responsible for calling db_conn.commit().
+    upsert_event(db_conn, event_local.to_dict())
 
     logger.info("Event created: %s (%s)", event_local.event_id, event_local.html_link)
 

@@ -29,6 +29,7 @@ generate_llms_files: true
 llms_lookback_days: 30 # days of history to include in llms.txt / llms-full.txt (0 = current run only)
 
 # Content stripping
+unwrap_tags: [] # tag.class patterns to strip wrapper tags before HTML→markdown (e.g., div.word for animation divs)
 strip_boilerplate: [] # regex patterns to remove from converted markdown (e.g., nav menus, footers)
 
 # Content quality
@@ -37,3 +38,9 @@ min_article_words: 200 # pages below this word count are skipped as index pages
 changelog_url: null # documentation only: URL of changelog for incremental re-crawls
 strip_path_prefix: null # strip this prefix from URL paths when computing output file paths
 strip_domain: false # omit the domain directory from output file paths
+
+# Pagination (for index/listing pages that use JS infinite scroll or "load more" buttons)
+pagination: "none" # "none", "scroll", or "click"
+pagination_selector: null # CSS selector for the "load more" button (required when pagination is "click")
+pagination_wait: 2.0 # seconds to wait after each scroll or click before checking for new content
+max_paginations: 10 # maximum number of scroll/click iterations per index page

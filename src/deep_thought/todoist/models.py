@@ -145,7 +145,7 @@ class TaskLocal:
     priority: int
     due_date: str | None
     due_string: str | None
-    due_is_recurring: bool | None
+    due_is_recurring: bool
     due_lang: str | None
     due_timezone: str | None
     deadline_date: str | None
@@ -171,7 +171,7 @@ class TaskLocal:
         # Unpack Due fields
         due_date: str | None = None
         due_string: str | None = None
-        due_is_recurring: bool | None = None
+        due_is_recurring: bool = False
         due_lang: str | None = None
         due_timezone: str | None = None
         if task.due is not None:

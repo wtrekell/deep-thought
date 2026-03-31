@@ -11,43 +11,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-
-def _get_author_name(submission: Any) -> str:
-    """Extract the author username from a PRAW Submission safely.
-
-    PRAW's author attribute is a Redditor object, or None for deleted accounts.
-
-    Args:
-        submission: A PRAW Submission object.
-
-    Returns:
-        The author's username string, or "[deleted]" if the account is gone.
-    """
-    author = submission.author
-    if author is None:
-        return "[deleted]"
-    return str(author)
-
-
-def _slugify_title(title: str) -> str:
-    """Convert a post title to a filesystem-safe slug.
-
-    Lowercases, replaces non-alphanumeric characters with hyphens, collapses
-    repeated hyphens, and strips leading/trailing hyphens.
-
-    Args:
-        title: The raw post title string.
-
-    Returns:
-        A cleaned slug suitable for use in a filename.
-    """
-    import re
-
-    slug = title.lower()
-    slug = re.sub(r"[^a-z0-9]+", "-", slug)
-    slug = slug.strip("-")
-    return slug[:80] if len(slug) > 80 else slug
-
+from deep_thought.reddit.utils import get_author_name, slugify_title  # noqa: F401 — re-exported for callers
 
 # ---------------------------------------------------------------------------
 # CollectedPostLocal
@@ -105,7 +69,7 @@ class CollectedPostLocal:
         post_id: str = str(submission.id)
         subreddit_name: str = str(submission.subreddit.display_name)
         state_key: str = f"{post_id}:{subreddit_name}:{rule_name}"
-        author_name: str = _get_author_name(submission)
+        author_name: str = get_author_name(submission.author)
         flair_text: str | None = submission.link_flair_text
 
         is_video_flag: int = 1 if getattr(submission, "is_video", False) else 0

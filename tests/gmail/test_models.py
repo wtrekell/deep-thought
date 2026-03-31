@@ -138,7 +138,8 @@ class TestProcessedEmailLocal:
         )
         assert email.message_id == "msg_001"
         assert email.subject == "Important Update"
-        assert email.from_address == "Sender <sender@example.com>"
+        # _parse_email_address extracts the bare email address from the From header
+        assert email.from_address == "sender@example.com"
         assert email.rule_name == "newsletters"
         assert email.status == "ok"
         assert '"archive"' in email.actions_taken

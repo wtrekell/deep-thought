@@ -273,10 +273,10 @@ This keeps all MIME parts intact. Do **not** reconstruct the message from extrac
 
 ```
 data/gmail/export/{rule_name}/
-├── {date}_{subject_slug}.md           # Email content with YAML frontmatter
+├── {YYMMDD}-{subject_slug}.md           # Email content with YAML frontmatter
 └── llm/
-    ├── {date}_{subject_slug}.llms.txt
-    └── {date}_{subject_slug}.llms-full.txt
+    ├── {YYMMDD}-{subject_slug}.llms.txt
+    └── {YYMMDD}-{subject_slug}.llms-full.txt
 ```
 
 In append mode, all emails for a rule accumulate in one file.

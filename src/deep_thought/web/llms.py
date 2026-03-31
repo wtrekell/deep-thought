@@ -36,7 +36,7 @@ class PageSummary:
 # ---------------------------------------------------------------------------
 
 
-def _strip_frontmatter(markdown_text: str) -> str:
+def strip_frontmatter(markdown_text: str) -> str:
     """Remove YAML frontmatter from a markdown string.
 
     Frontmatter is defined as content between the first two ``---`` lines
@@ -98,7 +98,8 @@ def write_llms_full(summaries: list[PageSummary], output_root: Path) -> Path:
             "",
             f"url: {summary.url}",
             f"mode: {summary.mode}",
-            f"crawled: {crawled_date}",
+            # "generated:" reflects when this file was produced, not when each page was crawled
+            f"generated: {crawled_date}",
             "",
             summary.content,
             "",
@@ -140,6 +141,8 @@ def write_llms_index(summaries: list[PageSummary], output_root: Path) -> Path:
 
     for summary in summaries:
         page_label = summary.title if summary.title else summary.url
+        # The ".md" suffix in the label is intentional — it matches the spec which
+        # calls for the display label to include the file extension.
         entry = f"- [{page_label}.md]({summary.md_relative_path}): {summary.url}, {summary.word_count} words"
         lines.append(entry)
 

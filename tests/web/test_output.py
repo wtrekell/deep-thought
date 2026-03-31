@@ -273,7 +273,7 @@ class TestWritePage:
             output_root=output_root,
         )
         file_content = result_path.read_text(encoding="utf-8")
-        assert "title: My Title" in file_content
+        assert 'title: "My Title"' in file_content
 
     def test_title_is_omitted_when_none(self, output_root: Path) -> None:
         """When title is None, no 'title:' field must appear in the frontmatter."""

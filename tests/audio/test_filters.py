@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    import sqlite3
 
 from deep_thought.audio.filters import (
     _SUPPORTED_EXTENSIONS,
@@ -204,6 +208,65 @@ class TestCheckFile:
         file_hash = compute_file_hash(sample_wav)
         passed, reason = check_file(sample_wav, file_hash, max_size_mb=10, conn=None)
         assert passed is True
+
+    def test_duplicate_detection_rejects_previously_processed_file(
+        self, sample_wav: Path, in_memory_db: sqlite3.Connection
+    ) -> None:
+        """check_file() must return False when the file hash matches an existing success record in DB."""
+        from deep_thought.audio.db.queries import upsert_processed_file
+
+        file_hash = compute_file_hash(sample_wav)
+
+        # Insert a success record with this hash into the database
+        upsert_processed_file(
+            in_memory_db,
+            {
+                "file_path": str(sample_wav),
+                "file_hash": file_hash,
+                "engine": "mlx",
+                "model": "small",
+                "duration_seconds": 1.0,
+                "speaker_count": 0,
+                "output_path": "/output/sample/",
+                "status": "success",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+        )
+        in_memory_db.commit()
+
+        # Same file should now be detected as a duplicate
+        passed, reason = check_file(sample_wav, file_hash, max_size_mb=10, conn=in_memory_db)
+        assert passed is False
+        assert "Duplicate" in reason
+
+    def test_non_success_record_does_not_block_reprocessing(
+        self, sample_wav: Path, in_memory_db: sqlite3.Connection
+    ) -> None:
+        """A record with status 'error' or 'pending' must not block reprocessing."""
+        from deep_thought.audio.db.queries import upsert_processed_file
+
+        file_hash = compute_file_hash(sample_wav)
+
+        # Insert a failed record — this should NOT count as a duplicate
+        upsert_processed_file(
+            in_memory_db,
+            {
+                "file_path": str(sample_wav),
+                "file_hash": file_hash,
+                "engine": "mlx",
+                "model": "small",
+                "duration_seconds": 0.0,
+                "speaker_count": 0,
+                "output_path": "",
+                "status": "error",
+                "created_at": "2026-01-01T00:00:00+00:00",
+            },
+        )
+        in_memory_db.commit()
+
+        passed, reason = check_file(sample_wav, file_hash, max_size_mb=10, conn=in_memory_db)
+        assert passed is True
+        assert reason == ""
 
 
 # ---------------------------------------------------------------------------

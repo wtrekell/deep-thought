@@ -87,7 +87,7 @@ def url_to_output_path(
 
     output_path = output_root if strip_domain else output_root / domain
     for directory_segment in directory_parts:
-        output_path = output_path / directory_segment
+        output_path = output_path / slugify(directory_segment)
 
     output_path = output_path / f"{filename_slug}.md"
 
@@ -122,12 +122,18 @@ def _build_frontmatter(url: str, mode: str, title: str | None, word_count: int) 
     """
     processed_date = datetime.now(tz=UTC).isoformat()
 
+    # Titles can contain YAML-unsafe characters (colons, quotes, brackets, '#').
+    # Always double-quote the value and escape any internal double quotes.
+    def _yaml_quoted_string(value: str) -> str:
+        escaped = value.replace('"', '\\"')
+        return f'"{escaped}"'
+
     lines: list[str] = ["---"]
     lines.append("tool: web")
     lines.append(f"url: {url}")
     lines.append(f"mode: {mode}")
     if title is not None:
-        lines.append(f"title: {title}")
+        lines.append(f"title: {_yaml_quoted_string(title)}")
     lines.append(f"word_count: {word_count}")
     lines.append(f"processed_date: {processed_date}")
     lines.append("---")

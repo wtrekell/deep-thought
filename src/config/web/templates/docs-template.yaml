@@ -30,6 +30,12 @@ exclude_patterns:
   - ".*login.*"
   - '.*\?.*'
 
+# tag.class patterns to strip wrapper tags from HTML before conversion (e.g., sites that
+# wrap every word in animation divs). Preserves the text content of matched tags.
+unwrap_tags: []
+  # - 'div.word'
+  # - 'span.char'
+
 # Regex patterns to remove from converted markdown (e.g., nav menus, footers, cookie banners).
 strip_boilerplate: []
   # - 'Was this page helpful\?.*?(?=\n\n|\Z)'
@@ -43,3 +49,11 @@ generate_llms_files: true
 llms_lookback_days: 30 # days of history to include in llms.txt / llms-full.txt (0 = current run only)
 strip_path_prefix: null # strip this prefix from URL paths when computing output file paths
 strip_domain: false # omit the domain directory from output file paths
+
+# Pagination: use when a doc index or navigation page uses JS to load its full link list.
+# pagination: "scroll"   # scroll to the bottom to trigger lazy loading
+# pagination: "click"    # click a button to expand content
+pagination: "none"
+pagination_selector: null # CSS selector for the expand/load button (required when pagination is "click")
+pagination_wait: 2.0 # seconds to wait after each scroll or click
+max_paginations: 10 # maximum scroll/click iterations per index page

@@ -251,7 +251,7 @@ class TestTaskLocalFromSdk:
 
         assert local_task.due_date is None
         assert local_task.due_string is None
-        assert local_task.due_is_recurring is None
+        assert local_task.due_is_recurring is False
         assert local_task.due_lang is None
         assert local_task.due_timezone is None
 

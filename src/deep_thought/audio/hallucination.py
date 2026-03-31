@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import string
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 # These phrases frequently appear in Whisper output as artifacts from its
 # YouTube training data, even when the audio contains nothing of the sort.
-KNOWN_HALLUCINATION_PHRASES: frozenset[str] = frozenset(
+_KNOWN_HALLUCINATION_PHRASES: frozenset[str] = frozenset(
     {
         "thank you for watching",
         "thanks for watching",
@@ -105,7 +106,7 @@ def detect_repetition(
     window_segments: list[TranscriptSegment],
     threshold: int = 3,
 ) -> float:
-    """Detect repeated phrases using bigram/trigram matching.
+    """Detect repeated phrases using bigram and trigram matching.
 
     Two checks are performed:
 
@@ -113,9 +114,9 @@ def detect_repetition(
        ``segment`` appears verbatim among ``window_segments``. If the count
        meets or exceeds ``threshold``, the segment is flagged.
 
-    2. **Internal repetition** — splits the segment into bigrams and checks
-       whether any single bigram appears more than ``threshold`` times within
-       the segment itself.
+    2. **Internal repetition** — splits the segment into bigrams and trigrams
+       and checks whether any single n-gram appears more than ``threshold``
+       times within the segment itself.
 
     Args:
         segment: The segment being evaluated.
@@ -134,13 +135,19 @@ def detect_repetition(
     if window_match_count >= threshold:
         return 1.0
 
-    # Check for internal bigram repetition within the segment itself
+    # Check for internal bigram and trigram repetition within the segment itself
     words = normalised_target.split()
     if len(words) >= 2:
-        bigrams = [f"{words[word_index]} {words[word_index + 1]}" for word_index in range(len(words) - 1)]
-        for bigram in bigrams:
-            if bigrams.count(bigram) >= threshold:
-                return 1.0
+        bigrams = [f"{words[i]} {words[i + 1]}" for i in range(len(words) - 1)]
+        bigram_counts = Counter(bigrams)
+        if any(count >= threshold for count in bigram_counts.values()):
+            return 1.0
+
+    if len(words) >= 3:
+        trigrams = [f"{words[i]} {words[i + 1]} {words[i + 2]}" for i in range(len(words) - 2)]
+        trigram_counts = Counter(trigrams)
+        if any(count >= threshold for count in trigram_counts.values()):
+            return 1.0
 
     return 0.0
 
@@ -250,10 +257,16 @@ def check_compression_ratio(
 def check_blocklist(segment: TranscriptSegment) -> float:
     """Check whether the segment text matches a known hallucination phrase.
 
-    Normalises the segment text and checks for substring matches against
-    ``KNOWN_HALLUCINATION_PHRASES``. A partial match (e.g. "Thank you for
-    watching this video" matches "thank you for watching") is sufficient to
-    flag the segment.
+    Normalises the segment text and checks against ``_KNOWN_HALLUCINATION_PHRASES``.
+    The matching strategy depends on phrase length:
+
+    - **Short phrases (3 words or fewer):** require an approximate exact match —
+      the normalised segment text must equal the phrase, or the phrase must equal
+      the entire normalised segment text. This avoids false positives where common
+      short words like "music" or "bye bye" appear inside legitimate speech.
+    - **Longer phrases (4+ words):** use substring matching, since multi-word
+      phrases like "thank you for watching" are specific enough to flag reliably
+      even when embedded in a longer sentence.
 
     Args:
         segment: The segment being evaluated.
@@ -262,9 +275,16 @@ def check_blocklist(segment: TranscriptSegment) -> float:
         1.0 if a known hallucination phrase is found, 0.0 otherwise.
     """
     normalised_segment_text = _normalize_text(segment.text)
-    for known_phrase in KNOWN_HALLUCINATION_PHRASES:
-        if known_phrase in normalised_segment_text:
-            return 1.0
+    for known_phrase in _KNOWN_HALLUCINATION_PHRASES:
+        phrase_word_count = len(known_phrase.split())
+        if phrase_word_count <= 3:
+            # Require approximate exact match for short phrases to avoid false positives
+            if normalised_segment_text == known_phrase:
+                return 1.0
+        else:
+            # Substring match is safe for longer, more specific phrases
+            if known_phrase in normalised_segment_text:
+                return 1.0
     return 0.0
 
 

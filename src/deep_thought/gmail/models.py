@@ -134,7 +134,8 @@ class ProcessedEmailLocal:
 
         message_id: str = message.get("id", "")
         subject: str = _extract_header(message, "Subject") or "(no subject)"
-        from_address: str = _extract_header(message, "From") or "(unknown sender)"
+        raw_from_header: str = _extract_header(message, "From") or "(unknown sender)"
+        from_address: str = _parse_email_address(raw_from_header)
         current_timestamp: str = datetime.now(tz=UTC).isoformat()
 
         return cls(

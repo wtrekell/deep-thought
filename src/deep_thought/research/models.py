@@ -4,15 +4,19 @@ SearchResult represents a single source citation returned by the Perplexity API.
 
 ResearchResult captures the full output of a search or research query: the
 synthesized answer, structured source citations, follow-up questions, cost, and
-all parameters that produced it. It can be constructed from a raw API response
-dict and serialized to a frontmatter-ready dict for markdown output.
+all parameters that produced it. It is constructed from a raw API response dict
+via the ``from_api_response`` classmethod; YAML frontmatter serialization is
+handled by ``output.py``.
 """
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # SearchResult
@@ -49,9 +53,17 @@ class SearchResult:
         Returns:
             A SearchResult with all fields populated from the dict.
         """
+        title = source_dict.get("title", "")
+        url = source_dict.get("url", "")
+
+        if not title:
+            logger.warning("SearchResult: API returned a source with an empty title.")
+        if not url:
+            logger.warning("SearchResult: API returned a source with an empty URL.")
+
         return cls(
-            title=source_dict.get("title", ""),
-            url=source_dict.get("url", ""),
+            title=title,
+            url=url,
             snippet=source_dict.get("snippet"),
             date=source_dict.get("date"),
         )
@@ -69,7 +81,7 @@ class ResearchResult:
     Captures the synthesized answer, structured source citations, follow-up
     questions, cost, and all parameters used to produce the result. The
     ``from_api_response`` classmethod constructs an instance from a raw API
-    response; ``to_frontmatter_dict`` serializes it for YAML frontmatter.
+    response; YAML frontmatter serialization is handled by ``output.py``.
     """
 
     query: str
@@ -139,6 +151,12 @@ class ResearchResult:
         first_choice: dict[str, Any] = response_data.get("choices", [{}])[0]
         answer_text: str = first_choice.get("message", {}).get("content", "")
 
+        if not answer_text:
+            raise ValueError(
+                "Perplexity API returned an empty answer. "
+                "The response may be malformed or the model returned no content."
+            )
+
         raw_search_results: list[dict[str, Any]] = response_data.get("search_results", [])
         parsed_search_results: list[SearchResult] = [
             SearchResult.from_api_dict(source_entry) for source_entry in raw_search_results
@@ -165,38 +183,6 @@ class ResearchResult:
             cost_usd=total_cost,
             processed_date=processed_timestamp,
         )
-
-    def to_frontmatter_dict(self) -> dict[str, Any]:
-        """Serialize this result to a dict suitable for YAML frontmatter.
-
-        Always includes the tool name, query, mode, model, cost, and
-        processed date. Conditionally includes recency (only when set),
-        domains (only when non-empty), and context_files (only when
-        non-empty).
-
-        Returns:
-            A dictionary containing only the fields appropriate for
-            frontmatter — no null values, no empty lists.
-        """
-        frontmatter: dict[str, Any] = {
-            "tool": "research",
-            "query": self.query,
-            "mode": self.mode,
-            "model": self.model,
-            "cost_usd": self.cost_usd,
-            "processed_date": self.processed_date,
-        }
-
-        if self.recency is not None:
-            frontmatter["recency"] = self.recency
-
-        if self.domains:
-            frontmatter["domains"] = self.domains
-
-        if self.context_files:
-            frontmatter["context_files"] = self.context_files
-
-        return frontmatter
 
 
 # ---------------------------------------------------------------------------

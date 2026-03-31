@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import logging
 import sys
 from collections.abc import Callable  # noqa: TC003
@@ -39,7 +40,21 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_VERSION = "0.1.0"
+
+def _get_version() -> str:
+    """Return the installed package version, falling back to a dev sentinel.
+
+    Returns:
+        The version string from package metadata, or "0.0.0-dev" if the
+        package is not installed in the current environment.
+    """
+    try:
+        return importlib.metadata.version("deep-thought")
+    except importlib.metadata.PackageNotFoundError:
+        return "0.0.0-dev"
+
+
+_VERSION = _get_version()
 
 # ---------------------------------------------------------------------------
 # Helpers shared across command handlers
@@ -232,6 +247,7 @@ def cmd_collect(args: argparse.Namespace) -> None:
     Args:
         args: Parsed argparse namespace with global flags.
     """
+    from deep_thought.gmail.db.queries import delete_expired_cache
     from deep_thought.gmail.processor import run_collection
 
     config = _load_config_from_args(args)
@@ -248,6 +264,10 @@ def cmd_collect(args: argparse.Namespace) -> None:
 
     connection = initialize_database()
     try:
+        # Purge expired AI decision cache entries before each collection run
+        expired_count = delete_expired_cache(connection)
+        if expired_count > 0:
+            logger.debug("Purged %d expired decision cache entries.", expired_count)
         # Set up Gemini extractor if any rule uses AI
         extractor = None
         rules_need_ai = any(rule.ai_instructions for rule in config.rules)
@@ -373,7 +393,7 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         "--save-config",
         metavar="PATH",
         default=None,
-        help="Write a default example configuration file to PATH and exit.",
+        help="Write a default example configuration file to PATH and exit (overrides other commands).",
     )
 
     subparsers = root_parser.add_subparsers(dest="subcommand", metavar="<command>")

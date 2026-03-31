@@ -18,11 +18,46 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+def compile_patterns(pattern_strings: list[str]) -> list[re.Pattern[str]]:
+    """Pre-compile a list of regex pattern strings into compiled pattern objects.
+
+    Invalid patterns are skipped with a warning so a single bad pattern does
+    not prevent the remaining patterns from being applied.
+
+    Args:
+        pattern_strings: List of regex pattern strings.
+
+    Returns:
+        List of compiled re.Pattern objects (one per valid input string).
+    """
+    compiled: list[re.Pattern[str]] = []
+    for pattern_text in pattern_strings:
+        try:
+            compiled.append(re.compile(pattern_text))
+        except re.error:
+            logger.warning("Skipping invalid regex pattern: %r", pattern_text)
+    return compiled
+
+
+def matches_any_compiled_pattern(url: str, compiled_patterns: list[re.Pattern[str]]) -> bool:
+    """Return True if url matches any of the provided pre-compiled patterns.
+
+    Args:
+        url: The URL string to test.
+        compiled_patterns: List of pre-compiled re.Pattern objects.
+
+    Returns:
+        True if at least one pattern partially matches url.
+    """
+    return any(pattern.search(url) for pattern in compiled_patterns)
+
+
 def matches_any_pattern(url: str, patterns: list[str]) -> bool:
     """Return True if url matches any of the provided regex patterns.
 
-    Each pattern string is compiled fresh; this function is intentionally
-    simple and does not cache compiled patterns.
+    Compiles patterns on every call. For hot paths where the same pattern
+    list is tested against many URLs, prefer ``compile_patterns()`` once
+    and then ``matches_any_compiled_pattern()`` per URL.
 
     Args:
         url: The URL string to test.
@@ -31,15 +66,8 @@ def matches_any_pattern(url: str, patterns: list[str]) -> bool:
     Returns:
         True if at least one pattern fully or partially matches url.
     """
-    for pattern_text in patterns:
-        try:
-            compiled_pattern = re.compile(pattern_text)
-        except re.error:
-            logger.warning("Skipping invalid regex pattern: %r", pattern_text)
-            continue
-        if compiled_pattern.search(url):
-            return True
-    return False
+    compiled_patterns = compile_patterns(patterns)
+    return matches_any_compiled_pattern(url, compiled_patterns)
 
 
 def is_url_allowed(url: str, include_patterns: list[str], exclude_patterns: list[str]) -> bool:
@@ -112,6 +140,11 @@ def extract_internal_links(html: str, root_url: str) -> list[str]:
     Finds all <a href> tags, resolves relative URLs against root_url,
     filters to links that share the same domain as root_url, deduplicates,
     and returns a sorted list.
+
+    Known limitation: query strings (e.g. ``?utm_source=nav``) are preserved
+    in extracted URLs. Tracking parameters can therefore create duplicate page
+    fetches. Use ``exclude_patterns`` in the config to filter out known
+    tracking parameter patterns if this causes problems.
 
     Args:
         html: Raw HTML content of the page.

@@ -75,11 +75,20 @@ class TestInitializeDatabase:
         assert version == 0
 
     def test_running_init_twice_is_idempotent(self) -> None:
-        """Calling initialize_database twice on a fresh in-memory DB must not fail."""
-        conn1 = initialize_database(":memory:")
-        conn1.close()
-        conn2 = initialize_database(":memory:")
-        conn2.close()
+        """Calling initialize_database twice on the same connection must not fail or duplicate tables."""
+        conn = initialize_database(":memory:")
+        # Run migrations a second time against the already-initialized connection.
+        # All migrations should be skipped (already applied) and the schema version must be unchanged.
+        version_after_first_init = get_schema_version(conn)
+        import pathlib
+
+        from deep_thought.web.db.schema import run_migrations
+
+        migrations_dir = pathlib.Path(__file__).parents[2] / "src" / "deep_thought" / "web" / "db" / "migrations"
+        run_migrations(conn, migrations_dir)
+        version_after_second_run = get_schema_version(conn)
+        assert version_after_first_init == version_after_second_run
+        conn.close()
 
     def test_crawled_pages_has_expected_columns(self, in_memory_db: Any) -> None:
         """The crawled_pages table must contain all required columns."""

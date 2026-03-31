@@ -8,6 +8,7 @@ Handles pagination, rate limiting, and retry with exponential backoff.
 from __future__ import annotations
 
 import base64
+import contextlib
 import logging
 import time
 from pathlib import Path
@@ -26,6 +27,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _RETRYABLE_STATUS_CODES = {429, 500, 503}
+
+# Label cache TTL: discard cached label name→ID mappings after this many seconds
+# so that labels deleted or renamed in Gmail during a long-running session do
+# not leave the client using stale IDs.
+_LABEL_CACHE_TTL_SECONDS = 3600.0
 
 
 def _retry_with_backoff(
@@ -63,14 +69,23 @@ def _retry_with_backoff(
                 raise
 
             if attempt < max_attempts - 1:
+                # Honour the server-specified Retry-After header when present
+                retry_after_value: float = 0.0
+                if http_error.resp:
+                    raw_retry_after = http_error.resp.get("retry-after", "")
+                    if raw_retry_after:
+                        with contextlib.suppress(ValueError):
+                            retry_after_value = float(raw_retry_after)
+
+                sleep_duration = max(retry_after_value, delay)
                 logger.warning(
                     "Gmail API error %d (attempt %d/%d), retrying in %.1fs...",
                     status_code,
                     attempt + 1,
                     max_attempts,
-                    delay,
+                    sleep_duration,
                 )
-                time.sleep(delay)
+                time.sleep(sleep_duration)
                 delay *= 2
 
     if last_error is not None:
@@ -121,6 +136,7 @@ class GmailClient:
         self._retry_base_delay = retry_base_delay
         self._service: Any = None
         self._label_cache: dict[str, str] = {}
+        self._label_cache_populated_at: float = 0.0
         self._last_request_time: float = 0.0
 
     def authenticate(self) -> None:
@@ -365,7 +381,9 @@ class GmailClient:
     def get_or_create_label(self, label_name: str) -> str:
         """Get the label ID for a name, creating the label if needed.
 
-        Results are cached for the lifetime of this client instance.
+        Results are cached for up to _LABEL_CACHE_TTL_SECONDS. The cache is
+        invalidated as a whole when the TTL expires so that labels deleted or
+        renamed in Gmail during a long-running session are not missed.
 
         Args:
             label_name: The human-readable label name.
@@ -373,6 +391,11 @@ class GmailClient:
         Returns:
             The Gmail label ID string.
         """
+        # Invalidate the entire cache if it has aged past the TTL
+        cache_age = time.time() - self._label_cache_populated_at
+        if cache_age >= _LABEL_CACHE_TTL_SECONDS:
+            self._label_cache = {}
+
         if label_name in self._label_cache:
             return self._label_cache[label_name]
 
@@ -383,6 +406,7 @@ class GmailClient:
             if label.get("name") == label_name:
                 label_id: str = label["id"]
                 self._label_cache[label_name] = label_id
+                self._label_cache_populated_at = time.time()
                 return label_id
 
         # Create the label
@@ -391,5 +415,6 @@ class GmailClient:
         created_label = self._execute(create_request)
         created_id: str = created_label["id"]
         self._label_cache[label_name] = created_id
+        self._label_cache_populated_at = time.time()
         logger.info("Created Gmail label '%s' (ID: %s)", label_name, created_id)
         return created_id

@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock  # noqa: TC003
 
-from deep_thought.reddit.models import CollectedPostLocal, _get_author_name, _slugify_title
+from deep_thought.reddit.models import CollectedPostLocal
+from deep_thought.reddit.utils import get_author_name as _get_author_name
+from deep_thought.reddit.utils import slugify_title as _slugify_title
 from tests.reddit.conftest import make_mock_submission
 
 # ---------------------------------------------------------------------------
@@ -69,15 +71,13 @@ def _make_video_post() -> MagicMock:
 
 class TestGetAuthorName:
     def test_returns_author_string_when_present(self) -> None:
-        """Author name should be extracted as a string from the mock."""
+        """Author name should be extracted as a string from the author attribute."""
         submission = make_mock_submission(author_name="test_user")
-        assert _get_author_name(submission) == "test_user"
+        assert _get_author_name(submission.author) == "test_user"
 
     def test_returns_deleted_when_author_is_none(self) -> None:
         """A None author attribute should return the '[deleted]' placeholder."""
-        submission = make_mock_submission()
-        submission.author = None
-        assert _get_author_name(submission) == "[deleted]"
+        assert _get_author_name(None) == "[deleted]"
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ class TestCollectedPostLocalFromSubmission:
         post = CollectedPostLocal.from_submission(
             submission=submission,
             rule_name="test_rule",
-            output_path="/data/reddit/export/test_rule/2026-03-22_abc123_test.md",
+            output_path="/data/reddit/export/test_rule/260322-abc123_test.md",
             word_count=42,
         )
 

@@ -31,6 +31,7 @@ from deep_thought.gmail.output import (
     generate_email_markdown,
     write_email_file,
 )
+from deep_thought.progress import track_items
 
 if TYPE_CHECKING:
     from deep_thought.gmail.client import GmailClient
@@ -38,6 +39,23 @@ if TYPE_CHECKING:
     from deep_thought.gmail.extractor import GeminiExtractor
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Timestamp helpers
+# ---------------------------------------------------------------------------
+
+
+def _utc_now_iso() -> str:
+    """Return the current UTC time as an ISO-8601 string.
+
+    Centralises the ISO format timestamp used for database writes so all
+    callers produce a consistent format.
+
+    Returns:
+        Current UTC datetime as an ISO 8601 string (e.g., "2026-03-30T12:00:00+00:00").
+    """
+    return datetime.now(tz=UTC).isoformat()
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +140,7 @@ def _apply_actions(
                 continue
 
             applied.append(action)
+            logger.debug("Action '%s' applied to %s", action, message_id)
         except Exception as action_error:
             logger.warning("Action '%s' failed for %s: %s", action, message_id, action_error)
 
@@ -234,7 +253,7 @@ def _process_single_email(
                 if extracted:
                     body_text = extracted
                     # Cache the result
-                    now_iso = datetime.now(tz=UTC).isoformat()
+                    now_iso = _utc_now_iso()
                     upsert_decision_cache(
                         db_conn,
                         {
@@ -251,7 +270,7 @@ def _process_single_email(
 
         # Write output
         subject = _extract_header(message, "Subject") or "(no subject)"
-        date_str = datetime.now(tz=UTC).strftime("%Y-%m-%d")
+        date_str = datetime.now(tz=UTC).strftime("%y%m%d")
 
         if not dry_run:
             if rule_config.append_mode:
@@ -334,7 +353,7 @@ def process_rule(
     message_stubs = gmail_client.list_messages(rule_config.query, max_results=remaining)
     logger.info("Rule '%s': found %d messages", rule_config.name, len(message_stubs))
 
-    for message_stub in message_stubs:
+    for message_stub in track_items(message_stubs, description=f"Rule: {rule_config.name}"):
         if not is_within_max_emails(global_email_count + result.processed + result.skipped, max_emails_per_run):
             break
 
@@ -404,7 +423,7 @@ def run_collection(
 
     global_email_count = 0
 
-    for rule in config.rules:
+    for rule in track_items(config.rules, description="Processing rules"):
         if rule_name_filter and rule.name != rule_name_filter:
             continue
 

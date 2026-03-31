@@ -30,7 +30,6 @@ hallucination_detection:
   no_speech_prob_threshold: 0.6 # Flag segments above this no-speech probability
   duration_chars_per_sec_max: 25 # Flag segments exceeding this text density
   duration_chars_per_sec_min: 2 # Flag segments below this (for segments > 0.5s)
-  use_vad: true # Use Voice Activity Detector for silence detection
   blocklist_enabled: true # Check against known hallucination phrases
   score_threshold: 2 # Number of layers that must flag before action is taken
   action: "remove" # 'remove', 'flag', or 'log'

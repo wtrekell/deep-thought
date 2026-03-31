@@ -8,6 +8,11 @@ Upsert strategy: INSERT ... ON CONFLICT(url) DO UPDATE SET updates all columns
 except created_at when the URL already exists, preserving the original crawl
 timestamp across re-crawls.
 
+Transaction responsibility: Callers are responsible for committing transactions.
+Write functions (upsert_crawled_page, delete_crawled_page) do not call
+conn.commit() themselves. Call conn.commit() after one or more writes, or use
+conn.rollback() to discard changes on error.
+
 Note: The crawled_pages table and web_schema_version table are created by the
 DB agent via migration files in db/migrations/. The DB agent should create:
   - crawled_pages table with columns: url (PRIMARY KEY), rule_name, title,

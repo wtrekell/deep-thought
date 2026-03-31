@@ -7,14 +7,16 @@ Usage:
     todoist [--dry-run] [--verbose] [--config PATH] [--project NAME] <subcommand>
 
 Subcommands:
-    init    — Create DB, config file, and directory structure
-    config  — Validate and display current YAML configuration
-    pull    — Pull tasks and projects from Todoist API
-    push    — Push local changes back to Todoist
-    sync    — Run pull then push sequentially
-    status  — Show last sync time and pending local changes
-    diff    — Show locally modified tasks
-    export  — Export current DB state to markdown files
+    init      — Create DB, config file, and directory structure
+    config    — Validate and display current YAML configuration
+    pull      — Pull tasks and projects from Todoist API
+    push      — Push local changes back to Todoist
+    sync      — Run pull then push sequentially
+    status    — Show last sync time and pending local changes
+    diff      — Show locally modified tasks
+    export    — Export current DB state to markdown files
+    create    — Create a new task in Todoist
+    complete  — Mark a task as completed
 """
 
 from __future__ import annotations
@@ -36,7 +38,13 @@ from deep_thought.todoist.config import (
     validate_config,
 )
 from deep_thought.todoist.create import CreateResult, create_task
-from deep_thought.todoist.db.queries import get_all_projects, get_modified_tasks, get_sync_value
+from deep_thought.todoist.db.queries import (
+    get_all_projects,
+    get_modified_tasks,
+    get_sync_value,
+    get_task_by_id,
+    mark_task_completed,
+)
 from deep_thought.todoist.db.schema import get_database_path, initialize_database
 from deep_thought.todoist.export import ExportResult, export_to_markdown
 from deep_thought.todoist.pull import PullResult, pull
@@ -215,6 +223,21 @@ def cmd_config(args: argparse.Namespace) -> None:
     print(f"    branch:               {config.claude.branch}")
 
 
+def _warn_on_config_issues(config: TodoistConfig) -> None:
+    """Run validate_config and print any warnings to stdout.
+
+    This is a non-fatal check. Warnings are printed so the user is aware
+    of potential misconfigurations, but the operation continues regardless.
+
+    Args:
+        config: The loaded TodoistConfig to validate.
+    """
+    config_issues = validate_config(config)
+    if config_issues:
+        for issue in config_issues:
+            print(f"WARNING: {issue}")
+
+
 def cmd_pull(args: argparse.Namespace) -> None:
     """Pull projects and tasks from the Todoist API and store them locally.
 
@@ -226,6 +249,7 @@ def cmd_pull(args: argparse.Namespace) -> None:
               config, project).
     """
     config = _load_config_from_args(args)
+    _warn_on_config_issues(config)
     todoist_client = _make_client_from_config(config)
 
     connection = initialize_database()
@@ -237,6 +261,7 @@ def cmd_pull(args: argparse.Namespace) -> None:
             dry_run=args.dry_run,
             verbose=args.verbose,
             project_filter=args.project,
+            keep_snapshots=getattr(args, "keep_snapshots", 10),
         )
     finally:
         connection.close()
@@ -267,6 +292,7 @@ def cmd_push(args: argparse.Namespace) -> None:
               config, project).
     """
     config = _load_config_from_args(args)
+    _warn_on_config_issues(config)
     todoist_client = _make_client_from_config(config)
 
     connection = initialize_database()
@@ -301,6 +327,7 @@ def cmd_sync(args: argparse.Namespace) -> None:
               config, project).
     """
     config = _load_config_from_args(args)
+    _warn_on_config_issues(config)
     todoist_client = _make_client_from_config(config)
 
     connection = initialize_database()
@@ -312,6 +339,7 @@ def cmd_sync(args: argparse.Namespace) -> None:
             dry_run=args.dry_run,
             verbose=args.verbose,
             project_filter=args.project,
+            keep_snapshots=getattr(args, "keep_snapshots", 10),
         )
     finally:
         connection.close()
@@ -401,7 +429,8 @@ def cmd_diff(args: argparse.Namespace) -> None:
         task_content: str = task_row.get("content") or "(no content)"
         updated_at: str = task_row.get("updated_at") or "unknown"
         synced_at: str = task_row.get("synced_at") or "never"
-        priority: int = task_row.get("priority") or 1
+        raw_priority = task_row.get("priority")
+        priority: int = raw_priority if raw_priority is not None else 1
         due_date: str | None = task_row.get("due_date")
 
         print(f"  [{task_id}] {task_content}")
@@ -424,6 +453,7 @@ def cmd_export(args: argparse.Namespace) -> None:
               project).
     """
     config = _load_config_from_args(args)
+    _warn_on_config_issues(config)
 
     connection = initialize_database()
     try:
@@ -483,6 +513,41 @@ def cmd_create(args: argparse.Namespace) -> None:
         print(f"Created task [{create_result.task_id}]: {create_result.task_content}")
 
 
+def cmd_complete(args: argparse.Namespace) -> None:
+    """Mark a task as completed in Todoist and update the local database.
+
+    Closes the task via the API first, then records the completion locally.
+    Supports --dry-run to preview without making changes.
+
+    Args:
+        args: Parsed argparse namespace with the task_id positional argument
+              and global flags (dry_run, verbose, config).
+    """
+    config = _load_config_from_args(args)
+    todoist_client = _make_client_from_config(config)
+
+    connection = initialize_database()
+    try:
+        task_row = get_task_by_id(connection, args.task_id)
+        if task_row is None:
+            print(f"ERROR: No task found with ID '{args.task_id}'.", file=sys.stderr)
+            sys.exit(1)
+
+        task_content: str = task_row.get("content") or "(no content)"
+
+        if args.dry_run:
+            print(f"[dry-run] Would complete task [{args.task_id}]: {task_content}")
+            return
+
+        todoist_client.close_task(args.task_id)
+        mark_task_completed(connection, args.task_id)
+        connection.commit()
+
+        print(f"Completed task [{args.task_id}]: {task_content}")
+    finally:
+        connection.close()
+
+
 # ---------------------------------------------------------------------------
 # Argument parser
 # ---------------------------------------------------------------------------
@@ -536,17 +601,35 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         "config",
         help="Validate and display the current YAML configuration.",
     )
-    subparsers.add_parser(
+    pull_parser = subparsers.add_parser(
         "pull",
         help="Pull tasks and projects from Todoist, applying filter rules.",
     )
+    pull_parser.add_argument(
+        "--keep-snapshots",
+        metavar="N",
+        type=int,
+        default=10,
+        dest="keep_snapshots",
+        help="Number of most-recent snapshot files to keep (default: 10). Pass 0 to keep all.",
+    )
+
     subparsers.add_parser(
         "push",
         help="Push local changes back to Todoist.",
     )
-    subparsers.add_parser(
+
+    sync_parser = subparsers.add_parser(
         "sync",
         help="Run pull then push sequentially (full bidirectional sync).",
+    )
+    sync_parser.add_argument(
+        "--keep-snapshots",
+        metavar="N",
+        type=int,
+        default=10,
+        dest="keep_snapshots",
+        help="Number of most-recent snapshot files to keep (default: 10). Pass 0 to keep all.",
     )
     subparsers.add_parser(
         "status",
@@ -559,6 +642,15 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "export",
         help="Export current database state to structured markdown files.",
+    )
+
+    complete_parser = subparsers.add_parser(
+        "complete",
+        help="Mark a task as completed in Todoist.",
+    )
+    complete_parser.add_argument(
+        "task_id",
+        help="Todoist task ID (shown in export output after 'id:').",
     )
 
     create_parser = subparsers.add_parser(
@@ -619,6 +711,7 @@ _COMMAND_HANDLERS = {
     "diff": cmd_diff,
     "export": cmd_export,
     "create": cmd_create,
+    "complete": cmd_complete,
 }
 
 

@@ -5,6 +5,12 @@ All functions accept an open sqlite3.Connection as their first argument and
 return plain Python types (dicts, lists, None). No business logic lives here —
 these are thin wrappers over SQL that the application layer calls directly.
 
+Callers are responsible for committing transactions. Write functions
+(upsert_collected_post, delete_all_posts, delete_posts_by_rule, set_key_value)
+execute SQL but do NOT call conn.commit(). The caller must commit after all
+writes for a logical unit of work are complete. This allows multiple writes
+to be batched into a single transaction for atomicity and performance.
+
 Upsert strategy: INSERT ... ON CONFLICT(state_key) DO UPDATE SET is used so
 that the original `created_at` timestamp is preserved across re-processing.
 

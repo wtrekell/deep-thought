@@ -37,6 +37,7 @@ from deep_thought.gcal.output import (
     get_event_files_for_calendar,
     write_event_file,
 )
+from deep_thought.progress import track_items
 
 if TYPE_CHECKING:
     from deep_thought.gcal.client import GcalClient
@@ -67,12 +68,14 @@ def _write_snapshot(events: list[dict[str, Any]], data_dir: Path) -> Path:
     snapshots_dir = data_dir / "snapshots"
     snapshots_dir.mkdir(parents=True, exist_ok=True)
 
-    timestamp_str = datetime.now(UTC).strftime("%Y-%m-%dT%H%M%S")
+    # Capture the timestamp once so the filename and JSON payload are consistent.
+    snapshot_time = datetime.now(UTC)
+    timestamp_str = snapshot_time.strftime("%Y-%m-%dT%H%M%S")
     snapshot_filename = f"{timestamp_str}.json"
     snapshot_path = snapshots_dir / snapshot_filename
 
     snapshot_payload: dict[str, Any] = {
-        "timestamp": datetime.now(UTC).isoformat(),
+        "timestamp": snapshot_time.isoformat(),
         "event_count": len(events),
         "events": events,
     }
@@ -195,64 +198,85 @@ def _sync_single_calendar(
     logger.debug("Calendar %s: fetched %d event(s) from API", calendar_id, len(fetched_events))
 
     # Step 4: Process each event.
-    for api_event in fetched_events:
-        event_id: str = api_event.get("id", "")
-        event_status: str = api_event.get("status", "confirmed")
+    # All DB writes in the loop are wrapped in a savepoint so that a mid-loop
+    # failure rolls back all writes for this calendar rather than leaving a
+    # partially-updated state. A SAVEPOINT is used instead of BEGIN because
+    # Python's sqlite3 module may have already implicitly started a transaction
+    # (e.g. from the clear_sync_token call above), and nested BEGIN would error.
+    # SAVEPOINT/RELEASE/ROLLBACK TO works at any nesting level.
+    savepoint_name = f"sp_sync_{calendar_id.replace('@', '_').replace('.', '_')}"
 
-        # Skip events that should not be included (e.g. cancelled when
-        # include_cancelled=False). Cancelled events handled below are the
-        # special case where we need to clean up an existing local record.
-        if not should_include_event(api_event, include_cancelled=config.include_cancelled):
-            # Even when include_cancelled=False we still need to clean up any
-            # existing local record for a newly-cancelled event.
-            if event_status == "cancelled":
-                existing_row = get_event(db_conn, event_id, calendar_id)
-                if existing_row is not None:
-                    cancelled_event_local = EventLocal.from_api_response(api_event, calendar_id)
-                    if not dry_run:
-                        delete_event_file(
-                            output_dir,
-                            calendar_summary,
-                            cancelled_event_local,
-                            flat_output=config.flat_output,
-                        )
-                        delete_event(db_conn, event_id, calendar_id)
-                    result.cancelled += 1
-                    logger.debug("Calendar %s: cancelled event %s removed", calendar_id, event_id)
-            continue
+    try:
+        db_conn.execute(f"SAVEPOINT {savepoint_name};")
+        for api_event in track_items(fetched_events, description=f"Syncing: {calendar_summary}"):
+            event_id: str = api_event.get("id", "")
+            event_status: str = api_event.get("status", "confirmed")
 
-        # For non-cancelled events, check whether we already have an up-to-date
-        # local copy so we can skip unnecessary writes.
-        existing_row = get_event(db_conn, event_id, calendar_id)
-        existing_updated_at: str | None = existing_row.get("updated_at") if existing_row else None
+            # Skip events that should not be included (e.g. cancelled when
+            # include_cancelled=False). Cancelled events handled below are the
+            # special case where we need to clean up an existing local record.
+            if not should_include_event(api_event, include_cancelled=config.include_cancelled):
+                # Even when include_cancelled=False we still need to clean up any
+                # existing local record for a newly-cancelled event.
+                if event_status == "cancelled":
+                    existing_row = get_event(db_conn, event_id, calendar_id)
+                    if existing_row is not None:
+                        cancelled_event_local = EventLocal.from_api_response(api_event, calendar_id)
+                        if not dry_run:
+                            delete_event_file(
+                                output_dir,
+                                calendar_summary,
+                                cancelled_event_local,
+                                flat_output=config.flat_output,
+                            )
+                            delete_event(db_conn, event_id, calendar_id)
+                        result.cancelled += 1
+                        logger.debug("Calendar %s: cancelled event %s removed", calendar_id, event_id)
+                continue
 
-        if existing_row is not None and not is_event_updated(api_event, existing_updated_at):
-            result.unchanged += 1
-            logger.debug("Calendar %s: event %s unchanged, skipping", calendar_id, event_id)
-            continue
+            # For non-cancelled events, check whether we already have an up-to-date
+            # local copy so we can skip unnecessary writes.
+            existing_row = get_event(db_conn, event_id, calendar_id)
+            existing_updated_at: str | None = existing_row.get("updated_at") if existing_row else None
 
-        is_new_event = existing_row is None
+            if existing_row is not None and not is_event_updated(api_event, existing_updated_at):
+                result.unchanged += 1
+                logger.debug("Calendar %s: event %s unchanged, skipping", calendar_id, event_id)
+                continue
 
-        # Convert API dict to our local model.
-        event_local = EventLocal.from_api_response(api_event, calendar_id)
+            is_new_event = existing_row is None
 
-        if not dry_run:
-            upsert_event(db_conn, event_local.to_dict())
-            event_markdown_content = generate_event_markdown(event_local)
-            write_event_file(
-                event_markdown_content,
-                output_dir,
-                calendar_summary,
-                event_local,
-                flat_output=config.flat_output,
-            )
+            # Convert API dict to our local model.
+            event_local = EventLocal.from_api_response(api_event, calendar_id)
 
-        if is_new_event:
-            result.created += 1
-            logger.debug("Calendar %s: created event %s", calendar_id, event_id)
-        else:
-            result.updated += 1
-            logger.debug("Calendar %s: updated event %s", calendar_id, event_id)
+            if not dry_run:
+                upsert_event(db_conn, event_local.to_dict())
+                event_markdown_content = generate_event_markdown(event_local)
+                write_event_file(
+                    event_markdown_content,
+                    output_dir,
+                    calendar_summary,
+                    event_local,
+                    flat_output=config.flat_output,
+                )
+
+            if is_new_event:
+                result.created += 1
+                logger.debug("Calendar %s: created event %s", calendar_id, event_id)
+            else:
+                result.updated += 1
+                logger.debug("Calendar %s: updated event %s", calendar_id, event_id)
+
+        db_conn.execute(f"RELEASE {savepoint_name};")
+    except Exception as processing_error:
+        db_conn.execute(f"ROLLBACK TO {savepoint_name};")
+        db_conn.execute(f"RELEASE {savepoint_name};")
+        logger.error(
+            "Calendar %s: error during event processing — rolling back savepoint. Error: %s",
+            calendar_id,
+            processing_error,
+        )
+        raise
 
     # Step 5: Persist the new sync token when available.
     # Sync tokens are only returned (and valid) for non-single_events pulls.
@@ -320,7 +344,7 @@ def run_pull(
     # Collect all raw events for the snapshot.
     all_fetched_events: list[dict[str, Any]] = []
 
-    for api_calendar in target_calendars:
+    for api_calendar in track_items(target_calendars, description="Syncing calendars"):
         calendar_id: str = api_calendar["id"]
         calendar_summary: str = api_calendar.get("summary", calendar_id)
 

@@ -90,7 +90,7 @@ class TestLoadConfig:
         config = load_config(fixture_path)
         assert config.hallucination.action == "remove"
         assert config.hallucination.score_threshold == 2
-        assert config.hallucination.use_vad is True
+        assert config.hallucination.blocklist_enabled is True
 
     def test_null_language_parsed_as_none(self, tmp_path: Path) -> None:
         """A null language value in YAML must be parsed as Python None."""

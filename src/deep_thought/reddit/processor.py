@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from deep_thought.progress import track_items
 from deep_thought.reddit.filters import apply_rule_filters
 from deep_thought.reddit.models import CollectedPostLocal
 from deep_thought.reddit.output import count_words, generate_markdown, write_post_file
@@ -66,10 +67,10 @@ def _build_output_path(
     """
     from datetime import UTC, datetime  # noqa: PLC0415
 
-    from deep_thought.reddit.output import _slugify_title  # noqa: PLC0415
+    from deep_thought.reddit.utils import slugify_title  # noqa: PLC0415
 
     date_prefix = datetime.now(tz=UTC).strftime("%Y-%m-%d")
-    title_slug = _slugify_title(title)
+    title_slug = slugify_title(title)
     filename = f"{date_prefix}_{post_id}_{title_slug}.md"
     return str(output_dir / rule_name / filename)
 
@@ -215,7 +216,7 @@ def process_rule(
         result.posts_errored += 1
         return result
 
-    for submission in submissions:
+    for submission in track_items(submissions, description=f"Rule: {rule_config.name}", total=rule_config.limit):
         remaining_capacity = max_posts_per_run - global_post_count - result.posts_collected - result.posts_updated
         if remaining_capacity <= 0:
             logger.info("Global post cap reached during rule '%s'.", rule_config.name)
@@ -307,7 +308,7 @@ def run_collection(
 
     global_post_count = 0
 
-    for rule_config in rules_to_run:
+    for rule_config in track_items(rules_to_run, description="Processing rules"):
         rule_result = process_rule(
             reddit_client=reddit_client,
             rule_config=rule_config,

@@ -17,6 +17,7 @@ from deep_thought.reddit.cli import (
     _handle_save_config,
     _load_config_from_args,
     _setup_logging,
+    cmd_collect,
     cmd_config,
     cmd_init,
     main,
@@ -512,3 +513,188 @@ class TestMain:
             main()
         assert exc_info.value.code == 1
         assert "unexpected error" in capsys.readouterr().err.lower()
+
+
+# ---------------------------------------------------------------------------
+# cmd_collect — T-05: integration path
+# ---------------------------------------------------------------------------
+
+
+class TestCmdCollect:
+    """Integration-level tests for cmd_collect.
+
+    All external dependencies (database, PRAW client, config loading, run_collection)
+    are mocked so no real I/O or network calls occur.
+    """
+
+    def _make_collect_args(
+        self,
+        dry_run: bool = False,
+        force: bool = False,
+        rule: str | None = None,
+        output: str | None = None,
+        config: str | None = None,
+    ) -> argparse.Namespace:
+        """Return a Namespace with all flags needed by cmd_collect."""
+        return argparse.Namespace(
+            dry_run=dry_run,
+            force=force,
+            rule=rule,
+            output=output,
+            config=config,
+            verbose=False,
+            save_config=None,
+            subcommand=None,
+        )
+
+    def test_successful_collect_prints_summary(
+        self,
+        minimal_config: RedditConfig,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """A successful collection run must print a summary of collected/updated/skipped counts."""
+        from deep_thought.reddit.processor import CollectionResult
+
+        mock_result = CollectionResult(posts_collected=3, posts_updated=1, posts_skipped=2, posts_errored=0)
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.reddit.cli.load_config", return_value=minimal_config),
+            patch("deep_thought.reddit.cli.validate_config", return_value=[]),
+            patch("deep_thought.reddit.cli._make_client_from_config"),
+            patch("deep_thought.reddit.cli.initialize_database", return_value=mock_conn),
+            patch("deep_thought.reddit.cli.run_collection", return_value=mock_result),
+        ):
+            cmd_collect(self._make_collect_args())
+
+        captured_output = capsys.readouterr().out
+        assert "Collected: 3" in captured_output
+        assert "Updated:   1" in captured_output
+        assert "Skipped:   2" in captured_output
+
+    def test_commits_database_after_collection(
+        self,
+        minimal_config: RedditConfig,
+    ) -> None:
+        """The database connection must be committed after a successful collection run."""
+        from deep_thought.reddit.processor import CollectionResult
+
+        mock_result = CollectionResult()
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.reddit.cli.load_config", return_value=minimal_config),
+            patch("deep_thought.reddit.cli.validate_config", return_value=[]),
+            patch("deep_thought.reddit.cli._make_client_from_config"),
+            patch("deep_thought.reddit.cli.initialize_database", return_value=mock_conn),
+            patch("deep_thought.reddit.cli.run_collection", return_value=mock_result),
+        ):
+            cmd_collect(self._make_collect_args())
+
+        mock_conn.commit.assert_called_once()
+
+    def test_closes_database_even_on_error(
+        self,
+        minimal_config: RedditConfig,
+    ) -> None:
+        """The database connection must always be closed, even if run_collection raises."""
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.reddit.cli.load_config", return_value=minimal_config),
+            patch("deep_thought.reddit.cli.validate_config", return_value=[]),
+            patch("deep_thought.reddit.cli._make_client_from_config"),
+            patch("deep_thought.reddit.cli.initialize_database", return_value=mock_conn),
+            patch("deep_thought.reddit.cli.run_collection", side_effect=RuntimeError("API failure")),
+            pytest.raises(RuntimeError),
+        ):
+            cmd_collect(self._make_collect_args())
+
+        mock_conn.close.assert_called_once()
+
+    def test_exits_with_code_1_when_all_posts_errored(
+        self,
+        minimal_config: RedditConfig,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """When every post fails with no successes, exit code must be 1."""
+        from deep_thought.reddit.processor import CollectionResult
+
+        mock_result = CollectionResult(posts_collected=0, posts_updated=0, posts_errored=2, errors=["err1", "err2"])
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.reddit.cli.load_config", return_value=minimal_config),
+            patch("deep_thought.reddit.cli.validate_config", return_value=[]),
+            patch("deep_thought.reddit.cli._make_client_from_config"),
+            patch("deep_thought.reddit.cli.initialize_database", return_value=mock_conn),
+            patch("deep_thought.reddit.cli.run_collection", return_value=mock_result),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            cmd_collect(self._make_collect_args())
+
+        assert exc_info.value.code == 1
+
+    def test_exits_with_code_2_on_partial_failure(
+        self,
+        minimal_config: RedditConfig,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """When some posts succeed and some fail, exit code must be 2."""
+        from deep_thought.reddit.processor import CollectionResult
+
+        mock_result = CollectionResult(posts_collected=3, posts_errored=1, errors=["one error"])
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.reddit.cli.load_config", return_value=minimal_config),
+            patch("deep_thought.reddit.cli.validate_config", return_value=[]),
+            patch("deep_thought.reddit.cli._make_client_from_config"),
+            patch("deep_thought.reddit.cli.initialize_database", return_value=mock_conn),
+            patch("deep_thought.reddit.cli.run_collection", return_value=mock_result),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            cmd_collect(self._make_collect_args())
+
+        assert exc_info.value.code == 2
+
+    def test_aborts_with_error_if_config_invalid(
+        self,
+        minimal_config: RedditConfig,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """cmd_collect must exit with code 1 when validate_config returns issues."""
+        validation_issues = ["max_posts_per_run must be > 0, got: -1."]
+
+        with (
+            patch("deep_thought.reddit.cli.load_config", return_value=minimal_config),
+            patch("deep_thought.reddit.cli.validate_config", return_value=validation_issues),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            cmd_collect(self._make_collect_args())
+
+        assert exc_info.value.code == 1
+        assert "max_posts_per_run" in capsys.readouterr().err
+
+    def test_dry_run_prefix_appears_in_output(
+        self,
+        minimal_config: RedditConfig,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """In dry-run mode, the summary line must be prefixed with '[dry-run]'."""
+        from deep_thought.reddit.processor import CollectionResult
+
+        mock_result = CollectionResult(posts_collected=1)
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.reddit.cli.load_config", return_value=minimal_config),
+            patch("deep_thought.reddit.cli.validate_config", return_value=[]),
+            patch("deep_thought.reddit.cli._make_client_from_config"),
+            patch("deep_thought.reddit.cli.initialize_database", return_value=mock_conn),
+            patch("deep_thought.reddit.cli.run_collection", return_value=mock_result),
+        ):
+            cmd_collect(self._make_collect_args(dry_run=True))
+
+        captured_output = capsys.readouterr().out
+        assert "[dry-run]" in captured_output

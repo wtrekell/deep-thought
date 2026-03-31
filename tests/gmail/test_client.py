@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import base64
+import time
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Retry logic
@@ -277,10 +282,14 @@ class TestGmailClientLabelCache:
 
     def test_returns_cached_label(self) -> None:
         """Should return from cache without hitting the API."""
+        import time
+
         from deep_thought.gmail.client import GmailClient
 
         client = GmailClient.__new__(GmailClient)
         client._label_cache = {"Processed": "Label_123"}
+        # Set populated_at to now so the cache is considered fresh (not expired)
+        client._label_cache_populated_at = time.time()
         client._rate_limit_rpm = 0
         client._retry_max_attempts = 1
         client._retry_base_delay = 0.0
@@ -298,6 +307,7 @@ class TestGmailClientLabelCache:
 
         client = GmailClient.__new__(GmailClient)
         client._label_cache = {}
+        client._label_cache_populated_at = 0.0
         client._rate_limit_rpm = 0
         client._retry_max_attempts = 1
         client._retry_base_delay = 0.0
@@ -319,6 +329,7 @@ class TestGmailClientLabelCache:
 
         client = GmailClient.__new__(GmailClient)
         client._label_cache = {}
+        client._label_cache_populated_at = 0.0
         client._rate_limit_rpm = 0
         client._retry_max_attempts = 1
         client._retry_base_delay = 0.0
@@ -337,3 +348,372 @@ class TestGmailClientLabelCache:
         result = client.get_or_create_label("NewLabel")
         assert result == "Label_789"
         assert client._label_cache["NewLabel"] == "Label_789"
+
+
+# ---------------------------------------------------------------------------
+# Retry-After header (M6)
+# ---------------------------------------------------------------------------
+
+
+class TestRetryAfterHeader:
+    """Tests that _retry_with_backoff respects the Retry-After response header."""
+
+    def test_uses_retry_after_when_longer_than_backoff(self) -> None:
+        """Should sleep for Retry-After value when it exceeds the exponential backoff delay."""
+        from deep_thought.gmail.client import _retry_with_backoff
+
+        mock_resp = MagicMock()
+        mock_resp.status = 429
+        mock_resp.get.side_effect = lambda key, default="": "10" if key == "retry-after" else default
+
+        from googleapiclient.errors import HttpError
+
+        error = HttpError(resp=mock_resp, content=b"Rate limited")
+        func = MagicMock(side_effect=[error, "success"])
+
+        with patch("deep_thought.gmail.client.time.sleep") as mock_sleep:
+            result = _retry_with_backoff(func, max_attempts=3, base_delay=1.0)
+
+        assert result == "success"
+        # The Retry-After value (10s) is larger than base_delay (1s), so sleep should be 10s
+        mock_sleep.assert_called_once_with(10.0)
+
+    def test_uses_backoff_when_longer_than_retry_after(self) -> None:
+        """Should sleep for the exponential backoff when it exceeds Retry-After."""
+        from deep_thought.gmail.client import _retry_with_backoff
+
+        mock_resp = MagicMock()
+        mock_resp.status = 429
+        # Retry-After of 0.1s — much shorter than base_delay=5s
+        mock_resp.get.side_effect = lambda key, default="": "0.1" if key == "retry-after" else default
+
+        from googleapiclient.errors import HttpError
+
+        error = HttpError(resp=mock_resp, content=b"Rate limited")
+        func = MagicMock(side_effect=[error, "success"])
+
+        with patch("deep_thought.gmail.client.time.sleep") as mock_sleep:
+            result = _retry_with_backoff(func, max_attempts=3, base_delay=5.0)
+
+        assert result == "success"
+        # max(0.1, 5.0) → should sleep for 5.0s
+        mock_sleep.assert_called_once_with(5.0)
+
+    def test_ignores_non_numeric_retry_after(self) -> None:
+        """Should fall back to exponential backoff when Retry-After is not a number."""
+        from deep_thought.gmail.client import _retry_with_backoff
+
+        mock_resp = MagicMock()
+        mock_resp.status = 429
+        mock_resp.get.side_effect = lambda key, default="": "not-a-number" if key == "retry-after" else default
+
+        from googleapiclient.errors import HttpError
+
+        error = HttpError(resp=mock_resp, content=b"Rate limited")
+        func = MagicMock(side_effect=[error, "success"])
+
+        with patch("deep_thought.gmail.client.time.sleep") as mock_sleep:
+            result = _retry_with_backoff(func, max_attempts=3, base_delay=2.0)
+
+        assert result == "success"
+        mock_sleep.assert_called_once_with(2.0)
+
+
+# ---------------------------------------------------------------------------
+# Label cache TTL (M3)
+# ---------------------------------------------------------------------------
+
+
+class TestLabelCacheTTL:
+    """Tests that the label cache expires after _LABEL_CACHE_TTL_SECONDS."""
+
+    def test_cache_is_used_when_fresh(self) -> None:
+        """Should serve from cache without calling the API when cache is not expired."""
+        from deep_thought.gmail.client import GmailClient
+
+        client = GmailClient.__new__(GmailClient)
+        client._label_cache = {"MyLabel": "Label_fresh"}
+        client._label_cache_populated_at = time.time()  # Populated just now — fresh
+        client._rate_limit_rpm = 0
+        client._retry_max_attempts = 1
+        client._retry_base_delay = 0.0
+        client._last_request_time = 0.0
+        client._service = MagicMock()
+
+        result = client.get_or_create_label("MyLabel")
+
+        assert result == "Label_fresh"
+        client._service.users().labels().list.assert_not_called()
+
+    def test_cache_is_invalidated_after_ttl(self) -> None:
+        """Should discard the cache and re-fetch from the API after the TTL elapses."""
+        from deep_thought.gmail.client import _LABEL_CACHE_TTL_SECONDS, GmailClient
+
+        client = GmailClient.__new__(GmailClient)
+        # Simulate a cache that was populated longer ago than the TTL
+        client._label_cache = {"StaleLabel": "Label_stale"}
+        client._label_cache_populated_at = time.time() - _LABEL_CACHE_TTL_SECONDS - 1.0
+        client._rate_limit_rpm = 0
+        client._retry_max_attempts = 1
+        client._retry_base_delay = 0.0
+        client._last_request_time = 0.0
+
+        mock_service = MagicMock()
+        mock_list = MagicMock()
+        mock_list.execute.return_value = {"labels": [{"name": "StaleLabel", "id": "Label_fresh_id"}]}
+        mock_service.users().labels().list.return_value = mock_list
+        client._service = mock_service
+
+        result = client.get_or_create_label("StaleLabel")
+
+        assert result == "Label_fresh_id"
+        # The API must have been called because the cache was invalidated
+        mock_service.users().labels().list.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Rate limiting (M9)
+# ---------------------------------------------------------------------------
+
+
+class TestGmailClientRateLimit:
+    """Tests for GmailClient._rate_limit."""
+
+    def test_no_sleep_on_first_call(self) -> None:
+        """Should not sleep when no prior request has been made."""
+        from deep_thought.gmail.client import GmailClient
+
+        client = GmailClient.__new__(GmailClient)
+        client._rate_limit_rpm = 60
+        client._last_request_time = 0.0  # Never called before
+
+        with (
+            patch("deep_thought.gmail.client.time.sleep") as mock_sleep,
+            patch("deep_thought.gmail.client.time.time", return_value=1000.0),
+        ):
+            client._rate_limit()
+
+        mock_sleep.assert_not_called()
+
+    def test_sleeps_when_within_minimum_interval(self) -> None:
+        """Should sleep the remaining interval when called too soon after the last request."""
+        from deep_thought.gmail.client import GmailClient
+
+        client = GmailClient.__new__(GmailClient)
+        client._rate_limit_rpm = 60  # 1 request/s → interval = 1.0s
+        client._last_request_time = 999.8  # 0.2s ago
+
+        with (
+            patch("deep_thought.gmail.client.time.sleep") as mock_sleep,
+            patch("deep_thought.gmail.client.time.time", side_effect=[1000.0, 1000.0]),
+        ):
+            client._rate_limit()
+
+        # elapsed = 1000.0 - 999.8 = 0.2s; need to sleep 1.0 - 0.2 = 0.8s
+        mock_sleep.assert_called_once()
+        sleep_duration = mock_sleep.call_args[0][0]
+        assert abs(sleep_duration - 0.8) < 0.001
+
+    def test_rate_limit_disabled_when_rpm_is_zero(self) -> None:
+        """Should not sleep or check time when rate_limit_rpm is 0 (disabled)."""
+        from deep_thought.gmail.client import GmailClient
+
+        client = GmailClient.__new__(GmailClient)
+        client._rate_limit_rpm = 0
+
+        with (
+            patch("deep_thought.gmail.client.time.sleep") as mock_sleep,
+            patch("deep_thought.gmail.client.time.time") as mock_time,
+        ):
+            client._rate_limit()
+
+        mock_sleep.assert_not_called()
+        mock_time.assert_not_called()
+
+
+class TestGeminiExtractorRateLimit:
+    """Tests for GeminiExtractor._rate_limit."""
+
+    def test_no_sleep_on_first_call(self) -> None:
+        """Should not sleep when no prior extraction has been made."""
+        with patch("google.generativeai.configure"), patch("google.generativeai.GenerativeModel"):
+            from deep_thought.gmail.extractor import GeminiExtractor
+
+            extractor = GeminiExtractor.__new__(GeminiExtractor)
+            extractor._rate_limit_rpm = 60
+            extractor._last_request_time = 0.0
+
+            with (
+                patch("deep_thought.gmail.extractor.time.sleep") as mock_sleep,
+                patch("deep_thought.gmail.extractor.time.time", return_value=1000.0),
+            ):
+                extractor._rate_limit()
+
+            mock_sleep.assert_not_called()
+
+    def test_sleeps_when_within_minimum_interval(self) -> None:
+        """Should sleep the remaining gap when called too soon after the last extraction."""
+        with patch("google.generativeai.configure"), patch("google.generativeai.GenerativeModel"):
+            from deep_thought.gmail.extractor import GeminiExtractor
+
+            extractor = GeminiExtractor.__new__(GeminiExtractor)
+            extractor._rate_limit_rpm = 60  # 1/s → interval = 1.0s
+            extractor._last_request_time = 999.7  # 0.3s ago
+
+            with (
+                patch("deep_thought.gmail.extractor.time.sleep") as mock_sleep,
+                patch("deep_thought.gmail.extractor.time.time", side_effect=[1000.0, 1000.0]),
+            ):
+                extractor._rate_limit()
+
+            mock_sleep.assert_called_once()
+            sleep_duration = mock_sleep.call_args[0][0]
+            assert abs(sleep_duration - 0.7) < 0.001
+
+    def test_rate_limit_disabled_when_rpm_is_zero(self) -> None:
+        """Should do nothing when rate_limit_rpm is 0."""
+        with patch("google.generativeai.configure"), patch("google.generativeai.GenerativeModel"):
+            from deep_thought.gmail.extractor import GeminiExtractor
+
+            extractor = GeminiExtractor.__new__(GeminiExtractor)
+            extractor._rate_limit_rpm = 0
+
+            with (
+                patch("deep_thought.gmail.extractor.time.sleep") as mock_sleep,
+                patch("deep_thought.gmail.extractor.time.time") as mock_time,
+            ):
+                extractor._rate_limit()
+
+            mock_sleep.assert_not_called()
+            mock_time.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# authenticate() coverage (M8)
+# ---------------------------------------------------------------------------
+
+
+class TestGmailClientAuthenticate:
+    """Tests for GmailClient.authenticate."""
+
+    def test_loads_valid_token_from_file(self, tmp_path: Path) -> None:
+        """Should load credentials from an existing token file if valid."""
+        from deep_thought.gmail.client import GmailClient
+
+        token_file = tmp_path / "token.json"
+        token_file.write_text("{}", encoding="utf-8")  # Must exist so the loading branch runs
+
+        client = GmailClient(
+            credentials_path=str(tmp_path / "credentials.json"),
+            token_path=str(token_file),
+            scopes=["https://mail.google.com/"],
+        )
+
+        mock_creds = MagicMock()
+        mock_creds.valid = True
+
+        with (
+            patch("deep_thought.gmail.client.Credentials.from_authorized_user_file", return_value=mock_creds),
+            patch("deep_thought.gmail.client.build") as mock_build,
+        ):
+            client.authenticate()
+
+        mock_build.assert_called_once_with("gmail", "v1", credentials=mock_creds)
+
+    def test_refreshes_expired_token(self, tmp_path: MagicMock) -> None:
+        """Should call credentials.refresh() when the token is expired but has a refresh token."""
+        from deep_thought.gmail.client import GmailClient
+
+        token_file = tmp_path / "token.json"
+        token_file.write_text("{}", encoding="utf-8")  # Must exist for the token-loading branch
+
+        client = GmailClient(
+            credentials_path=str(tmp_path / "credentials.json"),
+            token_path=str(token_file),
+            scopes=["https://mail.google.com/"],
+        )
+
+        mock_creds = MagicMock()
+        mock_creds.valid = False
+        mock_creds.expired = True
+        mock_creds.refresh_token = "refresh_tok"
+        mock_creds.to_json.return_value = "{}"
+
+        with (
+            patch("deep_thought.gmail.client.Credentials.from_authorized_user_file", return_value=mock_creds),
+            patch("deep_thought.gmail.client.Request") as mock_request_class,
+            patch("deep_thought.gmail.client.build"),
+        ):
+            client.authenticate()
+
+        mock_creds.refresh.assert_called_once_with(mock_request_class())
+
+    def test_runs_browser_flow_when_no_token(self, tmp_path: Path) -> None:
+        """Should run InstalledAppFlow when no valid token file exists."""
+        from deep_thought.gmail.client import GmailClient
+
+        credentials_file = tmp_path / "credentials.json"
+        credentials_file.write_text("{}", encoding="utf-8")
+        # Deliberately do NOT create the token file — forces the browser flow path
+
+        client = GmailClient(
+            credentials_path=str(credentials_file),
+            token_path=str(tmp_path / "token.json"),
+            scopes=["https://mail.google.com/"],
+        )
+
+        mock_flow = MagicMock()
+        mock_new_creds = MagicMock()
+        mock_new_creds.to_json.return_value = "{}"
+        mock_flow.run_local_server.return_value = mock_new_creds
+
+        with (
+            patch("deep_thought.gmail.client.InstalledAppFlow.from_client_secrets_file", return_value=mock_flow),
+            patch("deep_thought.gmail.client.build"),
+        ):
+            client.authenticate()
+
+        mock_flow.run_local_server.assert_called_once_with(port=0)
+
+    def test_raises_when_credentials_file_missing(self, tmp_path: Path) -> None:
+        """Should raise FileNotFoundError when the credentials.json file does not exist."""
+        from deep_thought.gmail.client import GmailClient
+
+        client = GmailClient(
+            credentials_path=str(tmp_path / "missing_credentials.json"),
+            token_path=str(tmp_path / "token.json"),
+            scopes=["https://mail.google.com/"],
+        )
+
+        # No token file exists either — forces the browser flow path
+        with pytest.raises(FileNotFoundError):
+            client.authenticate()
+
+
+# ---------------------------------------------------------------------------
+# get_raw_message missing field (L8)
+# ---------------------------------------------------------------------------
+
+
+class TestGmailClientGetRawMessageMissingField:
+    """Tests that get_raw_message raises ValueError when 'raw' field is absent."""
+
+    def test_raises_value_error_when_raw_field_missing(self) -> None:
+        """Should raise ValueError when the API response lacks the 'raw' field."""
+        from deep_thought.gmail.client import GmailClient
+
+        client = GmailClient.__new__(GmailClient)
+        client._rate_limit_rpm = 0
+        client._retry_max_attempts = 1
+        client._retry_base_delay = 0.0
+        client._last_request_time = 0.0
+
+        mock_service = MagicMock()
+        mock_get = MagicMock()
+        # Response without the 'raw' key
+        mock_get.execute.return_value = {"id": "msg_001", "payload": {}}
+        mock_service.users().messages().get.return_value = mock_get
+        client._service = mock_service
+
+        with pytest.raises(ValueError, match="no 'raw' field"):
+            client.get_raw_message("msg_001")

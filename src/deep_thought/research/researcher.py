@@ -61,7 +61,10 @@ class PerplexityClient:
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
-            timeout=httpx.Timeout(30.0, read=300.0),
+            # 60-second read timeout is sufficient for sync search (typical 2-10s).
+            # The async research command uses its own 10-minute polling loop, so
+            # individual poll requests don't need a long read timeout.
+            timeout=httpx.Timeout(30.0, read=60.0),
         )
 
     # -----------------------------------------------------------------------
@@ -204,6 +207,19 @@ class PerplexityClient:
         """Close the underlying HTTP client and release its resources."""
         self._client.close()
 
+    def __enter__(self) -> PerplexityClient:
+        """Enter the context manager, returning self for use in a ``with`` block."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
+        """Exit the context manager, closing the HTTP client unconditionally."""
+        self.close()
+
     # -----------------------------------------------------------------------
     # Private helpers
     # -----------------------------------------------------------------------
@@ -314,6 +330,10 @@ class PerplexityClient:
                     retry_delay = float(self._config.retry_base_delay_seconds * (2**attempt))
 
                     # Honour the Retry-After header for rate-limit responses.
+                    # Note: RFC 7231 also allows an HTTP-date string format for
+                    # this header, but only integer seconds are supported here.
+                    # An HTTP-date value will fail float() conversion and fall
+                    # back silently to exponential backoff.
                     if response.status_code == 429:
                         retry_after_header = response.headers.get("Retry-After")
                         if retry_after_header is not None:

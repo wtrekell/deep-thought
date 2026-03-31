@@ -4,6 +4,12 @@ All functions accept an open sqlite3.Connection as their first argument and
 return plain Python types (dicts, lists, None). No business logic lives here —
 these are thin wrappers over SQL that the application layer calls directly.
 
+Transaction boundaries:
+    These functions execute SQL statements but do NOT call conn.commit().
+    Callers are responsible for transaction management — commit after a logical
+    batch of operations (e.g., end of a collection run) or rollback on error.
+    Forgetting to commit means writes will be lost when the connection closes.
+
 Upsert strategy: INSERT ... ON CONFLICT DO UPDATE SET is used so that the
 original `created_at` timestamp is preserved across re-processing.
 

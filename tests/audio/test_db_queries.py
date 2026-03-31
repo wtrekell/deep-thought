@@ -6,12 +6,7 @@ initializes a fresh database for each test.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-
-import pytest
-
-if TYPE_CHECKING:
-    import sqlite3
+from typing import Any
 
 from deep_thought.audio.db.queries import (
     delete_processed_file,
@@ -21,22 +16,10 @@ from deep_thought.audio.db.queries import (
     get_processed_files_by_status,
     upsert_processed_file,
 )
-from deep_thought.audio.db.schema import initialize_database
 
 # ---------------------------------------------------------------------------
 # Fixtures and helpers
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture()
-def in_memory_db() -> sqlite3.Connection:
-    """Return a fully initialized in-memory SQLite connection.
-
-    All migrations are applied. Closes automatically after each test.
-    """
-    connection = initialize_database(":memory:")
-    yield connection
-    connection.close()
 
 
 def _file_data(

@@ -333,6 +333,43 @@ class TestSyncState:
         assert state is not None
         assert state["sync_token"] == "new_token_xyz"
 
+    def test_upsert_sets_updated_at_and_synced_at(self, seeded_db: sqlite3.Connection) -> None:
+        """upsert_sync_state should populate updated_at and synced_at with the current time."""
+        upsert_sync_state(seeded_db, "primary", "token_ts_test", "2026-03-24T00:00:00Z")
+        seeded_db.commit()
+        state = get_sync_state(seeded_db, "primary")
+        assert state is not None
+        assert state["updated_at"] is not None
+        assert state["synced_at"] is not None
+        # Both should be recent ISO timestamps
+        assert state["updated_at"].startswith("2026")
+        assert state["synced_at"].startswith("2026")
+
+    def test_clear_sync_token_updates_updated_at(self, seeded_db: sqlite3.Connection) -> None:
+        """clear_sync_token should update updated_at on the cleared row."""
+        state_before = get_sync_state(seeded_db, "primary")
+        assert state_before is not None
+        old_updated_at = state_before.get("updated_at")
+
+        clear_sync_token(seeded_db, "primary")
+        seeded_db.commit()
+        state_after = get_sync_state(seeded_db, "primary")
+        assert state_after is not None
+        assert state_after["sync_token"] is None
+        # updated_at should have changed from the epoch default or prior value
+        assert state_after["updated_at"] != old_updated_at or old_updated_at == "1970-01-01T00:00:00+00:00"
+
+    def test_clear_all_sync_tokens_updates_updated_at(self, seeded_db: sqlite3.Connection) -> None:
+        """clear_all_sync_tokens should update updated_at for every row."""
+        clear_all_sync_tokens(seeded_db)
+        seeded_db.commit()
+        for calendar_id in ("primary", "work@group.calendar.google.com"):
+            state = get_sync_state(seeded_db, calendar_id)
+            if state is not None:
+                assert state["sync_token"] is None
+                # updated_at should not be the epoch default after a clear
+                assert state["updated_at"] != "1970-01-01T00:00:00+00:00"
+
 
 # ---------------------------------------------------------------------------
 # Key/value store

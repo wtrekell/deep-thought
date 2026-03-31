@@ -45,6 +45,7 @@ def sync(
     dry_run: bool = False,
     verbose: bool = False,
     project_filter: str | None = None,
+    keep_snapshots: int = 10,
 ) -> SyncResult:
     """Run pull then push sequentially as a full bidirectional sync.
 
@@ -59,6 +60,8 @@ def sync(
         dry_run: If True, no writes to DB, snapshot, or Todoist API occur.
         verbose: If True, print progress messages to stdout.
         project_filter: If provided, limit both pull and push to this project.
+        keep_snapshots: Number of most-recent snapshot files to retain after
+                        the pull phase. Passed through to pull(). Defaults to 10.
 
     Returns:
         A SyncResult containing both the PullResult and PushResult.
@@ -73,6 +76,7 @@ def sync(
         dry_run=dry_run,
         verbose=verbose,
         project_filter=project_filter,
+        keep_snapshots=keep_snapshots,
     )
 
     if verbose:

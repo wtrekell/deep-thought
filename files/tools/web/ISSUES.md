@@ -18,212 +18,61 @@ Outstanding issues from code reviews. Critical and high severity issues were res
 | R-10 | High     | `crawler.py`          | Stealth mode UA mismatch (HTTP header vs JS `navigator.userAgent`)                           | Moved user-agent and viewport to `browser.new_context()` so both values match            |
 | R-11 | High     | `crawler.py`          | Stealth viewport randomization was a no-op                                                   | Resolved with R-10 — viewport set at context creation                                    |
 
-## Resolved (2026-03-28)
+## Resolved (2026-03-30)
 
-| ID   | Severity | File                     | Issue                                                   | Resolution                        |
-| ---- | -------- | ------------------------ | ------------------------------------------------------- | --------------------------------- |
-| L-02 | Low      | `260322-requirements.md` | State Database section omitted `title` from column list | Added `title TEXT` to column list |
-
-## Open — Medium
-
-### M-01: Database connection never explicitly closed
-
-- **File:** `cli.py`
-- `initialize_database()` returns a connection that is never closed, even on error paths. The OS cleans up on exit, but dirty shutdowns can leave WAL/SHM files.
-- **Recommendation:** Wrap database usage in a `finally` block or context manager.
-
-### M-02: `_PROJECT_ROOT` relies on file nesting depth
-
-- **File:** `config.py`
-- `Path(__file__).parent.parent.parent.parent` assumes exact directory depth. Fragile to refactoring.
-- **Recommendation:** Walk up looking for `pyproject.toml`, or use a shared utility.
-
-### M-03: `parse_known_args` silently ignores typos and unknown flags
-
-- **File:** `cli.py`
-- Used for fallback-to-crawl pattern, but typos like `--steath` produce no error.
-- **Recommendation:** Warn when `_remaining_args` is non-empty after subcommand resolution.
-
-### M-04: `validate_config` not called in `cmd_crawl`
-
-- **File:** `cli.py`
-- Config validation runs in `cmd_config` but not before crawling. Invalid config values could reach the processor.
-- **Recommendation:** Call `validate_config` after `_build_config_with_overrides` in `cmd_crawl`.
-
-### M-05: `cmd_init` uses relative paths for output directories
-
-- **File:** `cli.py`
-- `Path("output/web/")` and `Path("docs/")` break when run from a different working directory.
-- **Recommendation:** Use `_PROJECT_ROOT` or equivalent for absolute paths.
-
-### M-06: No `output_dir` validation in `validate_config`
-
-- **File:** `config.py`
-- Numeric ranges and regex patterns are validated, but `output_dir` is not checked for empty string or invalid path characters.
-- **Recommendation:** Add a non-empty string check.
-
-### M-07: `_enqueue_children_from_db` is a no-op stub
-
-- **File:** `processor.py`
-- Incremental documentation-mode re-crawls (without `--force`) silently skip child pages of already-crawled pages. The BFS graph is truncated with no warning.
-- **Recommendation:** At minimum log a warning. Better: store discovered child links in the database during initial crawl for replay.
-
-### M-08: `conn` parameter in `_process_page` is unused
-
-- **File:** `processor.py`
-- `sqlite3.Connection` is accepted but never referenced inside the function. Misleading signature.
-- **Recommendation:** Remove the parameter and update call sites.
-
-### M-09: `_collect_article_urls` has no page count cap during collection
-
-- **File:** `processor.py`
-- `max_pages` is only applied after all article URLs are collected, not during. Wide graphs with high `index_depth` fetch unnecessary index pages.
-- **Recommendation:** Pass `max_pages` into the collection function and stop early.
-
-### M-10: Regex patterns recompiled on every call to `matches_any_pattern`
-
-- **File:** `filters.py`
-- Called once per URL per pattern. For large crawls with multiple patterns, compilation overhead adds up.
-- **Recommendation:** Pre-compile patterns once at crawl start and pass compiled list through.
-
-### M-11: `_TitleParser` only captures first text node inside `<title>`
-
-- **File:** `converter.py`
-- Titles with HTML entities (e.g., `&mdash;`) are split into multiple `handle_data` calls; only the first chunk is captured.
-- **Recommendation:** Accumulate all text inside the `<title>` tag by appending to a list.
-
-### M-12: YAML frontmatter title values are not quoted
-
-- **File:** `output.py`
-- Titles containing colons, quotes, brackets, or `#` produce invalid YAML frontmatter.
-- **Recommendation:** Quote the title value or use a YAML serializer.
-
-### M-13: Migration SQL parsing is fragile
-
-- **File:** `db/schema.py`
-- Comment stripping (`--` prefix) and statement splitting (`;`) are naive. Would break on semicolons or `--` inside string literals.
-- **Recommendation:** Use `conn.executescript()` or document the constraint for migration authors.
-
-### M-14: `get_data_dir()` env var path missing `/web` subdirectory
-
-- **File:** `db/schema.py`
-- When `DEEP_THOUGHT_DATA_DIR` is set, returns the path directly without appending `/web`. Inconsistent with the fallback path `data/web`.
-- **Recommendation:** Change to `Path(env_override) / "web"`.
-
-### M-15: No commit after write operations in queries
-
-- **File:** `db/queries.py`
-- `upsert_crawled_page` and `delete_crawled_page` never call `conn.commit()`. Caller responsibility is undocumented.
-- **Recommendation:** Document caller commit responsibility, or add commits to write functions.
-
-### M-16: Image filename extension derived from URL, not content type
-
-- **File:** `image_extractor.py`
-- URLs without extensions or with misleading extensions get wrong file types. Fallback to `.jpg` is arbitrary.
-- **Recommendation:** Check `Content-Type` header and map to extension.
-
-### M-17: `extract_image_urls` does not filter `data:` URIs
-
-- **File:** `image_extractor.py`
-- `data:` URIs are skipped in `download_images` (R-01 fix), but they still enter the extracted URL list unnecessarily.
-- **Recommendation:** Filter `data:` URIs in `extract_image_urls` as well.
-
-### M-18: Playwright started in `__init__`, not in `__enter__`
-
-- **File:** `crawler.py`
-- Asymmetry between where Playwright starts (init) and where it stops (exit). Leaks subprocess if not used as context manager.
-- **Recommendation:** Move `sync_playwright().__enter__()` into `__enter__`.
-
-### M-19: Cross-module import of private function `_strip_frontmatter`
-
-- **File:** `processor.py`
-- Imports a private function from `llms.py`. The `# noqa: PLC2701` suppression confirms the tooling flagged this.
-- **Recommendation:** Make it public (`strip_frontmatter`) since it's used across modules.
+| ID    | Severity | File                     | Issue                                                                                                                      | Resolution                                                                                                                                   |
+| ----- | -------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| R-12  | High     | `converter.py`           | `\bclass=` in `unwrap_html_tags` matched `data-class="word"` — tags without a real `class` attr were incorrectly unwrapped | Replaced `\bclass=` with `(?<![a-zA-Z0-9\-])class=` (negative lookbehind); added regression test                                            |
+| M-01  | Medium   | `cli.py`                 | Database connection never explicitly closed                                                                                | Wrapped database usage in a `try/finally` block with `conn.close()`                                                                         |
+| M-02  | Medium   | `config.py`              | `_PROJECT_ROOT` relies on file nesting depth                                                                               | Replaced hardcoded `.parent.parent.parent` chain with `_find_project_root()` that walks up looking for `pyproject.toml`                     |
+| M-03  | Medium   | `cli.py`                 | `parse_known_args` silently ignores typos and unknown flags                                                                | Added `logger.warning()` when `_remaining_args` is non-empty after subcommand resolution                                                     |
+| M-04  | Medium   | `cli.py`                 | `validate_config` not called in `cmd_crawl`                                                                                | Added `validate_config()` call after `_build_config_with_overrides` in `cmd_crawl`                                                          |
+| M-05  | Medium   | `cli.py`                 | `cmd_init` uses relative paths for output directories                                                                      | Changed `Path("output/web/")` to `Path.cwd() / "output" / "web"` for correct absolute resolution                                           |
+| M-06  | Medium   | `config.py`              | No `output_dir` validation in `validate_config`                                                                            | Added empty/whitespace check for `output_dir` in `validate_config`                                                                          |
+| M-07  | Medium   | `processor.py`           | `_enqueue_children_from_db` is a no-op stub                                                                                | Added `logger.warning()` to surface the silent skip during incremental re-crawls                                                             |
+| M-08  | Medium   | `processor.py`           | `conn` parameter in `_process_page` is unused                                                                              | Removed `conn` parameter from `_process_page` and updated all three call sites                                                               |
+| M-09  | Medium   | `processor.py`           | `_collect_article_urls` has no page count cap during collection                                                            | Added `max_pages` and `collected` parameters; function now stops early once the limit is reached                                             |
+| M-10  | Medium   | `filters.py`             | Regex patterns recompiled on every call to `matches_any_pattern`                                                           | Added `compile_patterns()` and `matches_any_compiled_pattern()` helpers; patterns compiled once at crawl start                               |
+| M-11  | Medium   | `converter.py`           | `_TitleParser` only captures first text node inside `<title>`                                                              | Changed to accumulate chunks in `_title_chunks: list[str]` and join in the `title` property                                                  |
+| M-12  | Medium   | `output.py`              | YAML frontmatter title values are not quoted                                                                               | Added `_yaml_quoted_string()` inner function to double-quote and escape title values in frontmatter                                          |
+| M-13  | Medium   | `db/schema.py`           | Migration SQL parsing is fragile                                                                                           | Replaced manual comment-stripping and statement-splitting with `conn.executescript()`                                                        |
+| M-14  | Medium   | `db/schema.py`           | `get_data_dir()` env var path missing `/web` subdirectory                                                                  | Changed to `Path(env_override) / "web"` to match the fallback path `data/web`                                                               |
+| M-15  | Medium   | `db/queries.py`          | No commit after write operations; caller responsibility undocumented                                                       | Added module-level docstring documenting that callers are responsible for committing transactions                                             |
+| M-16  | Medium   | `image_extractor.py`     | Image filename extension derived from URL, not content type                                                                | Added `_MIME_TO_EXTENSION` mapping; `download_images` now reads `Content-Type` header and maps to extension, falling back to URL extension   |
+| M-17  | Medium   | `image_extractor.py`     | `extract_image_urls` does not filter `data:` URIs                                                                          | Added `data:` URI filter in `extract_image_urls` so they never enter the extracted URL list                                                  |
+| M-18  | Medium   | `crawler.py`             | Playwright started in `__init__`, not in `__enter__`                                                                       | Moved `sync_playwright().__enter__()` into `__enter__`; `__init__` now stores the context manager without starting it                        |
+| M-19  | Medium   | `processor.py`           | Cross-module import of private function `_strip_frontmatter`                                                               | Renamed `_strip_frontmatter` → `strip_frontmatter` in `llms.py`; updated all imports                                                        |
+| L-01  | Low      | `models.py`              | `CrawledPageLocal.status_code` typed as `int`, but DB column is nullable                                                   | Changed type annotation to `int \| None`                                                                                                     |
+| L-02  | Low      | `260322-requirements.md` | State Database section omitted `title` from column list                                                                    | Added `title TEXT` to column list                                                                                                            |
+| L-03  | Low      | `output.py`              | Directory segments in output paths are not slugified                                                                       | Applied `slugify()` to each directory segment in `url_to_output_path`                                                                       |
+| L-04  | Low      | `filters.py`             | Query strings not stripped from extracted links                                                                            | Added known limitation comment in `extract_internal_links`; full fix deferred (requires config option design)                                |
+| L-05  | Low      | `converter.py`           | `count_words` has redundant list comprehension filter                                                                      | Simplified to `return len(markdown_text.split())`                                                                                           |
+| L-07  | Low      | `llms.py`                | `write_llms_index` appends `.md` to display label                                                                          | Confirmed intentional per spec; added clarifying comment in code                                                                             |
+| L-08  | Low      | `llms.py`                | `crawled_date` labeled `crawled:` but represents generation time                                                           | Renamed field to `generated:` and added comment explaining it is set once per run, not per page                                              |
+| L-10  | Low      | `tests/web/test_unwrap_tags.py` | Parametrized test uses a generator where a direct expression would do                                               | Replaced with `tag_still_present = f"<{pattern.split('.')[0]}" in result`                                                                    |
+| T-01  | Test     | `tests/web/`             | No test file for `crawler.py`                                                                                              | Created `tests/web/test_crawler.py` covering context manager lifecycle, fetch_page, retry logic, stealth mode, and pagination                |
+| T-02  | Test     | `tests/web/`             | No test file for `llms.py`                                                                                                 | Created `tests/web/test_llms.py` covering `write_llms_full`, `write_llms_index`, and `strip_frontmatter`                                    |
+| T-03  | Test     | `tests/web/`             | No test file for `image_extractor.py`                                                                                      | Created `tests/web/test_image_extractor.py` covering `extract_image_urls` and `download_images`                                             |
+| T-04  | Test     | `tests/web/`             | No test file for `config.py` core functions                                                                                | Created `tests/web/test_config_core.py` covering `load_config`, `validate_config`, and `_parse_crawl_config`                                |
+| T-05  | Test     | `tests/web/`             | No test file for `models.py`                                                                                               | Created `tests/web/test_models.py` covering `CrawledPageLocal.to_dict()`                                                                    |
+| T-06  | Test     | `tests/web/test_processor.py` | No tests for mode runner orchestration                                                                                | Added `TestRunBlogMode`, `TestRunDocumentationMode`, and `TestRunDirectMode` test classes                                                    |
+| T-07  | Test     | `tests/web/test_db.py`   | Idempotency test uses separate in-memory databases                                                                         | Rewrote `test_running_init_twice_is_idempotent` to call `initialize_database` twice on the same connection                                   |
+| T-08  | Test     | `tests/web/test_processor.py` | `_process_page` success path only tested with `dry_run=True`                                                          | Added `TestProcessPageWritePath` class covering `write_page`, image extraction, and `PageSummary` construction paths                         |
+| T-09  | Test     | `tests/web/conftest.py`  | Unused fixtures `sample_html` and `blog_index_html`                                                                        | Removed both fixtures from `conftest.py`                                                                                                     |
+| _VER  | Medium   | `cli.py`                 | `_VERSION` was a hardcoded string instead of reading package metadata                                                      | Added `_get_version()` using `importlib.metadata.version("deep-thought")` with `PackageNotFoundError` fallback                               |
 
 ## Open — Low
-
-### L-01: `CrawledPageLocal.status_code` typed as `int`, but DB column is nullable
-
-- **File:** `models.py`
-- No sentinel for "no HTTP response" (DNS failure, connection refused).
-- **Recommendation:** Consider `int | None` to match the database.
-
-### L-03: Directory segments in output paths are not slugified
-
-- **File:** `output.py`
-- Only the filename is slugified. Directory names can contain spaces or special characters.
-- **Recommendation:** Apply `slugify()` to directory segments.
-
-### L-04: Query strings not stripped from extracted links
-
-- **File:** `filters.py`
-- Tracking parameters (e.g., `?utm_source=nav`) create duplicate page fetches.
-- **Recommendation:** Consider stripping common tracking parameters or providing a config option.
-
-### L-05: `count_words` has redundant list comprehension filter
-
-- **File:** `converter.py`
-- `[token for token in text.split() if token]` — the `if token` is redundant since `split()` already omits empties.
-- **Recommendation:** Simplify to `len(text.split())`.
 
 ### L-06: Duplicated page-processing loop across three mode runners
 
 - **File:** `processor.py`
 - The fetch/process/upsert/error loop is nearly identical in `run_blog_mode`, `run_documentation_mode`, and `run_direct_mode`.
 - **Recommendation:** Extract a shared `_process_url_list` helper.
-
-### L-07: `write_llms_index` appends `.md` to display label
-
-- **File:** `llms.py`
-- Produces `[Introduction.md](...)` — matches spec literally but looks odd as a display label.
-- **Recommendation:** Clarify whether `.md` in the label is intentional per requirements.
-
-### L-08: `crawled_date` in `write_llms_full` labeled `crawled:` but represents generation time
-
-- **File:** `llms.py`
-- Misleading field name. Timestamp is set once before the loop, not per-page.
-- **Recommendation:** Rename to `generated:` or use per-page crawl timestamps.
+- **Deferred:** Refactoring the loop requires redesigning the mode runner interfaces and updating all related tests. The risk of introducing regressions outweighs the cleanup benefit at this stage. Revisit after the current test suite provides broader safety coverage.
 
 ### L-09: Image extractor does not handle `srcset`, `<picture>`, or CSS backgrounds
 
 - **File:** `image_extractor.py`
 - Only `<img src>` is parsed. Modern pages use responsive image patterns.
 - **Recommendation:** Consider `srcset` extraction as a follow-up enhancement.
-
-## Open — Test Coverage
-
-### T-01: No test file for `crawler.py`
-
-Core page-fetching class (retry logic, stealth mode, context management) has zero test coverage.
-
-### T-02: No test file for `llms.py`
-
-LLM context file generation (`write_llms_full`, `write_llms_index`, `_strip_frontmatter`) untested.
-
-### T-03: No test file for `image_extractor.py`
-
-`extract_image_urls` and `download_images` untested.
-
-### T-04: No test file for `config.py` core functions
-
-`load_config`, `_parse_crawl_config`, `validate_config` (11 validation checks) untested directly.
-
-### T-05: No test file for `models.py`
-
-`CrawledPageLocal.to_dict()` untested.
-
-### T-06: No tests for mode runner orchestration
-
-`process()`, `run_blog_mode`, `run_documentation_mode`, `run_direct_mode` have no tests.
-
-### T-07: `test_db.py` idempotency test uses separate in-memory databases
-
-`test_running_init_twice_is_idempotent` opens two independent `:memory:` databases instead of calling init twice on the same database.
-
-### T-08: `_process_page` success path only tested with `dry_run=True`
-
-The `write_page`, image extraction, and `PageSummary` construction paths are never exercised.
-
-### T-09: Unused fixtures `sample_html` and `blog_index_html` in `conftest.py`
-
-Defined but never referenced by any test.
+- **Deferred:** This is a feature enhancement, not a bug fix. Implementing `srcset`/`<picture>` support requires parsing attribute syntax and resolving relative URLs, which is a meaningful scope addition. Tracked for a future enhancement cycle.

@@ -7,7 +7,7 @@ import sqlite3  # noqa: TC003 — sqlite3.Connection is used at runtime in run_u
 from pathlib import Path
 from typing import Any
 
-from deep_thought.gcal.create import _is_date_only, parse_event_frontmatter
+from deep_thought.gcal.create import _is_date_only, _validate_start_before_end, parse_event_frontmatter
 from deep_thought.gcal.db.queries import get_calendar, upsert_event
 from deep_thought.gcal.models import EventLocal, UpdateResult
 from deep_thought.gcal.output import generate_event_markdown, write_event_file
@@ -149,6 +149,12 @@ def run_update(
     """
     frontmatter, body_text = parse_event_frontmatter(file_path)
 
+    # Validate start < end before calling the API so the user gets a clear
+    # local error rather than a cryptic API rejection.
+    start_value: str = str(frontmatter["start"])
+    end_value: str = str(frontmatter["end"])
+    _validate_start_before_end(start_value, end_value)
+
     event_id_raw: Any = frontmatter.get("event_id")
     if not event_id_raw:
         raise ValueError(f"Missing required 'event_id' field in frontmatter: {file_path}")
@@ -179,10 +185,9 @@ def run_update(
     api_response: dict[str, Any] = client.patch_event(calendar_id, event_id, patch_body)
 
     event_local = EventLocal.from_api_response(api_response, calendar_id)
-    upsert_event(db_conn, event_local.to_dict())
-    db_conn.commit()
 
     # Resolve the calendar display name for the output directory structure
+    # before the DB write so the commit only happens after all I/O succeeds.
     calendar_row = get_calendar(db_conn, calendar_id)
     calendar_display_name: str = calendar_row["summary"] if calendar_row else calendar_id
 
@@ -197,6 +202,10 @@ def run_update(
         event=event_local,
         flat_output=flat_output,
     )
+
+    # Write to the DB only after the file has been successfully updated.
+    # The caller (cli.py) is responsible for calling db_conn.commit().
+    upsert_event(db_conn, event_local.to_dict())
 
     logger.info("Event updated: %s (%s)", event_local.event_id, event_local.html_link)
 

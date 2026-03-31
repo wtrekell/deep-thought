@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import logging
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -12,9 +13,14 @@ from deep_thought.audio.cli import (
     _build_argument_parser,
     _build_config_with_overrides,
     _build_root_parser_with_transcribe_defaults,
+    _get_version,
+    _load_config_from_args,
+    _resolve_output_root,
+    _setup_logging,
     cmd_config,
     cmd_init,
     cmd_transcribe,
+    main,
 )
 from deep_thought.audio.config import (
     AudioConfig,
@@ -25,10 +31,6 @@ from deep_thought.audio.config import (
     LimitsConfig,
     OutputConfig,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -65,7 +67,6 @@ def _make_config(
             no_speech_prob_threshold=0.6,
             duration_chars_per_sec_max=25,
             duration_chars_per_sec_min=2,
-            use_vad=True,
             blocklist_enabled=True,
             score_threshold=2,
             action="remove",
@@ -281,9 +282,7 @@ class TestCommandHandlers:
         captured = capsys.readouterr()
         assert "Audio Tool initialised" in captured.out
 
-    def test_cmd_init_copies_config_when_missing(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_cmd_init_copies_config_when_missing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """cmd_init must copy the bundled config to the project-level path when it does not exist."""
         monkeypatch.chdir(tmp_path)
         bundled_config = tmp_path / "bundled.yaml"
@@ -573,3 +572,252 @@ class TestCommandHandlersDispatch:
         assert _COMMAND_HANDLERS["transcribe"] is cmd_transcribe
         assert _COMMAND_HANDLERS["config"] is cmd_config
         assert _COMMAND_HANDLERS["init"] is cmd_init
+
+
+# ---------------------------------------------------------------------------
+# TestCLIHelpers (T-04)
+# ---------------------------------------------------------------------------
+
+
+class TestSetupLogging:
+    def test_sets_debug_level_when_verbose_true(self) -> None:
+        """When verbose=True, the root logger level must be DEBUG."""
+        _setup_logging(verbose=True)
+        assert logging.getLogger().level == logging.DEBUG
+
+    def test_sets_info_level_when_verbose_false(self) -> None:
+        """When verbose=False, the root logger level must be INFO."""
+        _setup_logging(verbose=False)
+        assert logging.getLogger().level == logging.INFO
+
+
+class TestLoadConfigFromArgs:
+    def test_loads_config_from_explicit_path(self, tmp_path: Path) -> None:
+        """When args.config is set, load_config must receive that path."""
+        # Write a minimal valid config file
+        config_file = tmp_path / "audio-configuration.yaml"
+        config_file.write_text(
+            "engine: mlx\nmodel: small\nlanguage: en\n"
+            "output_mode: paragraph\npause_threshold: 1.5\n"
+            "diarize: false\nhf_token_env: HF_TOKEN\n"
+            "remove_fillers: false\noutput_dir: data/\n"
+            "generate_llms_files: false\nmax_file_size_mb: 100\n"
+            "chunk_duration_minutes: 5\n",
+            encoding="utf-8",
+        )
+        args = MagicMock()
+        args.config = str(config_file)
+
+        config = _load_config_from_args(args)
+
+        assert config.engine.engine == "mlx"
+        assert config.engine.model == "small"
+
+    def test_passes_none_path_when_config_not_set(self) -> None:
+        """When args.config is None, load_config must be called with no path."""
+        args = MagicMock()
+        args.config = None
+
+        with patch("deep_thought.audio.cli.load_config", return_value=_make_config()) as mock_load:
+            _load_config_from_args(args)
+
+        called_path = mock_load.call_args[0][0]
+        assert called_path is None
+
+
+class TestResolveOutputRoot:
+    def test_cli_output_overrides_config(self) -> None:
+        """When args.output is set, the result must be that path."""
+        args = MagicMock()
+        args.output = "/override/output"
+        config = _make_config(output_dir="data/audio/export/")
+
+        result = _resolve_output_root(args, config)
+
+        assert result == Path("/override/output")
+
+    def test_falls_back_to_config_output_dir(self) -> None:
+        """When args.output is None, the result must be config.output.output_dir."""
+        args = MagicMock()
+        args.output = None
+        config = _make_config(output_dir="data/audio/export/")
+
+        result = _resolve_output_root(args, config)
+
+        assert result == Path("data/audio/export/")
+
+
+# ---------------------------------------------------------------------------
+# TestMainEntryPoint (T-03)
+# ---------------------------------------------------------------------------
+
+
+class TestMainEntryPoint:
+    def test_main_dispatches_to_config_subcommand(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """main() with the 'config' subcommand must invoke cmd_config."""
+        mock_cmd_config = MagicMock()
+        with (
+            patch("sys.argv", ["audio", "config"]),
+            patch.dict("deep_thought.audio.cli._COMMAND_HANDLERS", {"config": mock_cmd_config}),
+        ):
+            main()
+
+        mock_cmd_config.assert_called_once()
+
+    def test_main_dispatches_to_init_subcommand(self) -> None:
+        """main() with the 'init' subcommand must invoke cmd_init."""
+        mock_cmd_init = MagicMock()
+        with (
+            patch("sys.argv", ["audio", "init"]),
+            patch.dict("deep_thought.audio.cli._COMMAND_HANDLERS", {"init": mock_cmd_init}),
+        ):
+            main()
+
+        mock_cmd_init.assert_called_once()
+
+    def test_main_exits_1_on_file_not_found(self) -> None:
+        """main() must exit with code 1 when FileNotFoundError is raised by the handler."""
+        failing_handler = MagicMock(side_effect=FileNotFoundError("no config"))
+        with (
+            patch("sys.argv", ["audio", "config"]),
+            patch.dict("deep_thought.audio.cli._COMMAND_HANDLERS", {"config": failing_handler}),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 1
+
+    def test_main_exits_1_on_os_error(self) -> None:
+        """main() must exit with code 1 when OSError is raised by the handler."""
+        failing_handler = MagicMock(side_effect=OSError("disk full"))
+        with (
+            patch("sys.argv", ["audio", "config"]),
+            patch.dict("deep_thought.audio.cli._COMMAND_HANDLERS", {"config": failing_handler}),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 1
+
+    def test_main_exits_1_on_value_error(self) -> None:
+        """main() must exit with code 1 when ValueError is raised by the handler."""
+        failing_handler = MagicMock(side_effect=ValueError("bad value"))
+        with (
+            patch("sys.argv", ["audio", "config"]),
+            patch.dict("deep_thought.audio.cli._COMMAND_HANDLERS", {"config": failing_handler}),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 1
+
+    def test_main_exits_1_on_unexpected_error(self) -> None:
+        """main() must exit with code 1 when an unexpected Exception is raised."""
+        failing_handler = MagicMock(side_effect=RuntimeError("unexpected"))
+        with (
+            patch("sys.argv", ["audio", "config"]),
+            patch.dict("deep_thought.audio.cli._COMMAND_HANDLERS", {"config": failing_handler}),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 1
+
+    def test_main_defaults_to_transcribe_when_no_subcommand(self) -> None:
+        """main() with no subcommand must fall back to cmd_transcribe."""
+        mock_transcribe = MagicMock()
+        with (
+            patch("sys.argv", ["audio"]),
+            patch.dict("deep_thought.audio.cli._COMMAND_HANDLERS", {"transcribe": mock_transcribe}),
+        ):
+            main()
+
+        mock_transcribe.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# TestGetVersion
+# ---------------------------------------------------------------------------
+
+
+class TestGetVersion:
+    def test_returns_string(self) -> None:
+        """_get_version() must always return a string."""
+        result = _get_version()
+        assert isinstance(result, str)
+
+    def test_fallback_when_package_not_found(self) -> None:
+        """When the package is not installed, _get_version() must return the fallback string."""
+        from importlib.metadata import PackageNotFoundError
+
+        with patch("deep_thought.audio.cli.version", side_effect=PackageNotFoundError()):
+            result = _get_version()
+
+        assert result == "0.0.0+unknown"
+
+
+# ---------------------------------------------------------------------------
+# TestLlmFlag (T-06)
+# ---------------------------------------------------------------------------
+
+
+class TestLlmFlag:
+    def test_llm_flag_triggers_llm_file_generation(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """When --llm is set, cmd_transcribe must generate llms.txt and llms-full.txt."""
+        from deep_thought.audio.processor import ProcessResult
+
+        output_dir = tmp_path / "output"
+        output_dir.mkdir()
+        md_dir = output_dir / "interview"
+        md_dir.mkdir()
+        md_file = md_dir / "interview.md"
+        md_file.write_text("---\ntool: audio\n---\nTranscript body.", encoding="utf-8")
+
+        success_result = ProcessResult(
+            source_path=tmp_path / "interview.wav",
+            output_path=md_dir,
+            status="success",
+            duration_seconds=90.0,
+        )
+
+        args = _make_transcribe_args(
+            input=str(tmp_path / "audio"),
+            output=str(output_dir),
+            llm=True,
+        )
+        # generate_llms_files=False in config, but --llm overrides it
+        mock_config = _make_config(generate_llms_files=False)
+
+        with (
+            patch("deep_thought.audio.cli.load_config", return_value=mock_config),
+            patch("deep_thought.audio.cli.validate_config", return_value=[]),
+            patch("deep_thought.audio.db.schema.initialize_database", return_value=MagicMock()),
+            patch("deep_thought.audio.engines.create_engine", return_value=MagicMock()),
+            patch("deep_thought.audio.processor.process_batch", return_value=[success_result]),
+        ):
+            cmd_transcribe(args)
+
+        captured = capsys.readouterr()
+        assert "llms" in captured.out.lower() or (output_dir / "llms.txt").exists()
+
+    def test_llm_flag_none_uses_config_value(self, tmp_path: Path) -> None:
+        """When args.llm is None, the config's generate_llms_files value is used."""
+        from deep_thought.audio.processor import ProcessResult
+
+        success_result = ProcessResult(source_path=tmp_path / "a.wav", status="success")
+        args = _make_transcribe_args(llm=None)
+        # config has generate_llms_files=False and no output_path on result
+        mock_config = _make_config(generate_llms_files=False)
+
+        with (
+            patch("deep_thought.audio.cli.load_config", return_value=mock_config),
+            patch("deep_thought.audio.cli.validate_config", return_value=[]),
+            patch("deep_thought.audio.db.schema.initialize_database", return_value=MagicMock()),
+            patch("deep_thought.audio.engines.create_engine", return_value=MagicMock()),
+            patch("deep_thought.audio.processor.process_batch", return_value=[success_result]),
+            patch("deep_thought.audio.llms.write_llms_index") as mock_write_index,
+        ):
+            cmd_transcribe(args)
+
+        # With generate_llms_files=False and llm=None, LLM files must not be written
+        mock_write_index.assert_not_called()

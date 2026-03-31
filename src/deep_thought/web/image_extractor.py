@@ -16,6 +16,21 @@ _ALLOWED_IMAGE_SCHEMES: frozenset[str] = frozenset({"http", "https"})
 _IMAGE_DOWNLOAD_TIMEOUT_SECONDS: int = 30
 _IMAGE_MAX_SIZE_BYTES: int = 50 * 1024 * 1024  # 50 MB
 
+# Maps MIME type (from Content-Type header) to file extension
+_MIME_TO_EXTENSION: dict[str, str] = {
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/svg+xml": ".svg",
+    "image/avif": ".avif",
+    "image/bmp": ".bmp",
+    "image/tiff": ".tiff",
+    "image/x-icon": ".ico",
+    "image/vnd.microsoft.icon": ".ico",
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -105,11 +120,17 @@ def download_images(image_urls: list[str], output_dir: Path) -> list[Path]:
             continue
 
         url_extension = Path(parsed_url.path).suffix or ".jpg"
-        image_filename = f"image_{image_index:03d}{url_extension}"
-        destination_path = output_dir / image_filename
 
         try:
             with urllib.request.urlopen(image_url, timeout=_IMAGE_DOWNLOAD_TIMEOUT_SECONDS) as response:  # noqa: S310
+                content_type_header: str = response.headers.get("Content-Type", "")
+                # Strip parameters like "; charset=utf-8" before looking up the MIME type
+                mime_type = content_type_header.split(";")[0].strip().lower()
+                resolved_extension = _MIME_TO_EXTENSION.get(mime_type, url_extension) or ".jpg"
+
+                image_filename = f"image_{image_index:03d}{resolved_extension}"
+                destination_path = output_dir / image_filename
+
                 image_data = response.read(_IMAGE_MAX_SIZE_BYTES + 1)
 
             if len(image_data) > _IMAGE_MAX_SIZE_BYTES:

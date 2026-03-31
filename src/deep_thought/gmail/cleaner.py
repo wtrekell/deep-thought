@@ -15,10 +15,31 @@ import html2text
 # ---------------------------------------------------------------------------
 
 
+def _attr_value_is_one(value: str) -> bool:
+    """Return True if the attribute value represents the number 1.
+
+    Handles quoted values ('1', "1"), unquoted 1, and numerically-equal
+    strings like "01" or "0001".
+
+    Args:
+        value: The raw attribute value string (may include surrounding quotes).
+
+    Returns:
+        True if the value represents the integer 1.
+    """
+    stripped = value.strip("\"' \t")
+    try:
+        return int(stripped) == 1
+    except ValueError:
+        return False
+
+
 def _remove_tracking_pixels(html: str) -> str:
     """Remove 1x1 tracking pixel images from HTML.
 
-    Matches <img> tags where width and/or height are set to 1.
+    Uses a simple scan over <img> tags so it handles single quotes, unquoted
+    attribute values, and numeric strings like "01" that a pure regex would
+    miss.
 
     Args:
         html: Raw HTML string.
@@ -26,17 +47,27 @@ def _remove_tracking_pixels(html: str) -> str:
     Returns:
         HTML with tracking pixel images removed.
     """
-    # Match img tags with 1x1 dimensions
+
+    # Pass 1: remove img tags where width AND/OR height indicate 1 pixel
+    def _strip_if_pixel(match: re.Match[str]) -> str:
+        """Return empty string if the matched img tag is a 1×1 pixel, else return it."""
+        tag_text = match.group(0)
+
+        width_match = re.search(r'width\s*=\s*(["\']?[0-9]+["\']?)', tag_text, re.IGNORECASE)
+        height_match = re.search(r'height\s*=\s*(["\']?[0-9]+["\']?)', tag_text, re.IGNORECASE)
+
+        width_is_one = _attr_value_is_one(width_match.group(1)) if width_match else False
+        height_is_one = _attr_value_is_one(height_match.group(1)) if height_match else False
+
+        if width_is_one and height_is_one:
+            return ""
+        return tag_text
+
+    html = re.sub(r"<img[^>]*/?>", _strip_if_pixel, html, flags=re.IGNORECASE)
+
+    # Pass 2: match common tracking keywords in src URLs regardless of quote style
     html = re.sub(
-        r'<img[^>]*(?:width\s*=\s*["\']?1["\']?[^>]*height\s*=\s*["\']?1["\']?'
-        r"|height\s*=\s*[\"']?1[\"']?[^>]*width\s*=\s*[\"']?1[\"']?)[^>]*/?>",
-        "",
-        html,
-        flags=re.IGNORECASE,
-    )
-    # Match common tracking pixel patterns in src URLs
-    html = re.sub(
-        r'<img[^>]*src\s*=\s*["\'][^"\']*(?:track|pixel|open|beacon|click)[^"\']*["\'][^>]*/?>',
+        r'<img[^>]*src\s*=\s*["\']?[^"\'>\s]*(?:track|pixel|open|beacon|click)[^"\'>\s]*["\']?[^>]*/?>',
         "",
         html,
         flags=re.IGNORECASE,

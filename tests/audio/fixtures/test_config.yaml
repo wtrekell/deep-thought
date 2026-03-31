@@ -23,7 +23,6 @@ hallucination_detection:
   no_speech_prob_threshold: 0.6
   duration_chars_per_sec_max: 25
   duration_chars_per_sec_min: 2
-  use_vad: true
   blocklist_enabled: true
   score_threshold: 2
   action: 'remove'

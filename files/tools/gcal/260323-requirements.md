@@ -283,10 +283,10 @@ The Calendar API supports sync tokens for efficient incremental pulls:
 
 ```
 data/gcal/export/{calendar_name}/
-├── {date}_{summary_slug}.md           # Event with YAML frontmatter
+├── {YYMMDD}-{summary_slug}.md           # Event with YAML frontmatter
 └── llm/
-    ├── {date}_{summary_slug}.llms.txt
-    └── {date}_{summary_slug}.llms-full.txt
+    ├── {YYMMDD}-{summary_slug}.llms.txt
+    └── {YYMMDD}-{summary_slug}.llms-full.txt
 ```
 
 When `flat_output: true`, all events export to `data/gcal/export/` without calendar subdirectories.

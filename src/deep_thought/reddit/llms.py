@@ -10,10 +10,11 @@ prioritises machine parseability over human readability.
 
 from __future__ import annotations
 
-import re
 from datetime import UTC, datetime
 from pathlib import Path  # noqa: TC003
 from typing import TYPE_CHECKING, Any
+
+from deep_thought.reddit.utils import slugify_title
 
 if TYPE_CHECKING:
     from deep_thought.reddit.models import CollectedPostLocal
@@ -24,12 +25,17 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def _strip_frontmatter(markdown_text: str) -> str:
+def strip_frontmatter(markdown_text: str) -> str:
     """Remove YAML frontmatter from a markdown string.
 
     Frontmatter is defined as content between the first two ``---`` lines
     at the very beginning of the file. If no valid frontmatter block is
     found the text is returned unchanged.
+
+    Limitation: if the post body itself contains a line consisting solely of
+    ``---``, the function will truncate prematurely at that line. This is
+    acceptable because all frontmatter in this tool is machine-generated and
+    kept short; the risk of accidental ``---`` in a post body is low.
 
     Args:
         markdown_text: Full markdown content, possibly starting with ``---``.
@@ -52,22 +58,6 @@ def _strip_frontmatter(markdown_text: str) -> str:
 
     body_lines = lines[closing_index + 1 :]
     return "\n".join(body_lines).lstrip("\n")
-
-
-def _slugify_title(title: str, max_length: int = 60) -> str:
-    """Convert a post title to a filesystem-safe slug.
-
-    Args:
-        title: The raw post title string.
-        max_length: Maximum slug length before truncation.
-
-    Returns:
-        A cleaned slug suitable for use in a link.
-    """
-    slug = title.lower()
-    slug = re.sub(r"[^a-z0-9]+", "-", slug)
-    slug = slug.strip("-")
-    return slug[:max_length] if len(slug) > max_length else slug
 
 
 def _read_post_content(post: CollectedPostLocal) -> str:
@@ -116,7 +106,7 @@ def generate_llms_index(posts: list[CollectedPostLocal], rule_name: str) -> str:
     ]
 
     for post in posts:
-        title_slug = _slugify_title(post.title)
+        title_slug = slugify_title(post.title)
         output_filename = Path(post.output_path).name
         relative_path = f"{rule_name}/{output_filename}"
         entry = f"- [{title_slug}.md]({relative_path}): r/{post.subreddit}, score {post.score}, {post.word_count} words"
@@ -143,7 +133,7 @@ def generate_llms_full(posts: list[CollectedPostLocal], rule_name: str) -> str:
 
     for post in posts:
         raw_content = _read_post_content(post)
-        stripped_content = _strip_frontmatter(raw_content)
+        stripped_content = strip_frontmatter(raw_content)
 
         block_lines: list[str] = [
             f"# {post.title}",
@@ -215,16 +205,14 @@ def write_post_llms_files(
         title: Post title for the filename slug.
         post_metadata: CollectedPostLocal or similar object with score/comment_count.
     """
-    from deep_thought.reddit.output import _slugify_title  # noqa: PLC0415
-
     llm_dir = output_dir / rule_name / "llm"
     llm_dir.mkdir(parents=True, exist_ok=True)
 
     date_prefix = datetime.now(tz=UTC).strftime("%Y-%m-%d")
-    title_slug = _slugify_title(title)
+    title_slug = slugify_title(title)
     base_name = f"{date_prefix}_{post_id}_{title_slug}"
 
-    stripped_content = _strip_frontmatter(post_content)
+    stripped_content = strip_frontmatter(post_content)
     collected_date = datetime.now(tz=UTC).isoformat()
 
     # llms.txt (index-style)
@@ -235,7 +223,7 @@ def write_post_llms_files(
         "",
         f"- [{base_name}.md](../{base_name}.md)",
     ]
-    llms_txt_path = llm_dir / f"{base_name}.llms.txt"
+    llms_txt_path = llm_dir / f"{base_name}-llms.txt"
     llms_txt_path.write_text("\n".join(llms_index_lines), encoding="utf-8")
 
     # llms-full.txt (full content)
@@ -248,5 +236,5 @@ def write_post_llms_files(
         "",
         stripped_content,
     ]
-    llms_full_path = llm_dir / f"{base_name}.llms-full.txt"
+    llms_full_path = llm_dir / f"{base_name}-llms-full.txt"
     llms_full_path.write_text("\n".join(llms_full_lines), encoding="utf-8")

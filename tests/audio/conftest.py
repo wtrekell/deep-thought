@@ -58,7 +58,6 @@ def sample_config() -> AudioConfig:
             no_speech_prob_threshold=0.6,
             duration_chars_per_sec_max=25,
             duration_chars_per_sec_min=2,
-            use_vad=True,
             blocklist_enabled=True,
             score_threshold=2,
             action="remove",

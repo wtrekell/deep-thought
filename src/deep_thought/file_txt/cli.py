@@ -28,6 +28,7 @@ from deep_thought.file_txt.config import (
 from deep_thought.file_txt.convert import ConvertResult, convert_file
 from deep_thought.file_txt.filters import collect_input_files
 from deep_thought.file_txt.llms import DocumentSummary, write_llms_full, write_llms_index
+from deep_thought.progress import track_items
 
 logger = logging.getLogger(__name__)
 
@@ -220,7 +221,7 @@ def cmd_convert(args: argparse.Namespace) -> None:
     error_count = 0
     successful_results: list[ConvertResult] = []
 
-    for source_path in input_files:
+    for source_path in track_items(input_files, description="Converting files"):
         if args.verbose:
             dry_run_label = "[dry-run] " if args.dry_run else ""
             print(f"{dry_run_label}Converting: {source_path}")

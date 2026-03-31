@@ -34,7 +34,20 @@ from deep_thought.reddit.processor import CollectionResult, run_collection
 
 logger = logging.getLogger(__name__)
 
-_VERSION = "0.1.0"
+
+def _get_version() -> str:
+    """Return the installed package version, with a fallback for development installs.
+
+    Returns:
+        The version string from package metadata, or "0.1.0" if not found.
+    """
+    try:
+        from importlib.metadata import version  # noqa: PLC0415
+
+        return version("deep-thought")
+    except Exception:
+        return "0.1.0"
+
 
 # ---------------------------------------------------------------------------
 # Helpers shared across command handlers
@@ -210,6 +223,13 @@ def cmd_collect(args: argparse.Namespace) -> None:
         args: Parsed argparse namespace with global flags and collect-specific flags.
     """
     config = _load_config_from_args(args)
+
+    validation_issues = validate_config(config)
+    if validation_issues:
+        for issue_message in validation_issues:
+            print(f"ERROR: {issue_message}", file=sys.stderr)
+        sys.exit(1)
+
     reddit_client = _make_client_from_config(config)
 
     output_override: Path | None = Path(args.output) if args.output else None
@@ -268,7 +288,7 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     root_parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {_VERSION}",
+        version=f"%(prog)s {_get_version()}",
         help="Show version and exit.",
     )
     root_parser.add_argument(
@@ -393,7 +413,7 @@ def _handle_save_config(destination_path_str: str) -> None:
         sys.exit(1)
 
     if destination_path.exists():
-        print(f"ERROR: File already exists at {destination_path}. Use --force to overwrite.", file=sys.stderr)
+        print(f"ERROR: File already exists at {destination_path}. Remove it manually to regenerate.", file=sys.stderr)
         sys.exit(1)
 
     destination_path.parent.mkdir(parents=True, exist_ok=True)

@@ -283,15 +283,15 @@ class TestBuildFrontmatter:
             output_mode="paragraph",
             processed_date="2026-03-22T00:00:00+00:00",
         )
-        assert "tool: audio" in frontmatter
-        assert "source_file: interview.mp3" in frontmatter
-        assert "engine: mlx" in frontmatter
-        assert "model: large-v3-turbo" in frontmatter
-        assert "language: en" in frontmatter
+        assert 'tool: "audio"' in frontmatter
+        assert 'source_file: "interview.mp3"' in frontmatter
+        assert 'engine: "mlx"' in frontmatter
+        assert 'model: "large-v3-turbo"' in frontmatter
+        assert 'language: "en"' in frontmatter
         assert "duration_seconds: 330.0" in frontmatter
         assert "speaker_count: 2" in frontmatter
-        assert "output_mode: paragraph" in frontmatter
-        assert "processed_date: 2026-03-22T00:00:00+00:00" in frontmatter
+        assert 'output_mode: "paragraph"' in frontmatter
+        assert 'processed_date: "2026-03-22T00:00:00+00:00"' in frontmatter
 
     def test_frontmatter_wrapped_in_dashes(self) -> None:
         """The frontmatter block must start and end with --- delimiters."""
@@ -379,8 +379,8 @@ class TestWriteTranscript:
         )
         content = output_path.read_text(encoding="utf-8")
         assert content.startswith("---\n")
-        assert "tool: audio" in content
-        assert "source_file: talk.mp3" in content
+        assert 'tool: "audio"' in content
+        assert 'source_file: "talk.mp3"' in content
 
     def test_output_file_contains_transcript_body(self, tmp_path: Path) -> None:
         """The written file must contain the formatted transcript text."""

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from deep_thought.audio.hallucination import (
     HallucinationScore,
+    _normalize_text,
     apply_hallucination_detection,
     check_blocklist,
     check_compression_ratio,
@@ -39,6 +40,53 @@ def _make_segment(
         compression_ratio=compression_ratio,
         speaker=speaker,
     )
+
+
+# ---------------------------------------------------------------------------
+# TestNormalizeText (T-08)
+# ---------------------------------------------------------------------------
+
+
+class TestNormalizeText:
+    def test_lowercases_input(self) -> None:
+        """_normalize_text must convert all characters to lowercase."""
+        result = _normalize_text("Hello World")
+        assert result == "hello world"
+
+    def test_strips_punctuation(self) -> None:
+        """_normalize_text must remove all punctuation characters."""
+        result = _normalize_text("Hello, world!")
+        assert result == "hello world"
+
+    def test_collapses_extra_whitespace(self) -> None:
+        """_normalize_text must collapse multiple spaces into a single space."""
+        result = _normalize_text("hello   world")
+        assert result == "hello world"
+
+    def test_strips_leading_and_trailing_whitespace(self) -> None:
+        """_normalize_text must strip leading and trailing whitespace."""
+        result = _normalize_text("  hello world  ")
+        assert result == "hello world"
+
+    def test_empty_string_returns_empty(self) -> None:
+        """_normalize_text on an empty string must return an empty string."""
+        result = _normalize_text("")
+        assert result == ""
+
+    def test_punctuation_only_returns_empty(self) -> None:
+        """A string containing only punctuation must produce an empty string."""
+        result = _normalize_text("!?.,;:")
+        assert result == ""
+
+    def test_preserves_alphanumeric_content(self) -> None:
+        """Alphanumeric content must be preserved after normalization."""
+        result = _normalize_text("Thank you for watching!")
+        assert result == "thank you for watching"
+
+    def test_combined_normalisation(self) -> None:
+        """_normalize_text must apply all transformations together."""
+        result = _normalize_text("  Thank You, FOR Watching!!  ")
+        assert result == "thank you for watching"
 
 
 # ---------------------------------------------------------------------------

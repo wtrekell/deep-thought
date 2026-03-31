@@ -161,6 +161,48 @@ class TestValidateConfig:
         issues = validate_config(config)
         assert not any("lookahead_days" in issue for issue in issues)
 
+    def test_catches_zero_api_rate_limit_rpm(self) -> None:
+        """Should report an issue when api_rate_limit_rpm is 0 or negative."""
+        config = load_config(FIXTURES_DIR / "test_config.yaml")
+        config.api_rate_limit_rpm = 0
+        issues = validate_config(config)
+        assert any("api_rate_limit_rpm" in issue for issue in issues)
+
+    def test_catches_negative_api_rate_limit_rpm(self) -> None:
+        """Should report an issue when api_rate_limit_rpm is negative."""
+        config = load_config(FIXTURES_DIR / "test_config.yaml")
+        config.api_rate_limit_rpm = -1
+        issues = validate_config(config)
+        assert any("api_rate_limit_rpm" in issue for issue in issues)
+
+    def test_valid_api_rate_limit_rpm_returns_no_issue(self) -> None:
+        """A positive api_rate_limit_rpm should produce no issue."""
+        config = load_config(FIXTURES_DIR / "test_config.yaml")
+        config.api_rate_limit_rpm = 100
+        issues = validate_config(config)
+        assert not any("api_rate_limit_rpm" in issue for issue in issues)
+
+    def test_warns_on_large_lookback_days(self) -> None:
+        """Should include a warning issue when lookback_days exceeds 365."""
+        config = load_config(FIXTURES_DIR / "test_config.yaml")
+        config.lookback_days = 366
+        issues = validate_config(config)
+        assert any("lookback_days" in issue for issue in issues)
+
+    def test_warns_on_large_lookahead_days(self) -> None:
+        """Should include a warning issue when lookahead_days exceeds 365."""
+        config = load_config(FIXTURES_DIR / "test_config.yaml")
+        config.lookahead_days = 366
+        issues = validate_config(config)
+        assert any("lookahead_days" in issue for issue in issues)
+
+    def test_boundary_lookback_days_365_is_valid(self) -> None:
+        """lookback_days of exactly 365 should not trigger the large-value warning."""
+        config = load_config(FIXTURES_DIR / "test_config.yaml")
+        config.lookback_days = 365
+        issues = validate_config(config)
+        assert not any("lookback_days" in issue for issue in issues)
+
 
 # ---------------------------------------------------------------------------
 # Default config path

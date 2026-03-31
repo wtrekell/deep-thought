@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
+import pytest  # noqa: TC002 — pytest.LogCaptureFixture used at runtime in test signatures
+
 from deep_thought.gcal.models import EventLocal
 from deep_thought.gcal.output import (
     _build_filename,
@@ -91,12 +93,12 @@ class TestBuildFilename:
     def test_timed_event(self) -> None:
         """Should extract date from datetime start_time."""
         event = _make_test_event(start_time="2026-03-24T09:00:00-05:00")
-        assert _build_filename(event) == "2026-03-24_team-standup.md"
+        assert _build_filename(event) == "260324-team-standup.md"
 
     def test_allday_event(self) -> None:
         """Should extract date from date-only start_time."""
         event = _make_test_event(start_time="2026-03-25", summary="Company Holiday")
-        assert _build_filename(event) == "2026-03-25_company-holiday.md"
+        assert _build_filename(event) == "260325-company-holiday.md"
 
 
 class TestGetCalendarDirName:
@@ -235,3 +237,34 @@ class TestGetEventFilesForCalendar:
     def test_empty_directory(self, tmp_path: Path) -> None:
         """Should return empty list for nonexistent directory."""
         assert get_event_files_for_calendar(tmp_path, "Nonexistent") == []
+
+
+# ---------------------------------------------------------------------------
+# JSON deserialization warning logging (M4)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildEventFrontmatterWarnings:
+    """Tests for warning log output on corrupt JSON fields in _build_event_frontmatter."""
+
+    def test_corrupt_attendees_json_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Should log a warning when attendees JSON is corrupt and omit the field."""
+        import logging
+
+        event = _make_test_event(attendees="not valid JSON {{{{")
+        with caplog.at_level(logging.WARNING, logger="deep_thought.gcal.output"):
+            result = generate_event_markdown(event)
+
+        assert "attendees" in caplog.text.lower()
+        assert "attendees:" not in result
+
+    def test_corrupt_recurrence_json_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Should log a warning when recurrence JSON is corrupt and omit the field."""
+        import logging
+
+        event = _make_test_event(recurrence="not valid JSON {{{{")
+        with caplog.at_level(logging.WARNING, logger="deep_thought.gcal.output"):
+            result = generate_event_markdown(event)
+
+        assert "recurrence" in caplog.text.lower()
+        assert "recurrence:" not in result

@@ -5,8 +5,9 @@ All functions accept an open sqlite3.Connection as their first argument and
 return plain Python types (dicts, lists, None). No business logic lives here —
 these are thin wrappers over SQL that the application layer calls directly.
 
-Upsert strategy: INSERT OR REPLACE replaces the entire row when the primary
-key conflicts. This is safe because we always provide all columns.
+Upsert strategy: INSERT ... ON CONFLICT(id) DO UPDATE SET, explicitly
+excluding `created_at` from the update so that the original API-provided
+creation timestamp is never overwritten by a re-pull.
 
 Timestamps: `synced_at` is always set to the current UTC time at the moment
 of the write, marking when the local database last received this record from
@@ -65,7 +66,7 @@ def upsert_project(conn: sqlite3.Connection, project_data: dict[str, Any]) -> No
     synced_at = _now_utc_iso()
     conn.execute(
         """
-        INSERT OR REPLACE INTO projects (
+        INSERT INTO projects (
             id, name, description, color,
             is_archived, is_favorite, is_inbox_project, is_shared, is_collapsed,
             order_index, parent_id, folder_id, view_style, url, workspace_id,
@@ -75,7 +76,25 @@ def upsert_project(conn: sqlite3.Connection, project_data: dict[str, Any]) -> No
             :is_archived, :is_favorite, :is_inbox_project, :is_shared, :is_collapsed,
             :order_index, :parent_id, :folder_id, :view_style, :url, :workspace_id,
             :can_assign_tasks, :created_at, :updated_at, :synced_at
-        );
+        )
+        ON CONFLICT(id) DO UPDATE SET
+            name              = excluded.name,
+            description       = excluded.description,
+            color             = excluded.color,
+            is_archived       = excluded.is_archived,
+            is_favorite       = excluded.is_favorite,
+            is_inbox_project  = excluded.is_inbox_project,
+            is_shared         = excluded.is_shared,
+            is_collapsed      = excluded.is_collapsed,
+            order_index       = excluded.order_index,
+            parent_id         = excluded.parent_id,
+            folder_id         = excluded.folder_id,
+            view_style        = excluded.view_style,
+            url               = excluded.url,
+            workspace_id      = excluded.workspace_id,
+            can_assign_tasks  = excluded.can_assign_tasks,
+            updated_at        = excluded.updated_at,
+            synced_at         = excluded.synced_at;
         """,
         {**project_data, "synced_at": synced_at},
     )
@@ -108,6 +127,24 @@ def get_project_by_id(conn: sqlite3.Connection, project_id: str) -> dict[str, An
     return _row_to_dict(cursor.fetchone())
 
 
+def get_project_ids_by_name(conn: sqlite3.Connection, project_name: str) -> list[str]:
+    """Return all project IDs whose name exactly matches the given string.
+
+    A project name is not guaranteed to be unique in Todoist, so this function
+    returns a list. In practice it will almost always contain zero or one entry.
+
+    Args:
+        conn: An open SQLite connection.
+        project_name: The display name of the project to look up.
+
+    Returns:
+        List of Todoist project ID strings matching the given name.
+        Empty list if no projects with that name exist.
+    """
+    cursor = conn.execute("SELECT id FROM projects WHERE name = ?;", (project_name,))
+    return [row["id"] for row in cursor.fetchall()]
+
+
 def delete_project(conn: sqlite3.Connection, project_id: str) -> None:
     """Delete a project by ID. Cascades to sections, tasks, and comments.
 
@@ -134,11 +171,17 @@ def upsert_section(conn: sqlite3.Connection, section_data: dict[str, Any]) -> No
     synced_at = _now_utc_iso()
     conn.execute(
         """
-        INSERT OR REPLACE INTO sections (
+        INSERT INTO sections (
             id, name, project_id, order_index, is_collapsed, synced_at
         ) VALUES (
             :id, :name, :project_id, :order_index, :is_collapsed, :synced_at
-        );
+        )
+        ON CONFLICT(id) DO UPDATE SET
+            name          = excluded.name,
+            project_id    = excluded.project_id,
+            order_index   = excluded.order_index,
+            is_collapsed  = excluded.is_collapsed,
+            synced_at     = excluded.synced_at;
         """,
         {**section_data, "synced_at": synced_at},
     )
@@ -190,7 +233,7 @@ def upsert_task(conn: sqlite3.Connection, task_data: dict[str, Any]) -> None:
     synced_at = _now_utc_iso()
     conn.execute(
         """
-        INSERT OR REPLACE INTO tasks (
+        INSERT INTO tasks (
             id, content, description,
             project_id, section_id, parent_id, order_index, priority,
             due_date, due_string, due_is_recurring, due_lang, due_timezone,
@@ -210,7 +253,33 @@ def upsert_task(conn: sqlite3.Connection, task_data: dict[str, Any]) -> None:
             :is_completed, :completed_at,
             :labels, :url,
             :created_at, :updated_at, :synced_at
-        );
+        )
+        ON CONFLICT(id) DO UPDATE SET
+            content          = excluded.content,
+            description      = excluded.description,
+            project_id       = excluded.project_id,
+            section_id       = excluded.section_id,
+            parent_id        = excluded.parent_id,
+            order_index      = excluded.order_index,
+            priority         = excluded.priority,
+            due_date         = excluded.due_date,
+            due_string       = excluded.due_string,
+            due_is_recurring = excluded.due_is_recurring,
+            due_lang         = excluded.due_lang,
+            due_timezone     = excluded.due_timezone,
+            deadline_date    = excluded.deadline_date,
+            deadline_lang    = excluded.deadline_lang,
+            duration_amount  = excluded.duration_amount,
+            duration_unit    = excluded.duration_unit,
+            assignee_id      = excluded.assignee_id,
+            assigner_id      = excluded.assigner_id,
+            creator_id       = excluded.creator_id,
+            is_completed     = excluded.is_completed,
+            completed_at     = excluded.completed_at,
+            labels           = excluded.labels,
+            url              = excluded.url,
+            updated_at       = excluded.updated_at,
+            synced_at        = excluded.synced_at;
         """,
         {**task_data, "synced_at": synced_at},
     )
@@ -298,6 +367,23 @@ def mark_task_synced(conn: sqlite3.Connection, task_id: str) -> None:
     )
 
 
+def mark_task_completed(conn: sqlite3.Connection, task_id: str) -> None:
+    """Set a task's is_completed flag and record the completion timestamp.
+
+    Both updated_at and synced_at are set to now so the task does not
+    appear as locally modified after completion.
+
+    Args:
+        conn: An open SQLite connection.
+        task_id: The Todoist string ID of the task.
+    """
+    now = _now_utc_iso()
+    conn.execute(
+        "UPDATE tasks SET is_completed = 1, completed_at = ?, updated_at = ?, synced_at = ? WHERE id = ?;",
+        (now, now, now, task_id),
+    )
+
+
 def delete_task(conn: sqlite3.Connection, task_id: str) -> None:
     """Delete a task by ID. Cascades to task_labels and comments.
 
@@ -324,11 +410,17 @@ def upsert_label(conn: sqlite3.Connection, label_data: dict[str, Any]) -> None:
     synced_at = _now_utc_iso()
     conn.execute(
         """
-        INSERT OR REPLACE INTO labels (
+        INSERT INTO labels (
             id, name, color, order_index, is_favorite, synced_at
         ) VALUES (
             :id, :name, :color, :order_index, :is_favorite, :synced_at
-        );
+        )
+        ON CONFLICT(id) DO UPDATE SET
+            name        = excluded.name,
+            color       = excluded.color,
+            order_index = excluded.order_index,
+            is_favorite = excluded.is_favorite,
+            synced_at   = excluded.synced_at;
         """,
         {**label_data, "synced_at": synced_at},
     )
@@ -444,13 +536,21 @@ def upsert_comment(conn: sqlite3.Connection, comment_data: dict[str, Any]) -> No
     synced_at = _now_utc_iso()
     conn.execute(
         """
-        INSERT OR REPLACE INTO comments (
+        INSERT INTO comments (
             id, task_id, project_id, content,
             posted_at, poster_id, attachment_json, synced_at
         ) VALUES (
             :id, :task_id, :project_id, :content,
             :posted_at, :poster_id, :attachment_json, :synced_at
-        );
+        )
+        ON CONFLICT(id) DO UPDATE SET
+            task_id         = excluded.task_id,
+            project_id      = excluded.project_id,
+            content         = excluded.content,
+            posted_at       = excluded.posted_at,
+            poster_id       = excluded.poster_id,
+            attachment_json = excluded.attachment_json,
+            synced_at       = excluded.synced_at;
         """,
         {**comment_data, "synced_at": synced_at},
     )

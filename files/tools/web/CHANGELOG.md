@@ -4,6 +4,11 @@
 
 ### Added
 
+- JS pagination support for index/listing pages: new `pagination` config option (`"none"` / `"scroll"` / `"click"`) controls how the crawler expands JS-rendered content before extracting article links; scroll mode scrolls to the page bottom and waits for height growth up to `max_paginations` iterations; click mode clicks the element matching `pagination_selector` until it disappears or `max_paginations` is reached; errors in individual pagination steps log a warning and return the HTML accumulated so far rather than crashing; pagination applies only to index pages, not individual article pages
+- `pagination_selector` config option: CSS selector string for the "load more" button (required when `pagination` is `"click"`)
+- `pagination_wait` config option: seconds to wait after each scroll or click before checking for new content (default: `2.0`)
+- `max_paginations` config option: maximum number of scroll/click iterations per index page (default: `10`)
+- `unwrap_tags` config option: list of `tag.class` patterns (e.g. `div.word`) to strip wrapper tags from HTML while preserving their text content — applied before HTML→markdown conversion; solves sites that wrap every word in animation divs (e.g. `claude.com/blog`); matching is case-insensitive and works with both single- and double-quoted class attributes; invalid HTML tag names in patterns are caught by `validate_config()`; excess newlines left after unwrapping are collapsed (same normalization as `strip_boilerplate`)
 - `strip_boilerplate` config option: list of regex patterns to remove from converted markdown before saving (applied after HTML→markdown conversion, before word counting)
 - `llms_lookback_days` config option: controls how many days of history to include in `llms-full.txt` and `llms.txt` (default: 30, set to 0 for current-run-only behavior)
 - `strip_path_prefix` config option: strips a URL path prefix from output file paths (e.g., `/docs/en` → files written without that prefix)
