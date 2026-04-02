@@ -14,6 +14,10 @@
 - `strip_path_prefix` config option: strips a URL path prefix from output file paths (e.g., `/docs/en` → files written without that prefix)
 - `strip_domain` config option: omits the domain directory from output file paths
 
+### Fixed
+
+- BFS graph broken on incremental re-crawls: when a cached page was skipped, its child links were never discovered, silently truncating the crawl tree at that node. Fixed by storing extracted child links as JSON in a new `child_links` column (migration `002_add_child_links.sql`) and implementing `_enqueue_children_from_db()` to re-enqueue them on cache hits without re-fetching the page. Pre-migration rows (`child_links` is `NULL`) are silently skipped at DEBUG level.
+
 ### Changed
 
 - `web init` now scaffolds the full workspace: copies default config, creates starter batch configs from templates, creates both output directories (`output/web/` and `docs/`), and initializes the database

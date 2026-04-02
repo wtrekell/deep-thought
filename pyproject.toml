@@ -112,3 +112,9 @@ markers = [
     "error_handling: marks tests for error handling scenarios",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+]
+

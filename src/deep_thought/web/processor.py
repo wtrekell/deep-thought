@@ -8,6 +8,7 @@ the configured mode. All runners share common page processing logic.
 from __future__ import annotations
 
 import contextlib
+import json
 import logging
 import sqlite3  # noqa: TC003 — sqlite3.Connection is used at runtime in function signatures
 import sys
@@ -590,6 +591,8 @@ def run_documentation_mode(
                 # Enqueue child links if we have not reached max depth
                 if current_depth < config.crawl.max_depth:
                     child_links = extract_internal_links(page_result.html, root_url)
+                    queries.update_page_child_links(conn, current_url, json.dumps(list(child_links)))
+                    conn.commit()
                     for child_url in child_links:
                         if child_url not in visited_urls and is_url_allowed(
                             child_url,
@@ -623,28 +626,49 @@ def _enqueue_children_from_db(
     root_url: str,
     current_depth: int,
 ) -> None:
-    """No-op stub: when a page is skipped via DB cache, its children cannot be re-enqueued
-    without re-fetching the HTML. This function is a placeholder for future enhancement
-    (e.g., storing extracted links in the DB). Currently skipped pages do not contribute
-    children to the BFS queue.
+    """Re-enqueue child links for a cached page using stored link data.
+
+    When a page is skipped because it was already successfully crawled, its
+    previously-extracted child links (stored as JSON in the ``child_links``
+    column) are parsed and filtered against the current crawl config, then
+    added to the BFS queue. This preserves full BFS graph traversal without
+    re-fetching the cached page.
+
+    If ``child_links`` is absent (rows pre-dating migration 002), the page's
+    children are silently skipped at DEBUG level — they will be discovered
+    naturally when those URLs are reached via other paths, or on the next
+    full crawl.
 
     Args:
         existing_row: The cached DB row for the skipped page.
-        url_queue: The BFS queue to potentially add children to.
+        url_queue: The BFS queue to add children to.
         visited_urls: Set of already-visited URLs.
         config: The WebConfig for filter settings.
         root_url: The crawl root URL.
         current_depth: The depth of the skipped page.
     """
-    # Children cannot be recovered without storing them in the DB — left for future work.
-    # Callers should be aware that BFS graph completeness is truncated at skipped pages.
-    logger.warning(
-        "Skipped cached page at depth %d (url=%r): child links cannot be re-enqueued "
-        "without re-fetching the HTML. BFS graph may be incomplete. "
-        "Use --force to re-crawl all pages and restore full graph traversal.",
-        current_depth,
-        existing_row.get("url", "<unknown>"),
-    )
+    child_links_json = existing_row.get("child_links")
+    if not child_links_json:
+        logger.debug(
+            "Cached page %r has no stored child links (pre-migration row); children not traversed.",
+            existing_row.get("url", "<unknown>"),
+        )
+        return
+
+    try:
+        child_links: list[str] = json.loads(str(child_links_json))
+    except (ValueError, TypeError):
+        logger.debug("Could not parse child_links for %r; skipping.", existing_row.get("url"))
+        return
+
+    for child_url in child_links:
+        if child_url not in visited_urls and is_url_allowed(
+            child_url,
+            config.crawl.include_patterns,
+            config.crawl.exclude_patterns,
+        ):
+            visited_urls.add(child_url)
+            url_queue.append((child_url, current_depth + 1))
 
 
 def run_direct_mode(

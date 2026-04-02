@@ -15,7 +15,6 @@ from rich.progress import (
 
 from deep_thought.progress import create_progress, spinner_context, track_items
 
-
 # ---------------------------------------------------------------------------
 # track_items
 # ---------------------------------------------------------------------------

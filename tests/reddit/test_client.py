@@ -11,6 +11,9 @@ from types import ModuleType
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import prawcore.exceptions  # type: ignore[import-untyped]
+import pytest
+
 # ---------------------------------------------------------------------------
 # Lazy-import helpers
 # ---------------------------------------------------------------------------
@@ -244,3 +247,53 @@ class TestFlattenCommentTree:
             result=result,
         )
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# RedditClient.get_comments
+# ---------------------------------------------------------------------------
+
+
+def _make_rate_limit_error(retry_after: str | None = None) -> prawcore.exceptions.TooManyRequests:
+    """Build a TooManyRequests exception with a mock response."""
+    mock_response = MagicMock()
+    mock_response.status_code = 429
+    mock_response.headers = {"retry-after": retry_after} if retry_after else {}
+    mock_response.text = "Too Many Requests"
+    return prawcore.exceptions.TooManyRequests(mock_response)
+
+
+class TestGetComments:
+    def _make_client(self) -> RedditClient:
+        """Return a RedditClient instance without calling __init__ (get_comments doesn't use _reddit)."""
+        return RedditClient.__new__(RedditClient)
+
+    @pytest.mark.error_handling
+    def test_too_many_requests_from_replace_more_propagates(self) -> None:
+        """TooManyRequests raised by replace_more() must propagate to the caller."""
+        client = self._make_client()
+        submission = MagicMock()
+        submission.id = "abc123"
+        submission.comments.replace_more.side_effect = _make_rate_limit_error(retry_after="5")
+
+        with pytest.raises(prawcore.exceptions.TooManyRequests):
+            client.get_comments(submission, max_depth=2, max_comments=50)
+
+    @pytest.mark.error_handling
+    def test_non_rate_limit_error_from_replace_more_logs_warning_and_returns_empty(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Non-429 errors from replace_more() must log a warning and return an empty list."""
+        import logging
+
+        client = self._make_client()
+        submission = MagicMock()
+        submission.id = "abc123"
+        submission.comments.replace_more.side_effect = RuntimeError("network error")
+        submission.comments.__iter__ = MagicMock(return_value=iter([]))
+
+        with caplog.at_level(logging.WARNING, logger="deep_thought.reddit.client"):
+            result = client.get_comments(submission, max_depth=2, max_comments=50)
+
+        assert result == []
+        assert any("abc123" in record.message for record in caplog.records)

@@ -15,6 +15,13 @@ Outstanding issues from the 2026-03-23 code review. Critical and high severity i
 - **File:** `llms.py`
 - A 1h 30s recording displays as "1h 0m". Acceptable for display purposes.
 
+## Resolved (2026-04-01)
+
+| ID   | Severity | File                          | Issue                                                                                     | Resolution                                                                                                                                                  |
+| ---- | -------- | ----------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| H-01 | High     | `processor.py`                | No retry or backoff on 429 — all subsequent rules fail instantly after rate limit is hit. Secondary bug caught in code review: `rate_limited` was initially set on every 429 (not just final failure), causing the inter-rule cooldown to trigger on recoverable rate limits. | Added exponential backoff retry (up to 3 attempts) on `TooManyRequests` in `process_rule`, plus 60s inter-rule cooldown in `run_collection` when rate limited. `rate_limited` flag corrected to set only on final retry failure. |
+| H-02 | High     | `client.py`, `processor.py`   | Per-post 429s during comment fetching were swallowed silently — `get_comments()` caught `TooManyRequests` in a broad `except Exception`, so the rate limit was invisible to the orchestration layer. The next post was tried immediately, exhausting the budget for the entire rule. | `get_comments()` now re-raises `TooManyRequests`; `process_rule()` catches it specifically, sleeps with backoff before the next post, and sets `rate_limited = True` to trigger the inter-rule cooldown. |
+
 ## Resolved (2026-03-30)
 
 | ID   | Severity | File                    | Issue                                                                                                                                                                | Resolution                                                                                                                         |

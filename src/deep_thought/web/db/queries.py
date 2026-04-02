@@ -16,7 +16,8 @@ conn.rollback() to discard changes on error.
 Note: The crawled_pages table and web_schema_version table are created by the
 DB agent via migration files in db/migrations/. The DB agent should create:
   - crawled_pages table with columns: url (PRIMARY KEY), rule_name, title,
-    status_code, word_count, output_path, status, created_at, updated_at, synced_at
+    status_code, word_count, output_path, status, child_links, created_at,
+    updated_at, synced_at
   - web_schema_version table with columns: key (PRIMARY KEY), value, updated_at
 """
 
@@ -139,6 +140,25 @@ def get_all_crawled_pages(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     cursor = conn.execute("SELECT * FROM crawled_pages ORDER BY url;")
     rows: list[sqlite3.Row] = cursor.fetchall()
     return _rows_to_dicts(rows)
+
+
+def update_page_child_links(conn: sqlite3.Connection, url: str, child_links_json: str) -> None:
+    """Store the JSON-encoded list of child links discovered from a crawled page.
+
+    Called after child links are extracted from a freshly-fetched page so that
+    subsequent cache-hit BFS traversals can re-enqueue children without
+    re-fetching the page HTML.
+
+    Args:
+        conn: An open SQLite connection.
+        url: The URL primary key of the crawled page row to update.
+        child_links_json: JSON-encoded list of child URL strings
+                          (e.g. ``'["https://example.com/a", "https://example.com/b"]'``).
+    """
+    conn.execute(
+        "UPDATE crawled_pages SET child_links = ? WHERE url = ?;",
+        (child_links_json, url),
+    )
 
 
 def delete_crawled_page(conn: sqlite3.Connection, url: str) -> None:

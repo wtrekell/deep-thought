@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import logging
 import sqlite3  # noqa: TC003
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+import prawcore.exceptions  # type: ignore[import-untyped]
 
 from deep_thought.progress import track_items
 from deep_thought.reddit.filters import apply_rule_filters
@@ -23,6 +26,14 @@ if TYPE_CHECKING:
     from deep_thought.reddit.config import RedditConfig, RuleConfig
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Rate-limit retry constants
+# ---------------------------------------------------------------------------
+
+_MAX_RETRIES = 3
+_BASE_BACKOFF_SECONDS = 10.0
+_DEFAULT_RATE_LIMIT_COOLDOWN = 60.0
 
 # ---------------------------------------------------------------------------
 # Result dataclass
@@ -38,6 +49,7 @@ class CollectionResult:
     posts_updated: int = 0
     posts_errored: int = 0
     errors: list[str] = field(default_factory=list)
+    rate_limited: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -69,9 +81,9 @@ def _build_output_path(
 
     from deep_thought.reddit.utils import slugify_title  # noqa: PLC0415
 
-    date_prefix = datetime.now(tz=UTC).strftime("%Y-%m-%d")
+    date_prefix = datetime.now(tz=UTC).strftime("%y%m%d")
     title_slug = slugify_title(title)
-    filename = f"{date_prefix}_{post_id}_{title_slug}.md"
+    filename = f"{date_prefix}-{post_id}_{title_slug}.md"
     return str(output_dir / rule_name / filename)
 
 
@@ -160,6 +172,28 @@ def _process_single_post(
     return ("updated" if is_update else "collected"), is_update
 
 
+def _get_retry_delay(retry_after: str | None, attempt: int) -> float:
+    """Return the number of seconds to wait before retrying after a 429.
+
+    Prefers the ``Retry-After`` header value when available, plus a 1-second
+    buffer to account for clock skew. Falls back to exponential backoff
+    (10s, 20s, 40s, …) when the header is absent or non-numeric.
+
+    Args:
+        retry_after: Value of the ``Retry-After`` response header, or None.
+        attempt: Zero-based retry attempt number.
+
+    Returns:
+        Delay in seconds.
+    """
+    if retry_after:
+        try:
+            return float(retry_after) + 1.0
+        except (ValueError, TypeError):
+            pass
+    return _BASE_BACKOFF_SECONDS * (2.0**attempt)
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -180,6 +214,9 @@ def process_rule(
 
     Stops early when the global post cap is reached. Per-post exceptions are
     caught, logged, and counted — the remaining posts continue processing.
+    TooManyRequests exceptions from comment fetching are handled specifically:
+    the tool sleeps for the backoff duration before continuing and sets
+    ``result.rate_limited`` so the inter-rule cooldown fires in ``run_collection``.
 
     Args:
         reddit_client: The RedditClient wrapping PRAW.
@@ -202,18 +239,42 @@ def process_rule(
 
     logger.info("Processing rule '%s' (subreddit: r/%s).", rule_config.name, rule_config.subreddit)
 
-    try:
-        submissions = reddit_client.get_submissions(
-            subreddit=rule_config.subreddit,
-            sort=rule_config.sort,
-            time_filter=rule_config.time_filter,
-            limit=rule_config.limit,
-        )
-    except Exception as fetch_error:
-        error_message = f"Failed to fetch submissions for rule '{rule_config.name}': {fetch_error}"
-        logger.error(error_message)
-        result.errors.append(error_message)
-        result.posts_errored += 1
+    submissions: list[Any] | None = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            submissions = reddit_client.get_submissions(
+                subreddit=rule_config.subreddit,
+                sort=rule_config.sort,
+                time_filter=rule_config.time_filter,
+                limit=rule_config.limit,
+            )
+            break
+        except prawcore.exceptions.TooManyRequests as rate_error:
+            delay = _get_retry_delay(rate_error.retry_after, attempt)
+            if attempt < _MAX_RETRIES - 1:
+                logger.warning(
+                    "Rate limited on rule '%s' (attempt %d/%d). Waiting %.0fs before retry.",
+                    rule_config.name,
+                    attempt + 1,
+                    _MAX_RETRIES,
+                    delay,
+                )
+                time.sleep(delay)
+            else:
+                result.rate_limited = True
+                error_message = f"Rate limited on rule '{rule_config.name}' after {_MAX_RETRIES} retries: {rate_error}"
+                logger.error(error_message)
+                result.errors.append(error_message)
+                result.posts_errored += 1
+                return result
+        except Exception as fetch_error:
+            error_message = f"Failed to fetch submissions for rule '{rule_config.name}': {fetch_error}"
+            logger.error(error_message)
+            result.errors.append(error_message)
+            result.posts_errored += 1
+            return result
+
+    if submissions is None:
         return result
 
     for submission in track_items(submissions, description=f"Rule: {rule_config.name}", total=rule_config.limit):
@@ -255,6 +316,15 @@ def process_rule(
                 result.posts_collected += 1
                 logger.debug("Collected post %s.", submission.id)
 
+        except prawcore.exceptions.TooManyRequests as rate_error:
+            state_key = f"{submission.id}:{submission.subreddit.display_name}:{rule_config.name}"
+            delay = _get_retry_delay(rate_error.retry_after, attempt=0)
+            error_message = f"Rate limited fetching comments for post {state_key}. Waiting {delay:.0f}s."
+            logger.warning(error_message)
+            result.errors.append(error_message)
+            result.posts_errored += 1
+            result.rate_limited = True
+            time.sleep(delay)
         except Exception as post_error:
             state_key = f"{submission.id}:{submission.subreddit.display_name}:{rule_config.name}"
             error_message = f"Error processing post {state_key}: {post_error}"
@@ -307,8 +377,9 @@ def run_collection(
             return aggregate_result
 
     global_post_count = 0
+    total_rules = len(rules_to_run)
 
-    for rule_config in track_items(rules_to_run, description="Processing rules"):
+    for rule_index, rule_config in enumerate(track_items(rules_to_run, description="Processing rules")):
         rule_result = process_rule(
             reddit_client=reddit_client,
             rule_config=rule_config,
@@ -325,7 +396,17 @@ def run_collection(
         aggregate_result.posts_updated += rule_result.posts_updated
         aggregate_result.posts_errored += rule_result.posts_errored
         aggregate_result.errors.extend(rule_result.errors)
+        if rule_result.rate_limited:
+            aggregate_result.rate_limited = True
 
         global_post_count += rule_result.posts_collected + rule_result.posts_updated
+
+        # Cooldown before the next rule when rate limiting was hit
+        if rule_result.rate_limited and rule_index < total_rules - 1:
+            logger.info(
+                "Rate limiting detected; pausing %.0fs before next rule.",
+                _DEFAULT_RATE_LIMIT_COOLDOWN,
+            )
+            time.sleep(_DEFAULT_RATE_LIMIT_COOLDOWN)
 
     return aggregate_result

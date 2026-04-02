@@ -106,7 +106,7 @@ def _build_frontmatter(
     lines.append(f"author: u/{author_name}")
     lines.append(f"score: {submission.score}")
     lines.append(f"num_comments: {submission.num_comments}")
-    escaped_url = str(submission.url).replace('"', "%22")
+    escaped_url = str(submission.url).replace('"', '\\"')
     lines.append(f'url: "{escaped_url}"')
     lines.append(f"is_video: {str(is_video).lower()}")
     if flair_text is not None:
