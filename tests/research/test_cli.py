@@ -389,7 +389,9 @@ class TestHandleSaveConfig:
 class TestCmdInit:
     """Tests for cmd_init."""
 
-    def test_prints_confirmation(self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_prints_confirmation(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Should print a confirmation message to stdout."""
         monkeypatch.chdir(tmp_path)
         bundled = tmp_path / "bundled.yaml"
@@ -402,7 +404,9 @@ class TestCmdInit:
         captured = capsys.readouterr()
         assert "Research Tool initialised" in captured.out
 
-    def test_uses_output_override(self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_uses_output_override(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Should use the --output override path instead of the default output dir."""
         monkeypatch.chdir(tmp_path)
         bundled = tmp_path / "bundled.yaml"
@@ -443,7 +447,9 @@ class TestCmdInit:
         assert project_config.exists()
         assert project_config.read_text() == "# bundled default\napi_key_env: TEST_KEY\n"
 
-    def test_skips_config_copy_if_exists(self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_skips_config_copy_if_exists(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Should not overwrite an existing project-level config file."""
         monkeypatch.chdir(tmp_path)
         bundled = tmp_path / "bundled.yaml"
@@ -473,7 +479,10 @@ class TestCmdConfig:
         """Should print all configuration fields when config is valid."""
         config_file = tmp_path / "config.yaml"
         config_file.write_text(
-            "api_key_env: MY_PERPLEXITY_KEY\nsearch_model: sonar\nresearch_model: sonar-deep-research\n",
+            "api_key_env: MY_PERPLEXITY_KEY\n"
+            "search_model: sonar\n"
+            "research_model: sonar-deep-research\n"
+            "output_dir: data/research/export/\n",
             encoding="utf-8",
         )
         args = argparse.Namespace(config=str(config_file))
@@ -486,7 +495,14 @@ class TestCmdConfig:
         """Should exit with code 1 when the config has validation issues."""
         config_file = tmp_path / "config.yaml"
         # api_key_env is empty, which triggers a validation issue.
-        config_file.write_text('api_key_env: ""\n', encoding="utf-8")
+        # All other required fields must be present so load_config() succeeds.
+        config_file.write_text(
+            'api_key_env: ""\n'
+            "search_model: sonar\n"
+            "research_model: sonar-deep-research\n"
+            "output_dir: data/research/export/\n",
+            encoding="utf-8",
+        )
         args = argparse.Namespace(config=str(config_file))
         with pytest.raises(SystemExit) as exit_info:
             cmd_config(args)
@@ -495,7 +511,14 @@ class TestCmdConfig:
     def test_prints_issues_to_stderr(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         """Should print validation issues to stderr when config is invalid."""
         config_file = tmp_path / "config.yaml"
-        config_file.write_text('api_key_env: ""\n', encoding="utf-8")
+        # All required fields present; api_key_env empty to trigger a validation warning.
+        config_file.write_text(
+            'api_key_env: ""\n'
+            "search_model: sonar\n"
+            "research_model: sonar-deep-research\n"
+            "output_dir: data/research/export/\n",
+            encoding="utf-8",
+        )
         args = argparse.Namespace(config=str(config_file))
         with pytest.raises(SystemExit):
             cmd_config(args)
@@ -515,7 +538,10 @@ class TestCmdSearch:
         """Return a Namespace with defaults suitable for cmd_search tests."""
         config_file = tmp_path / "config.yaml"
         config_file.write_text(
-            f"api_key_env: TEST_KEY\noutput_dir: {tmp_path}/output\n",
+            f"api_key_env: TEST_KEY\n"
+            f"search_model: sonar\n"
+            f"research_model: sonar-deep-research\n"
+            f"output_dir: {tmp_path}/output\n",
             encoding="utf-8",
         )
         defaults: dict[str, object] = {
@@ -588,7 +614,7 @@ class TestCmdSearch:
         mock_result.cost_usd = 0.0042
         mock_client = MagicMock()
         mock_client.search.return_value = mock_result
-        written_output_path = tmp_path / "output" / "2026-03-23_what-is-mlx.md"
+        written_output_path = tmp_path / "output" / "260323-what-is-mlx.md"
 
         with (
             patch.dict(
@@ -654,7 +680,10 @@ class TestCmdResearch:
         """Return a Namespace with defaults suitable for cmd_research tests."""
         config_file = tmp_path / "config.yaml"
         config_file.write_text(
-            f"api_key_env: TEST_KEY\noutput_dir: {tmp_path}/output\n",
+            f"api_key_env: TEST_KEY\n"
+            f"search_model: sonar\n"
+            f"research_model: sonar-deep-research\n"
+            f"output_dir: {tmp_path}/output\n",
             encoding="utf-8",
         )
         defaults: dict[str, object] = {
@@ -688,12 +717,12 @@ class TestCmdResearch:
         assert "dry-run" in captured.out
         assert "Compare MLX vs PyTorch" in captured.out
 
-    def test_prints_submitting_message_before_api_call(
+    def test_shows_spinner_before_api_call(
         self,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """Should print 'Submitting deep research query...' before making the API call."""
+        """Should show 'Researching...' spinner message on stderr before the API call."""
         args = self._make_research_args(tmp_path)
 
         mock_result = MagicMock()
@@ -719,7 +748,7 @@ class TestCmdResearch:
             cmd_research(args)
 
         captured = capsys.readouterr()
-        assert "Submitting deep research query" in captured.out
+        assert "Researching..." in captured.err
 
     def test_writes_file_and_prints_summary(
         self,
@@ -734,7 +763,7 @@ class TestCmdResearch:
         mock_result.cost_usd = 0.24
         mock_client = MagicMock()
         mock_client.research.return_value = mock_result
-        written_output_path = tmp_path / "output" / "2026-03-23_compare-mlx.md"
+        written_output_path = tmp_path / "output" / "260323-compare-mlx.md"
 
         with (
             patch.dict(

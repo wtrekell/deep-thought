@@ -146,9 +146,10 @@ def run_migrations(conn: sqlite3.Connection, migrations_dir: Path) -> None:
     sorted lexicographically, which keeps them in numeric order as long as
     the prefix width is consistent.
 
-    Each migration is applied inside its own transaction. If a migration
-    fails, the transaction is rolled back and the error is re-raised, leaving
-    the database in the last successfully applied state.
+    Each migration is applied atomically via conn.executescript(), which runs
+    the entire file in a single implicit transaction. If a migration fails,
+    the error is re-raised and the database is left in the last successfully
+    applied state.
 
     Args:
         conn: An open SQLite connection.
@@ -180,18 +181,11 @@ def run_migrations(conn: sqlite3.Connection, migrations_dir: Path) -> None:
 
         migration_sql = migration_file.read_text(encoding="utf-8")
 
-        # Strip SQL line comments before splitting on semicolons so that
-        # comment text containing semicolons does not produce false statement
-        # fragments.
-        sql_lines_without_comments = [line for line in migration_sql.splitlines() if not line.strip().startswith("--")]
-        migration_sql_stripped = "\n".join(sql_lines_without_comments)
-
         try:
-            conn.execute("BEGIN;")
-            for raw_statement in migration_sql_stripped.split(";"):
-                statement = raw_statement.strip()
-                if statement:
-                    conn.execute(statement)
+            # executescript() runs the SQL in a single implicit transaction and
+            # handles multi-statement files correctly without manual splitting.
+            conn.executescript(migration_sql)
+            # Record the applied version inside its own transaction
             _set_schema_version(conn, migration_number)
             conn.commit()
         except sqlite3.Error as database_error:

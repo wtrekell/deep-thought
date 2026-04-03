@@ -15,6 +15,16 @@ runtime the fields hold plain Python ``str`` values (ISO-8601 strings). Because 
 resolves the pattern types from the SDK's annotations rather than the runtime values, we
 call ``str()`` explicitly when extracting these fields so that our ``str`` annotations
 remain correct from both a mypy and a runtime perspective.
+
+Note on ``synced_at``
+---------------------
+All five DB tables (projects, sections, tasks, labels, comments) include a ``synced_at``
+column that records when the row was last written by a sync operation. This field is
+intentionally absent from every model class defined here — it is injected at write time
+by ``db/queries.py`` using the current UTC timestamp. Keeping ``synced_at`` out of these
+models avoids polluting the domain representation with a purely persistence-layer concern:
+the Todoist API never returns a ``synced_at`` value, and no business logic in this package
+should depend on it.
 """
 
 from __future__ import annotations
@@ -171,7 +181,7 @@ class TaskLocal:
         # Unpack Due fields
         due_date: str | None = None
         due_string: str | None = None
-        due_is_recurring: bool | None = None
+        due_is_recurring: bool = False
         due_lang: str | None = None
         due_timezone: str | None = None
         if task.due is not None:

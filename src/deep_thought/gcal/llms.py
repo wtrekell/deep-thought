@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def _strip_frontmatter(markdown_text: str) -> str:
+def strip_frontmatter(markdown_text: str) -> str:
     """Remove YAML frontmatter from a markdown string.
 
     Args:
@@ -51,7 +51,7 @@ def generate_llms_index(
 
     for file_path in event_files:
         text = file_path.read_text(encoding="utf-8")
-        body = _strip_frontmatter(text)
+        body = strip_frontmatter(text)
         first_line = ""
         for line in body.splitlines():
             stripped = line.strip()
@@ -82,7 +82,7 @@ def generate_llms_full(
 
     for file_path in event_files:
         text = file_path.read_text(encoding="utf-8")
-        body = _strip_frontmatter(text)
+        body = strip_frontmatter(text)
         sections.append(f"\n---\n\n## {file_path.name}\n\n{body}")
 
     return "\n".join(sections) + "\n"

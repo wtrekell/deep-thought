@@ -100,7 +100,7 @@ class TestWriteEmailFile:
             output_dir=tmp_path,
             rule_name="newsletters",
             subject="Weekly Digest",
-            date_str="2026-03-23",
+            date_str="260323",
         )
         assert file_path.exists()
         assert "weekly-digest" in file_path.name
@@ -113,7 +113,7 @@ class TestWriteEmailFile:
             output_dir=tmp_path,
             rule_name="receipts",
             subject="Invoice",
-            date_str="2026-03-23",
+            date_str="260323",
         )
         assert file_path.parent.name == "receipts"
 
@@ -124,9 +124,60 @@ class TestWriteEmailFile:
             output_dir=tmp_path,
             rule_name="test",
             subject="",
-            date_str="2026-03-23",
+            date_str="260323",
         )
         assert "no-subject" in file_path.name
+
+    def test_collision_appends_counter_suffix(self, tmp_path: Path) -> None:
+        """Should append _1, _2, ... when two files would have the same name (M2).
+
+        Subjects that produce the same 80-character slug (e.g., long subjects
+        that differ only after the truncation point) would overwrite each other
+        without collision detection.
+        """
+        shared_subject = "a" * 100  # Slugifies to 80 'a' chars — identical for both
+
+        first_path = write_email_file(
+            content="First email content",
+            output_dir=tmp_path,
+            rule_name="test_rule",
+            subject=shared_subject,
+            date_str="260330",
+        )
+        second_path = write_email_file(
+            content="Second email content",
+            output_dir=tmp_path,
+            rule_name="test_rule",
+            subject=shared_subject,
+            date_str="260330",
+        )
+
+        assert first_path.exists()
+        assert second_path.exists()
+        assert first_path != second_path
+        assert first_path.read_text() == "First email content"
+        assert second_path.read_text() == "Second email content"
+        assert "_1" in second_path.name
+
+    def test_collision_counter_increments_beyond_one(self, tmp_path: Path) -> None:
+        """Should use _2, _3, ... for the third and subsequent collisions."""
+        shared_subject = "collision subject"
+
+        paths = [
+            write_email_file(
+                content=f"Email {i}",
+                output_dir=tmp_path,
+                rule_name="test_rule",
+                subject=shared_subject,
+                date_str="260330",
+            )
+            for i in range(3)
+        ]
+
+        assert len({p.name for p in paths}) == 3, "All three files should have distinct names"
+        assert paths[0].read_text() == "Email 0"
+        assert paths[1].read_text() == "Email 1"
+        assert paths[2].read_text() == "Email 2"
 
 
 class TestAppendToRuleFile:

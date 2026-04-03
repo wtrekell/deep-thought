@@ -259,7 +259,9 @@ class TestRenderSectionFile:
             "is_completed": False,
         }
         content = _render_section_file(memory_conn, "Work", "Backlog", [task], base_config)
-        assert "claude: repo=deep-thought, branch=main" in content
+        assert "  - claude:" in content
+        assert "      repo: deep-thought" in content
+        assert "      branch: main" in content
 
     def test_omits_claude_marker_when_label_absent(
         self, memory_conn: sqlite3.Connection, base_config: TodoistConfig
@@ -282,7 +284,52 @@ class TestRenderSectionFile:
             "is_completed": False,
         }
         content = _render_section_file(memory_conn, "Work", "Backlog", [task], base_config)
-        assert "claude:" not in content
+        assert "- claude:" not in content
+
+    def test_renders_claude_block_without_repo_when_repo_not_configured(self, memory_conn: sqlite3.Connection) -> None:
+        """Should render branch but omit repo when claude.repo is None."""
+        from deep_thought.todoist.config import ClaudeConfig
+
+        config_no_repo = TodoistConfig(
+            api_token_env="TODOIST_API_TOKEN",
+            projects=["Work"],
+            pull_filters=PullFilters(
+                labels=FilterConfig(include=[], exclude=[]),
+                projects=FilterConfig(include=[], exclude=[]),
+                sections=FilterConfig(include=[], exclude=[]),
+                assignee=FilterConfig(include=[], exclude=[]),
+                has_due_date=None,
+            ),
+            push_filters=PushFilters(
+                labels=FilterConfig(include=[], exclude=[]),
+                assignee=FilterConfig(include=[], exclude=[]),
+                conflict_resolution="prompt",
+                require_confirmation=False,
+            ),
+            comments=CommentConfig(sync=True, include_attachments=False),
+            claude=ClaudeConfig(label="claude-code", repo=None, branch="main"),
+        )
+        task = {
+            "id": "t1",
+            "content": "Claude task no repo",
+            "description": "",
+            "project_id": "p1",
+            "section_id": "s1",
+            "parent_id": None,
+            "order_index": 1,
+            "priority": 1,
+            "due_date": None,
+            "due_string": None,
+            "due_is_recurring": None,
+            "deadline_date": None,
+            "assignee_id": None,
+            "labels": '["claude-code"]',
+            "is_completed": False,
+        }
+        content = _render_section_file(memory_conn, "Work", "Backlog", [task], config_no_repo)
+        assert "  - claude:" in content
+        assert "repo:" not in content
+        assert "      branch: main" in content
 
     def test_renders_due_date(self, memory_conn: sqlite3.Connection, base_config: TodoistConfig) -> None:
         task = {

@@ -214,16 +214,16 @@ def _build_frontmatter(
         opening and closing ``---`` delimiters and a trailing newline.
     """
     lines: list[str] = ["---"]
-    lines.append("tool: audio")
-    lines.append(f"source_file: {source_file}")
-    lines.append(f"engine: {engine}")
-    lines.append(f"model: {model}")
-    lines.append(f"language: {language}")
+    lines.append('tool: "audio"')
+    lines.append(f'source_file: "{source_file}"')
+    lines.append(f'engine: "{engine}"')
+    lines.append(f'model: "{model}"')
+    lines.append(f'language: "{language}"')
     lines.append(f"duration_seconds: {duration_seconds}")
     if speaker_count > 0:
         lines.append(f"speaker_count: {speaker_count}")
-    lines.append(f"output_mode: {output_mode}")
-    lines.append(f"processed_date: {processed_date}")
+    lines.append(f'output_mode: "{output_mode}"')
+    lines.append(f'processed_date: "{processed_date}"')
     lines.append("---")
     return "\n".join(lines) + "\n"
 
@@ -276,13 +276,14 @@ def write_transcript(
     output_dir = output_root / document_stem
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if output_mode == "segment":
+    if output_mode == "paragraph":
+        formatted_body = format_paragraph_mode(segments, pause_threshold=pause_threshold)
+    elif output_mode == "segment":
         formatted_body = format_segment_mode(segments)
     elif output_mode == "timestamp":
         formatted_body = format_timestamp_mode(segments)
     else:
-        # Default to paragraph mode for "paragraph" or any unrecognised value
-        formatted_body = format_paragraph_mode(segments, pause_threshold=pause_threshold)
+        raise ValueError(f"Unknown output_mode '{output_mode}'. Must be one of: 'paragraph', 'segment', 'timestamp'.")
 
     processed_date = datetime.now(tz=UTC).isoformat()
     frontmatter_block = _build_frontmatter(

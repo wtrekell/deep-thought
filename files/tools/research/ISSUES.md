@@ -1,18 +1,16 @@
 # Research Tool — Known Issues
 
-Issues identified during code review on 2026-03-23. Severity ratings: medium, low.
+No outstanding issues. Last verified 2026-04-03.
 
 ---
 
-## Medium Severity
+## Resolved (2026-03-30)
 
-### M1: `to_frontmatter_dict()` is dead code
+### M1: `to_frontmatter_dict()` was dead code
 
 **File:** `models.py:169-199`
 
-`ResearchResult.to_frontmatter_dict()` is defined and tested but never called anywhere. The `output.py` module builds frontmatter directly via `_build_frontmatter()` using string concatenation. This creates two separate representations of the same output logic that can diverge.
-
-**Recommendation:** Either use `to_frontmatter_dict()` inside `_build_frontmatter()` as the source of truth, or remove the method and its tests.
+Removed `ResearchResult.to_frontmatter_dict()` and its tests. `_build_frontmatter()` in `output.py` is the sole source of truth for YAML frontmatter serialization.
 
 ---
 
@@ -20,29 +18,23 @@ Issues identified during code review on 2026-03-23. Severity ratings: medium, lo
 
 **File:** `output.py:119-127`
 
-Source titles and snippets are rendered directly into markdown link syntax without escaping. If a title contains markdown special characters (e.g., `[brackets]`, `*asterisks*`), the rendered markdown link becomes malformed.
-
-**Recommendation:** Add a helper to escape markdown special characters in titles and snippets before rendering them into `[title](url)` syntax.
+Added `_escape_markdown()` helper that escapes `` ` ``, `*`, `_`, `[`, and `]`. Applied to source titles and snippets before rendering into `[title](url)` syntax. Tests added for the helper and for integration with `generate_research_markdown()`.
 
 ---
 
-### M3: Config loading silently applies defaults for required fields
+### M3: Config loading silently applied defaults for required fields
 
 **File:** `config.py:95-101`
 
-The spec states all config values except `default_recency` are required. However, `load_config()` uses `.get()` with hardcoded defaults for every field. A malformed config with missing keys silently uses defaults instead of alerting the user.
-
-**Recommendation:** Use direct key access (e.g., `raw_dict["api_key_env"]`) for required fields so that a missing key raises `KeyError` with a clear message.
+Changed `api_key_env`, `search_model`, `research_model`, and `output_dir` to use direct key access (`raw_dict["key"]`) in `load_config()`. Missing required fields now raise `KeyError` immediately. Updated affected tests to include all required fields in their config fixtures.
 
 ---
 
-### M4: Config validation does not check `output_dir`
+### M4: Config validation did not check `output_dir`
 
 **File:** `config.py:105-140`
 
-`validate_config()` checks `api_key_env`, `search_model`, `research_model`, retry settings, and `default_recency`, but does not validate that `output_dir` is a non-empty string. An empty `output_dir` would cause confusing errors at file-write time.
-
-**Recommendation:** Add validation: `output_dir` must be a non-empty string.
+Added validation: `output_dir` must be a non-empty string. Added `test_catches_empty_output_dir` in `test_config.py`.
 
 ---
 
@@ -50,9 +42,7 @@ The spec states all config values except `default_recency` are required. However
 
 **File:** `models.py:139-140`
 
-`ResearchResult.from_api_response()` defaults to an empty string if `choices[0].message.content` is missing. A malformed API response produces a result with an empty answer rather than raising an error.
-
-**Recommendation:** Validate that the answer text is non-empty and raise `ValueError` if the API returned no content.
+`from_api_response()` now raises `ValueError` when the extracted answer text is empty. Added two tests: empty string content and missing `choices` key.
 
 ---
 
@@ -60,41 +50,31 @@ The spec states all config values except `default_recency` are required. However
 
 **File:** `researcher.py:63`
 
-The httpx client uses `timeout=httpx.Timeout(30.0, read=300.0)` — a 5-minute read timeout. For the `search` command (typical 2-10 seconds), this is excessive. If the API hangs after sending headers, the client waits 5 minutes before timing out.
-
-**Recommendation:** Use a tighter read timeout (e.g., 60 seconds). The async `research` command has its own 10-minute polling timeout, so individual requests don't need 5 minutes.
+Reduced read timeout from 300 seconds to 60 seconds. Added an inline comment explaining the rationale.
 
 ---
 
-### M7: `SearchResult` defaults to empty strings for title and URL
+### M7: `SearchResult` defaulted to empty strings for title and URL
 
 **File:** `models.py:52-54`
 
-`SearchResult.from_api_dict()` defaults `title` and `url` to empty strings via `.get("title", "")`. An empty title or URL makes the source citation unusable in the markdown output but is silently accepted.
-
-**Recommendation:** Log a warning when title or URL is empty, or use fallback values like `"(untitled)"` / `"(missing url)"`.
+`from_api_dict()` now logs a `WARNING` when title or URL is empty. Added `TestSearchResultWarnings` in `test_models.py` covering empty title, empty URL, missing title key, and the no-warning-for-valid-source case.
 
 ---
 
-### M8: Domain error message uses inconsistent terminology
+### M8: Domain error message used inconsistent terminology
 
 **File:** `cli.py:156-159`
 
-The error message for mixed domain types says "deny" while the spec and help text use "exclude." Minor terminology mismatch.
-
-**Recommendation:** Change "deny" to "exclude" for consistency with spec language.
+Changed "deny" to "exclude" in the mixed-domain `ValueError` message to match spec and help-text terminology.
 
 ---
 
-## Low Severity
-
-### L1: Version string is hardcoded
+### L1: Version string was hardcoded
 
 **File:** `cli.py:33`
 
-`_VERSION = "0.1.0"` is a hardcoded module constant that must be manually kept in sync with `pyproject.toml`. If the package version is bumped, the CLI version will be stale.
-
-**Recommendation:** Use `importlib.metadata.version("deep-thought")` to read the version from package metadata at runtime.
+Replaced `_VERSION = "0.1.0"` with `_get_version()` using `importlib.metadata.version("deep-thought")` and a `PackageNotFoundError` fallback to `"unknown"`.
 
 ---
 
@@ -102,29 +82,23 @@ The error message for mixed domain types says "deny" while the spec and help tex
 
 **File:** `tests/research/test_output.py`
 
-Tests verify that frontmatter is generated with expected content, but no test parses the generated YAML back with `yaml.safe_load()` to verify it is syntactically valid. Subtle escaping bugs could produce invalid YAML that string assertions miss.
-
-**Recommendation:** Add a roundtrip test: generate frontmatter, extract the YAML between `---` delimiters, parse with `yaml.safe_load()`, and verify key fields match.
+Added `test_yaml_roundtrip` to `TestBuildFrontmatter`: generates frontmatter, parses the YAML body with `yaml.safe_load()`, and verifies key fields. Includes a note that `yaml.safe_load` parses ISO timestamps as `datetime` objects.
 
 ---
 
-### L3: PerplexityClient does not implement context manager protocol
+### L3: `PerplexityClient` did not implement context manager protocol
 
 **File:** `researcher.py:37-64`
 
-The class docstring says "use it as a context manager" but `__enter__` and `__exit__` are not implemented. Callers must use `try/finally` with `close()`.
-
-**Recommendation:** Add `__enter__` and `__exit__` methods so the client can be used with `with` statements.
+Added `__enter__` (returns `self`) and `__exit__` (calls `self.close()`) methods so the client can be used in a `with` statement.
 
 ---
 
-### L4: Retry-After header only handles integer seconds
+### L4: `Retry-After` header only handled integer seconds
 
 **File:** `researcher.py:310-315`
 
-The retry logic parses `Retry-After` as `float()` only. Per RFC 7231, this header can also be an HTTP-date string, which would fail `float()` conversion and silently fall back to exponential backoff.
-
-**Recommendation:** Add HTTP-date parsing as a fallback, or document that date-format headers are not supported.
+Added a comment documenting that HTTP-date format is not supported and will fall back silently to exponential backoff.
 
 ---
 
@@ -132,16 +106,12 @@ The retry logic parses `Retry-After` as `float()` only. Per RFC 7231, this heade
 
 **File:** `output.py:77`
 
-The cost field is rendered as a raw float (e.g., `0.006000000000000001`). Very small or floating-point-imprecise costs produce unwieldy frontmatter values.
-
-**Recommendation:** Format with fixed precision (e.g., `f"{result.cost_usd:.6f}"`) and strip trailing zeros.
+Formatted with `f"{result.cost_usd:.6f}".rstrip("0").rstrip(".")` to produce clean decimal output. Added `test_cost_formatted_with_precision` and `test_cost_strips_floating_point_noise` in `test_output.py`.
 
 ---
 
-### L6: Logging setup happens after --save-config
+### L6: Logging setup happened after `--save-config`
 
 **File:** `cli.py:500-505, 553-558`
 
-`_setup_logging()` is called after `--save-config` is handled. If `--save-config` is used, logging is never configured. While `--save-config` exits immediately, any errors during config writing are not logged.
-
-**Recommendation:** Move `_setup_logging()` to before the `--save-config` check.
+Moved `_setup_logging()` to before the `--save-config` check in both `search_main()` and `research_main()` so logging is always configured before any code runs.

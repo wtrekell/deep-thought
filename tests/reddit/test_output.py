@@ -1,7 +1,7 @@
 """Tests for markdown generation in deep_thought.reddit.output.
 
 Tests cover frontmatter correctness, comment nesting, image inclusion,
-word counting, and file writing.
+word counting, file writing, comment depth calculation, and nested comment rendering.
 """
 
 from __future__ import annotations
@@ -12,12 +12,14 @@ from deep_thought.reddit.config import RuleConfig
 from deep_thought.reddit.output import (
     _build_frontmatter,
     _extract_image_url,
-    _get_author_name,
+    _get_comment_depth,
     _render_comment,
+    _render_comments_section,
     count_words,
     generate_markdown,
     write_post_file,
 )
+from deep_thought.reddit.utils import get_author_name as _get_author_name
 from tests.reddit.conftest import make_mock_comment, make_mock_submission
 
 # ---------------------------------------------------------------------------
@@ -76,15 +78,13 @@ class TestCountWords:
 
 class TestGetAuthorName:
     def test_extracts_author_when_present(self) -> None:
-        """Author name should be extracted from a PRAW object."""
+        """Author name should be extracted from a PRAW author object."""
         submission = make_mock_submission(author_name="test_author")
-        assert _get_author_name(submission) == "test_author"
+        assert _get_author_name(submission.author) == "test_author"
 
     def test_returns_deleted_when_author_is_none(self) -> None:
         """None author should produce the '[deleted]' placeholder."""
-        submission = make_mock_submission()
-        submission.author = None
-        assert _get_author_name(submission) == "[deleted]"
+        assert _get_author_name(None) == "[deleted]"
 
 
 # ---------------------------------------------------------------------------
@@ -328,3 +328,145 @@ class TestWritePostFile:
             title="test",
         )
         assert output_path.exists()
+
+
+# ---------------------------------------------------------------------------
+# _get_comment_depth — T-06: parent-chain traversal
+# ---------------------------------------------------------------------------
+
+
+class TestGetCommentDepth:
+    def test_top_level_comment_returns_zero(self) -> None:
+        """A comment whose parent is the submission itself must have depth 0."""
+        submission = make_mock_submission(post_id="abc123")
+        comment = make_mock_comment(parent_id="t3_abc123")
+        depth = _get_comment_depth(comment, submission, comment_lookup=None)
+        assert depth == 0
+
+    def test_direct_reply_returns_one_without_lookup(self) -> None:
+        """A reply to a top-level comment returns depth 1 when no lookup is provided."""
+        submission = make_mock_submission(post_id="abc123")
+        reply = make_mock_comment(comment_id="c2", parent_id="t1_c1")
+        depth = _get_comment_depth(reply, submission, comment_lookup=None)
+        assert depth == 1
+
+    def test_depth_two_with_comment_lookup(self) -> None:
+        """A comment two levels deep must return depth 2 when the lookup is provided."""
+        submission = make_mock_submission(post_id="abc123")
+        top_comment = make_mock_comment(comment_id="c1", parent_id="t3_abc123")
+        reply_1 = make_mock_comment(comment_id="c2", parent_id="t1_c1")
+        reply_2 = make_mock_comment(comment_id="c3", parent_id="t1_c2")
+
+        comment_lookup = {
+            "t1_c1": top_comment,
+            "t1_c2": reply_1,
+            "t1_c3": reply_2,
+        }
+        depth = _get_comment_depth(reply_2, submission, comment_lookup=comment_lookup)
+        assert depth == 2
+
+    def test_depth_three_with_comment_lookup(self) -> None:
+        """Three levels deep must return depth 3."""
+        submission = make_mock_submission(post_id="abc123")
+        c1 = make_mock_comment(comment_id="c1", parent_id="t3_abc123")
+        c2 = make_mock_comment(comment_id="c2", parent_id="t1_c1")
+        c3 = make_mock_comment(comment_id="c3", parent_id="t1_c2")
+        c4 = make_mock_comment(comment_id="c4", parent_id="t1_c3")
+
+        comment_lookup = {
+            "t1_c1": c1,
+            "t1_c2": c2,
+            "t1_c3": c3,
+            "t1_c4": c4,
+        }
+        depth = _get_comment_depth(c4, submission, comment_lookup=comment_lookup)
+        assert depth == 3
+
+    def test_safety_cap_at_ten(self) -> None:
+        """The depth cap of 10 must prevent infinite loops on malformed data."""
+        submission = make_mock_submission(post_id="abc123")
+
+        # Build a very deep chain — deeper than the safety cap of 10
+        comments = {}
+        previous_id = "t3_abc123"
+        for i in range(15):
+            cid = f"c{i}"
+            comment = make_mock_comment(comment_id=cid, parent_id=previous_id)
+            comments[f"t1_{cid}"] = comment
+            previous_id = f"t1_{cid}"
+
+        deepest_comment = comments["t1_c14"]
+        depth = _get_comment_depth(deepest_comment, submission, comment_lookup=comments)
+        assert depth <= 10
+
+    def test_missing_parent_in_lookup_terminates_early(self) -> None:
+        """If a parent is not found in the lookup, traversal stops without raising."""
+        submission = make_mock_submission(post_id="abc123")
+        orphan_comment = make_mock_comment(comment_id="c99", parent_id="t1_missing")
+        # Empty lookup — parent t1_missing won't be found
+        depth = _get_comment_depth(orphan_comment, submission, comment_lookup={})
+        assert isinstance(depth, int)
+
+
+# ---------------------------------------------------------------------------
+# _render_comments_section — T-07: nested comment rendering
+# ---------------------------------------------------------------------------
+
+
+class TestRenderCommentsSection:
+    def test_empty_comments_returns_empty_string(self) -> None:
+        """With no comments, the section should be an empty string."""
+        submission = make_mock_submission(post_id="abc123")
+        result = _render_comments_section([], submission)
+        assert result == ""
+
+    def test_single_top_level_comment(self) -> None:
+        """A single top-level comment should produce a ## Comments heading and the comment body."""
+        submission = make_mock_submission(post_id="abc123")
+        comment = make_mock_comment(body="Top level comment here.", parent_id="t3_abc123")
+        result = _render_comments_section([comment], submission)
+        assert "## Comments" in result
+        assert "Top level comment here." in result
+
+    def test_nested_comment_uses_blockquote_indent(self) -> None:
+        """A reply to a top-level comment should appear with blockquote (>) formatting."""
+        submission = make_mock_submission(post_id="abc123")
+        top_comment = make_mock_comment(comment_id="c1", body="Top level.", parent_id="t3_abc123")
+        reply = make_mock_comment(comment_id="c2", body="A reply.", parent_id="t1_c1")
+        result = _render_comments_section([top_comment, reply], submission)
+        assert ">" in result
+        assert "A reply." in result
+
+    def test_multiple_top_level_comments(self) -> None:
+        """Multiple top-level comments should all appear under the ## Comments heading."""
+        submission = make_mock_submission(post_id="abc123")
+        comment_a = make_mock_comment(comment_id="c1", body="First comment.", parent_id="t3_abc123")
+        comment_b = make_mock_comment(comment_id="c2", body="Second comment.", parent_id="t3_abc123")
+        result = _render_comments_section([comment_a, comment_b], submission)
+        assert "First comment." in result
+        assert "Second comment." in result
+
+    def test_deep_nesting_increases_blockquote_level(self) -> None:
+        """A depth-2 reply must have more > characters than a depth-1 reply."""
+        submission = make_mock_submission(post_id="abc123")
+        c1 = make_mock_comment(comment_id="c1", body="Level 1.", parent_id="t3_abc123")
+        c2 = make_mock_comment(comment_id="c2", body="Level 2.", parent_id="t1_c1")
+        c3 = make_mock_comment(comment_id="c3", body="Level 3.", parent_id="t1_c2")
+
+        result = _render_comments_section([c1, c2, c3], submission)
+
+        # Count the > characters in lines containing each comment body
+        lines_with_level_2 = [line for line in result.splitlines() if "Level 2." in line]
+        lines_with_level_3 = [line for line in result.splitlines() if "Level 3." in line]
+
+        # Level 3 must have more > than level 2
+        assert lines_with_level_3
+        assert lines_with_level_2
+        assert lines_with_level_3[0].count(">") > lines_with_level_2[0].count(">")
+
+    def test_comments_section_includes_comment_heading(self) -> None:
+        """The section must start with a ## Comments heading."""
+        submission = make_mock_submission(post_id="abc123")
+        comment = make_mock_comment(parent_id="t3_abc123")
+        result = _render_comments_section([comment], submission)
+        assert result.startswith("## Comments")

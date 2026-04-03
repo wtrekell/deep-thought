@@ -52,6 +52,11 @@ def minimal_crawl_config() -> CrawlConfig:
         strip_domain=False,
         llms_lookback_days=30,
         strip_boilerplate=[],
+        unwrap_tags=[],
+        pagination="none",
+        pagination_selector=None,
+        pagination_wait=2.0,
+        max_paginations=10,
     )
 
 
@@ -657,6 +662,11 @@ class TestMain:
                     strip_domain=False,
                     llms_lookback_days=30,
                     strip_boilerplate=[],
+                    unwrap_tags=[],
+                    pagination="none",
+                    pagination_selector=None,
+                    pagination_wait=2.0,
+                    max_paginations=10,
                 )
             )
             main()

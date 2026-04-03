@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
+
+import pytest
 
 from deep_thought.research.models import ResearchResult, SearchResult
 
@@ -216,64 +219,70 @@ class TestFromApiResponse:
         )
         assert result.cost_usd == 0.0
 
-
-# ---------------------------------------------------------------------------
-# TestToFrontmatterDict
-# ---------------------------------------------------------------------------
-
-
-class TestToFrontmatterDict:
-    """Tests for ResearchResult.to_frontmatter_dict."""
-
-    def _make_result(self, **overrides: object) -> ResearchResult:
-        """Return a ResearchResult with sensible defaults, optionally overridden."""
-        defaults: dict[str, object] = {
-            "query": "What is MLX?",
-            "mode": "search",
-            "model": "sonar",
-            "recency": None,
-            "domains": [],
-            "context_files": [],
-            "answer": "MLX is Apple's ML framework.",
+    def test_raises_value_error_for_empty_answer(self) -> None:
+        """Should raise ValueError when the API response contains no answer text."""
+        empty_answer_response: dict[str, object] = {
+            "choices": [{"message": {"content": ""}}],
             "search_results": [],
-            "related_questions": [],
-            "cost_usd": 0.005,
-            "processed_date": "2026-03-23T12:00:00Z",
+            "usage": {"cost": {"total_cost": 0.001}},
         }
-        defaults.update(overrides)
-        return ResearchResult(**defaults)  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="empty answer"):
+            ResearchResult.from_api_response(
+                response_data=empty_answer_response,
+                query="test query",
+                mode="search",
+                model="sonar",
+                recency=None,
+                domains=[],
+                context_files=[],
+            )
 
-    def test_includes_required_fields(self) -> None:
-        """Should always include tool, query, mode, model, cost_usd, and processed_date."""
-        result = self._make_result()
-        frontmatter_dict = result.to_frontmatter_dict()
-        assert frontmatter_dict["tool"] == "research"
-        assert frontmatter_dict["query"] == "What is MLX?"
-        assert frontmatter_dict["mode"] == "search"
-        assert frontmatter_dict["model"] == "sonar"
-        assert frontmatter_dict["cost_usd"] == 0.005
-        assert frontmatter_dict["processed_date"] == "2026-03-23T12:00:00Z"
+    def test_raises_value_error_for_missing_choices(self) -> None:
+        """Should raise ValueError when the choices array is missing entirely."""
+        missing_choices_response: dict[str, object] = {
+            "search_results": [],
+            "usage": {"cost": {"total_cost": 0.001}},
+        }
+        with pytest.raises(ValueError, match="empty answer"):
+            ResearchResult.from_api_response(
+                response_data=missing_choices_response,
+                query="test query",
+                mode="search",
+                model="sonar",
+                recency=None,
+                domains=[],
+                context_files=[],
+            )
 
-    def test_omits_none_recency(self) -> None:
-        """Should not include recency in the dict when it is None."""
-        result = self._make_result(recency=None)
-        frontmatter_dict = result.to_frontmatter_dict()
-        assert "recency" not in frontmatter_dict
 
-    def test_includes_recency_when_set(self) -> None:
-        """Should include recency in the dict when it holds a non-None value."""
-        result = self._make_result(recency="week")
-        frontmatter_dict = result.to_frontmatter_dict()
-        assert frontmatter_dict["recency"] == "week"
+# ---------------------------------------------------------------------------
+# TestSearchResultWarnings
+# ---------------------------------------------------------------------------
 
-    def test_omits_empty_domains(self) -> None:
-        """Should not include domains in the dict when the list is empty."""
-        result = self._make_result(domains=[])
-        frontmatter_dict = result.to_frontmatter_dict()
-        assert "domains" not in frontmatter_dict
 
-    def test_omits_empty_context_files(self) -> None:
-        """Should not include context_files in the dict when the list is empty."""
-        result = self._make_result(context_files=[])
-        frontmatter_dict = result.to_frontmatter_dict()
-        assert "context_files" not in frontmatter_dict
+class TestSearchResultWarnings:
+    """Tests for SearchResult.from_api_dict warning behaviour."""
+
+    def test_warns_on_empty_title(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Should log a warning when the API returns a source with an empty title."""
+        with caplog.at_level(logging.WARNING, logger="deep_thought.research.models"):
+            SearchResult.from_api_dict({"title": "", "url": "https://example.com"})
+        assert any("empty title" in record.message for record in caplog.records)
+
+    def test_warns_on_empty_url(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Should log a warning when the API returns a source with an empty URL."""
+        with caplog.at_level(logging.WARNING, logger="deep_thought.research.models"):
+            SearchResult.from_api_dict({"title": "Some Title", "url": ""})
+        assert any("empty URL" in record.message for record in caplog.records)
+
+    def test_warns_on_missing_title_key(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Should log a warning when the title key is absent from the source dict."""
+        with caplog.at_level(logging.WARNING, logger="deep_thought.research.models"):
+            SearchResult.from_api_dict({"url": "https://example.com"})
+        assert any("empty title" in record.message for record in caplog.records)
+
+    def test_no_warning_for_valid_source(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Should not log any warnings when both title and URL are populated."""
+        with caplog.at_level(logging.WARNING, logger="deep_thought.research.models"):
+            SearchResult.from_api_dict({"title": "Valid Title", "url": "https://example.com"})
+        assert caplog.records == []

@@ -220,7 +220,7 @@ class TestWritePage:
         assert "tool: web" in file_content
 
     def test_frontmatter_includes_source_url(self, output_root: Path) -> None:
-        """The frontmatter must include the source URL of the crawled page."""
+        """The frontmatter must include the source URL quoted to handle colons safely."""
         url = "https://example.com/my-page"
         result_path = write_page(
             markdown_text="Content here.",
@@ -231,7 +231,26 @@ class TestWritePage:
             output_root=output_root,
         )
         file_content = result_path.read_text(encoding="utf-8")
-        assert f"url: {url}" in file_content
+        assert f'url: "{url}"' in file_content
+
+    def test_frontmatter_url_is_quoted_to_handle_colons(self, output_root: Path) -> None:
+        """URLs containing colons must be double-quoted in YAML frontmatter.
+
+        Bare YAML values that contain colons are ambiguous — a YAML parser may
+        misinterpret them as key-value separators. The url field must always be
+        double-quoted so it round-trips correctly regardless of URL structure.
+        """
+        url = "https://example.com/path?key=value&other=thing"
+        result_path = write_page(
+            markdown_text="Content.",
+            url=url,
+            mode="blog",
+            title=None,
+            word_count=1,
+            output_root=output_root,
+        )
+        file_content = result_path.read_text(encoding="utf-8")
+        assert f'url: "{url}"' in file_content
 
     def test_frontmatter_includes_mode(self, output_root: Path) -> None:
         """The frontmatter must include the crawl mode used."""
@@ -273,7 +292,7 @@ class TestWritePage:
             output_root=output_root,
         )
         file_content = result_path.read_text(encoding="utf-8")
-        assert "title: My Title" in file_content
+        assert 'title: "My Title"' in file_content
 
     def test_title_is_omitted_when_none(self, output_root: Path) -> None:
         """When title is None, no 'title:' field must appear in the frontmatter."""

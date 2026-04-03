@@ -79,7 +79,7 @@ Running `reddit` with no arguments shows help. Collect is the default operation 
 
 ```
 files/tools/reddit/
-├── requirements.md              # This document
+├── 260322-requirements.md       # This document
 ├── api-model.md                 # PRAW SDK model reference (Submission, Comment, Subreddit)
 └── CHANGELOG.md                 # Release history
 
@@ -97,7 +97,10 @@ src/deep_thought/reddit/
 │       └── 001_init_schema.sql
 ├── filters.py                   # Score, age, keyword, flair filtering
 ├── output.py                    # Markdown + YAML frontmatter generation
+├── image_extractor.py           # Image download: extracts URLs from markdown, saves to img/
+├── embeddings.py                # Qdrant write: embeds collected posts (optional)
 ├── llms.py                      # .llms.txt / .llms-full.txt generation
+├── utils.py                     # Shared helpers: slugify_title (delegates to text_utils), get_author_name
 └── client.py                    # PRAW API client wrapper
 
 data/reddit/
@@ -127,7 +130,7 @@ max_posts_per_run: 500 # Global cap across all rules per invocation
 
 # Output
 output_dir: "data/reddit/export/"
-generate_llms_files: false          # Set true to generate .llms.txt / .llms-full.txt per rule
+generate_llms_files: false # Set true to generate .llms.txt / .llms-full.txt per rule
 
 rules:
   - name: "python_top_week"
@@ -168,7 +171,7 @@ rules:
 | `search_comments`   | Extend keyword matching to comment bodies                      |
 | `max_comment_depth` | Recursion depth for comment trees (default: 3)                 |
 | `max_comments`      | Max comments to collect per post (default: 200)                |
-| `include_images`    | Include image URLs in output; download linked images to `img/` |
+| `include_images`    | Download direct image links (jpg/png/gif/webp) to `img/` subdirectory and rewrite markdown references to local paths. Failures log a warning and leave the original URL. |
 
 ## Data Format
 
@@ -176,10 +179,10 @@ rules:
 
 ```
 data/reddit/export/{rule_name}/
-├── {date}_{post_id}_{title_slug}.md
+├── {YYMMDD}-{post_id}_{title_slug}.md
 └── llm/
-    ├── {date}_{post_id}_{title_slug}.llms.txt
-    └── {date}_{post_id}_{title_slug}.llms-full.txt
+    ├── {YYMMDD}-{post_id}_{title_slug}.llms.txt
+    └── {YYMMDD}-{post_id}_{title_slug}.llms-full.txt
 ```
 
 ### Frontmatter Schema
@@ -258,8 +261,8 @@ Index file per rule in the export root, following the llmstxt.org convention:
 
 ## Posts
 
-- [{title_slug}.md]({rule_name}/{date}_{post_id}_{title_slug}.md): r/{subreddit}, score {score}, {word_count} words
-- [{title_slug}.md]({rule_name}/{date}_{post_id}_{title_slug}.md): r/{subreddit}, score {score}, {word_count} words
+- [{title_slug}.md]({rule_name}/{YYMMDD}-{post_id}_{title_slug}.md): r/{subreddit}, score {score}, {word_count} words
+- [{title_slug}.md]({rule_name}/{YYMMDD}-{post_id}_{title_slug}.md): r/{subreddit}, score {score}, {word_count} words
 ```
 
 ## Error Handling
@@ -282,4 +285,3 @@ Index file per rule in the export root, following the llmstxt.org convention:
 - Write docstrings on every test method.
 - Test directory: `tests/reddit/` with `conftest.py` for shared fixtures
 - Fixture data files stored in `tests/reddit/fixtures/`
-

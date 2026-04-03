@@ -41,7 +41,7 @@ def get_data_dir() -> Path:
     """
     env_override = os.environ.get("DEEP_THOUGHT_DATA_DIR")
     if env_override:
-        return Path(env_override)
+        return Path(env_override) / "audio"
     return _project_root() / "data" / "audio"
 
 
@@ -181,18 +181,11 @@ def run_migrations(conn: sqlite3.Connection, migrations_dir: Path) -> None:
 
         migration_sql = migration_file.read_text(encoding="utf-8")
 
-        # Strip SQL line comments before splitting on semicolons so that
-        # comment text containing semicolons does not produce false statement
-        # fragments.
-        sql_lines_without_comments = [line for line in migration_sql.splitlines() if not line.strip().startswith("--")]
-        migration_sql_stripped = "\n".join(sql_lines_without_comments)
-
         try:
-            conn.execute("BEGIN;")
-            for raw_statement in migration_sql_stripped.split(";"):
-                statement = raw_statement.strip()
-                if statement:
-                    conn.execute(statement)
+            # executescript() handles multi-statement SQL safely without manual
+            # splitting or comment stripping. It commits any open transaction first,
+            # then runs all statements in a single implicit transaction.
+            conn.executescript(migration_sql)
             _set_schema_version(conn, migration_number)
             conn.commit()
         except sqlite3.Error as database_error:

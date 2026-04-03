@@ -150,8 +150,10 @@ def check_file(
 def collect_input_files(input_path: Path) -> list[Path]:
     """Return all supported audio files at input_path.
 
-    If input_path is a file, it is returned as a single-item list (regardless
-    of extension — callers are responsible for validation via check_file).
+    If input_path is a file, it is returned as a single-item list only when
+    its extension is supported. Files with unsupported extensions are returned
+    as an empty list so the caller receives an accurate count and the "Found N
+    audio file(s)" log is not misleading.
     If input_path is a directory, it is walked recursively and all files with
     a supported audio extension are returned.
 
@@ -168,7 +170,9 @@ def collect_input_files(input_path: Path) -> list[Path]:
         raise FileNotFoundError(f"Input path does not exist: {input_path}")
 
     if input_path.is_file():
-        return [input_path]
+        if is_supported_extension(input_path):
+            return [input_path]
+        return []
 
     candidate_files: list[Path] = [entry for entry in input_path.rglob("*") if entry.is_file()]
 

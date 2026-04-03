@@ -144,3 +144,13 @@ Expanded document to standardize future tool builds in deep-thought.
 - Maintain changelog with unreleased section
 - Keep CLAUDE.md updated with tool-specific commands
 - Store all docs in `files/tools/<tool>/`
+
+## 15. Progress Display
+
+- Use `deep_thought.progress.track_items()` to wrap main processing loops
+- Use `deep_thought.progress.spinner_context()` for single long-running operations
+- Use `deep_thought.progress.create_progress()` when manual task control is needed (while-loops, dynamic totals)
+- Never configure spinner/bar colors in tool code — the shared module owns the standard appearance (orange spinner + purple bar)
+- Non-TTY output degrades gracefully — no ANSI codes when stderr is piped
+- Progress bar coexists with `--verbose` logging (bar on stderr, logs on stderr via logging)
+- Progress bar reflects `--dry-run` counts (items are still iterated)

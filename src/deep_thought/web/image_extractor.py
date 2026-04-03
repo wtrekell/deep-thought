@@ -6,7 +6,9 @@ and returns the paths to successfully downloaded files.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
+import socket
 import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path  # noqa: TC003
@@ -15,6 +17,21 @@ from urllib.parse import urljoin, urlparse
 _ALLOWED_IMAGE_SCHEMES: frozenset[str] = frozenset({"http", "https"})
 _IMAGE_DOWNLOAD_TIMEOUT_SECONDS: int = 30
 _IMAGE_MAX_SIZE_BYTES: int = 50 * 1024 * 1024  # 50 MB
+
+# Maps MIME type (from Content-Type header) to file extension
+_MIME_TO_EXTENSION: dict[str, str] = {
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/svg+xml": ".svg",
+    "image/avif": ".avif",
+    "image/bmp": ".bmp",
+    "image/tiff": ".tiff",
+    "image/x-icon": ".ico",
+    "image/vnd.microsoft.icon": ".ico",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -104,12 +121,39 @@ def download_images(image_urls: list[str], output_dir: Path) -> list[Path]:
             logger.warning("Skipping image %s: disallowed URL scheme %r", image_url, parsed_url.scheme)
             continue
 
+        try:
+            image_host = parsed_url.hostname or ""
+            # DNS rebinding limitation: this pre-resolution check and the subsequent
+            # urlopen() call each perform their own DNS lookup. A DNS rebinding attack
+            # could return a public IP here and a private IP for the real connection,
+            # bypassing the guard. This is low-risk for a personal tool operating against
+            # known web CDN hostnames, but the check is not a complete SSRF defense.
+            resolved_ip = ipaddress.ip_address(socket.gethostbyname(image_host))
+            if (
+                resolved_ip.is_private
+                or resolved_ip.is_loopback
+                or resolved_ip.is_link_local
+                or resolved_ip.is_reserved
+                or resolved_ip.is_multicast
+            ):
+                logger.warning("Skipping image %s: resolved to non-routable IP %s", image_url, resolved_ip)
+                continue
+        except (OSError, ValueError):
+            logger.warning("Skipping image %s: could not resolve hostname", image_url)
+            continue
+
         url_extension = Path(parsed_url.path).suffix or ".jpg"
-        image_filename = f"image_{image_index:03d}{url_extension}"
-        destination_path = output_dir / image_filename
 
         try:
             with urllib.request.urlopen(image_url, timeout=_IMAGE_DOWNLOAD_TIMEOUT_SECONDS) as response:  # noqa: S310
+                content_type_header: str = response.headers.get("Content-Type", "")
+                # Strip parameters like "; charset=utf-8" before looking up the MIME type
+                mime_type = content_type_header.split(";")[0].strip().lower()
+                resolved_extension = _MIME_TO_EXTENSION.get(mime_type, url_extension) or ".jpg"
+
+                image_filename = f"image_{image_index:03d}{resolved_extension}"
+                destination_path = output_dir / image_filename
+
                 image_data = response.read(_IMAGE_MAX_SIZE_BYTES + 1)
 
             if len(image_data) > _IMAGE_MAX_SIZE_BYTES:

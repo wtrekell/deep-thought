@@ -22,17 +22,17 @@ class TestInitializeDatabase:
         assert "sync_state" in table_names
         assert "key_value" in table_names
 
-    def test_schema_version_is_one(self, in_memory_db: sqlite3.Connection) -> None:
-        """After running the first migration, schema version should be 1."""
-        assert get_schema_version(in_memory_db) == 1
+    def test_schema_version_is_two(self, in_memory_db: sqlite3.Connection) -> None:
+        """After running all migrations, schema version should be 2."""
+        assert get_schema_version(in_memory_db) == 2
 
     def test_idempotent_initialization(self) -> None:
         """Running initialize_database twice should not error or reset state."""
         conn = initialize_database(":memory:")
-        assert get_schema_version(conn) == 1
+        assert get_schema_version(conn) == 2
         # Simulating a second initialization on the same connection
         # by checking that re-reading the version still works
-        assert get_schema_version(conn) == 1
+        assert get_schema_version(conn) == 2
         conn.close()
 
     def test_events_table_has_composite_pk(self, in_memory_db: sqlite3.Connection) -> None:
@@ -55,9 +55,9 @@ class TestGetSchemaVersion:
         assert get_schema_version(conn) == 0
         conn.close()
 
-    def test_returns_version_after_migration(self, in_memory_db: sqlite3.Connection) -> None:
-        """Should return 1 after the first migration is applied."""
-        assert get_schema_version(in_memory_db) == 1
+    def test_returns_version_after_migrations(self, in_memory_db: sqlite3.Connection) -> None:
+        """Should return 2 after all migrations are applied."""
+        assert get_schema_version(in_memory_db) == 2
 
 
 class TestForeignKeys:

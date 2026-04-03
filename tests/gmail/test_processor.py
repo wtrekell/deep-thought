@@ -859,3 +859,265 @@ class TestRunSend:
 
         with pytest.raises(ValueError, match="unclosed"):
             run_send(mock_gmail_client, message_file)
+
+
+# ---------------------------------------------------------------------------
+# End-to-end integration tests (M7)
+# ---------------------------------------------------------------------------
+
+
+class TestCollectionIntegration:
+    """End-to-end integration tests covering the full collection pipeline.
+
+    Uses in-memory SQLite and a mock Gmail client so no real network calls are
+    made. Validates the whole flow: fetch → clean → write → record in DB.
+    """
+
+    def test_full_pipeline_stores_email_and_writes_file(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        tmp_path: Path,
+    ) -> None:
+        """Complete pipeline: email fetched, markdown written, DB row inserted."""
+        from deep_thought.gmail.db.queries import get_processed_email
+
+        rule = RuleConfig(
+            name="integration_rule",
+            query="from:integration@test.com",
+            ai_instructions=None,
+            actions=["archive", "mark_read"],
+            append_mode=False,
+        )
+        config = GmailConfig(
+            credentials_path="/fake/credentials.json",
+            token_path="/fake/token.json",
+            scopes=["https://mail.google.com/"],
+            gemini_api_key_env="GEMINI_API_KEY",
+            gemini_model="gemini-2.5-flash",
+            gemini_rate_limit_rpm=15,
+            gmail_rate_limit_rpm=0,
+            retry_max_attempts=1,
+            retry_base_delay_seconds=0,
+            max_emails_per_run=10,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+            output_dir=str(tmp_path),
+            generate_llms_files=False,
+            flat_output=False,
+            rules=[rule],
+        )
+
+        integration_message = make_mock_message(
+            message_id="integ_001",
+            subject="Integration Test Email",
+            from_address="sender@integration.test",
+        )
+        mock_gmail_client.list_messages.return_value = [{"id": "integ_001"}]
+        mock_gmail_client.get_message.return_value = integration_message
+
+        result = run_collection(
+            gmail_client=mock_gmail_client,
+            config=config,
+            db_conn=in_memory_db,
+        )
+
+        # Aggregated result
+        assert result.processed == 1
+        assert result.errors == 0
+        assert "archive" in result.actions_taken
+        assert "mark_read" in result.actions_taken
+
+        # File was written
+        rule_dir = tmp_path / "integration_rule"
+        markdown_files = list(rule_dir.glob("*.md"))
+        assert len(markdown_files) == 1
+        content = markdown_files[0].read_text(encoding="utf-8")
+        assert "Integration Test Email" in content
+        assert "tool: gmail" in content
+
+        # DB record was inserted
+        in_memory_db.commit()
+        db_record = get_processed_email(in_memory_db, "integ_001")
+        assert db_record is not None
+        assert db_record["rule_name"] == "integration_rule"
+        assert db_record["status"] == "ok"
+
+    def test_force_mode_clears_prior_state_and_reprocesses(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        tmp_path: Path,
+    ) -> None:
+        """Force mode should clear the existing DB record and reprocess the email."""
+        from deep_thought.gmail.db.queries import get_processed_email, upsert_processed_email
+
+        rule = RuleConfig(
+            name="force_rule",
+            query="from:force@test.com",
+            ai_instructions=None,
+            actions=[],
+            append_mode=False,
+        )
+        config = GmailConfig(
+            credentials_path="/fake/credentials.json",
+            token_path="/fake/token.json",
+            scopes=["https://mail.google.com/"],
+            gemini_api_key_env="GEMINI_API_KEY",
+            gemini_model="gemini-2.5-flash",
+            gemini_rate_limit_rpm=15,
+            gmail_rate_limit_rpm=0,
+            retry_max_attempts=1,
+            retry_base_delay_seconds=0,
+            max_emails_per_run=10,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+            output_dir=str(tmp_path),
+            generate_llms_files=False,
+            flat_output=False,
+            rules=[rule],
+        )
+
+        # Pre-populate the DB as if this email was already processed
+        upsert_processed_email(
+            in_memory_db,
+            {
+                "message_id": "force_integ_001",
+                "rule_name": "force_rule",
+                "subject": "Old Subject",
+                "from_address": "old@test.com",
+                "output_path": "/old/path.md",
+                "actions_taken": "[]",
+                "status": "ok",
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "updated_at": "2026-01-01T00:00:00+00:00",
+                "synced_at": "2026-01-01T00:00:00+00:00",
+            },
+        )
+        in_memory_db.commit()
+
+        updated_message = make_mock_message(
+            message_id="force_integ_001",
+            subject="Updated Subject",
+            from_address="new@test.com",
+        )
+        mock_gmail_client.list_messages.return_value = [{"id": "force_integ_001"}]
+        mock_gmail_client.get_message.return_value = updated_message
+
+        result = run_collection(
+            gmail_client=mock_gmail_client,
+            config=config,
+            db_conn=in_memory_db,
+            force=True,
+        )
+
+        assert result.processed == 1
+        in_memory_db.commit()
+        db_record = get_processed_email(in_memory_db, "force_integ_001")
+        assert db_record is not None
+        # The DB row should reflect the new processing, not the old one
+        assert db_record["subject"] == "Updated Subject"
+
+    def test_append_mode_accumulates_emails_in_single_file(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        tmp_path: Path,
+    ) -> None:
+        """In append mode, multiple emails should accumulate in one rule file."""
+        rule = RuleConfig(
+            name="append_rule",
+            query="label:newsletter",
+            ai_instructions=None,
+            actions=[],
+            append_mode=True,
+        )
+        config = GmailConfig(
+            credentials_path="/fake/credentials.json",
+            token_path="/fake/token.json",
+            scopes=["https://mail.google.com/"],
+            gemini_api_key_env="GEMINI_API_KEY",
+            gemini_model="gemini-2.5-flash",
+            gemini_rate_limit_rpm=15,
+            gmail_rate_limit_rpm=0,
+            retry_max_attempts=1,
+            retry_base_delay_seconds=0,
+            max_emails_per_run=10,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+            output_dir=str(tmp_path),
+            generate_llms_files=False,
+            flat_output=False,
+            rules=[rule],
+        )
+
+        email_one = make_mock_message(message_id="append_a", subject="Newsletter One", body_text="Content A")
+        email_two = make_mock_message(message_id="append_b", subject="Newsletter Two", body_text="Content B")
+        mock_gmail_client.list_messages.return_value = [{"id": "append_a"}, {"id": "append_b"}]
+        mock_gmail_client.get_message.side_effect = [email_one, email_two]
+
+        result = run_collection(
+            gmail_client=mock_gmail_client,
+            config=config,
+            db_conn=in_memory_db,
+        )
+
+        assert result.processed == 2
+        aggregate_file = tmp_path / "append_rule" / "append_rule.md"
+        assert aggregate_file.exists()
+        content = aggregate_file.read_text(encoding="utf-8")
+        assert "Content A" in content
+        assert "Content B" in content
+
+    def test_dry_run_produces_no_files_or_db_records(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        tmp_path: Path,
+    ) -> None:
+        """Dry-run mode should not create any files or database rows."""
+        from deep_thought.gmail.db.queries import get_all_processed_emails
+
+        rule = RuleConfig(
+            name="dryrun_rule",
+            query="from:dry@test.com",
+            ai_instructions=None,
+            actions=["archive"],
+            append_mode=False,
+        )
+        config = GmailConfig(
+            credentials_path="/fake/credentials.json",
+            token_path="/fake/token.json",
+            scopes=["https://mail.google.com/"],
+            gemini_api_key_env="GEMINI_API_KEY",
+            gemini_model="gemini-2.5-flash",
+            gemini_rate_limit_rpm=15,
+            gmail_rate_limit_rpm=0,
+            retry_max_attempts=1,
+            retry_base_delay_seconds=0,
+            max_emails_per_run=10,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+            output_dir=str(tmp_path),
+            generate_llms_files=False,
+            flat_output=False,
+            rules=[rule],
+        )
+
+        dry_message = make_mock_message(message_id="dry_001", subject="Dry Run Email")
+        mock_gmail_client.list_messages.return_value = [{"id": "dry_001"}]
+        mock_gmail_client.get_message.return_value = dry_message
+
+        result = run_collection(
+            gmail_client=mock_gmail_client,
+            config=config,
+            db_conn=in_memory_db,
+            dry_run=True,
+        )
+
+        assert result.processed == 1
+        # No files written
+        assert not any(tmp_path.rglob("*.md"))
+        # No DB records
+        all_emails = get_all_processed_emails(in_memory_db)
+        assert all_emails == []

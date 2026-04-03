@@ -46,8 +46,8 @@ class CommentConfig:
 
 @dataclass
 class ClaudeConfig:
-    label: str
-    repo: str
+    label: str | None
+    repo: str | None
     branch: str
 
 
@@ -157,9 +157,11 @@ def _parse_comment_config(raw_comments: dict[str, Any]) -> CommentConfig:
 def _parse_claude_config(raw_claude: dict[str, Any]) -> ClaudeConfig:
     """Parse the claude section of the YAML configuration."""
     raw_role: dict[str, Any] = raw_claude.get("role", {})
+    raw_label = raw_claude.get("label")
+    raw_repo = raw_role.get("repo")
     return ClaudeConfig(
-        label=raw_claude.get("label", "claude-code"),
-        repo=raw_role.get("repo", ""),
+        label=raw_label if raw_label else None,
+        repo=raw_repo if raw_repo else None,
         branch=raw_role.get("branch", "main"),
     )
 

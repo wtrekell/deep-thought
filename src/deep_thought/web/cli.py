@@ -15,6 +15,7 @@ Subcommands:
 from __future__ import annotations
 
 import argparse
+import importlib.metadata
 import logging
 import sys
 from dataclasses import replace
@@ -36,7 +37,21 @@ from deep_thought.web.processor import process
 
 logger = logging.getLogger(__name__)
 
-_VERSION = "0.1.0"
+
+def _get_version() -> str:
+    """Return the installed package version, falling back to a dev sentinel.
+
+    Returns:
+        The version string from package metadata, or "0.0.0-dev" if the
+        package is not installed in the current environment.
+    """
+    try:
+        return importlib.metadata.version("deep-thought")
+    except importlib.metadata.PackageNotFoundError:
+        return "0.0.0-dev"
+
+
+_VERSION = _get_version()
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +203,11 @@ def cmd_crawl(args: argparse.Namespace) -> None:
     config = _load_config_from_args(args)
     config = _build_config_with_overrides(args, config)
 
+    validation_issues = validate_config(config)
+    if validation_issues:
+        for issue_text in validation_issues:
+            logger.warning("Config issue: %s", issue_text)
+
     input_url: str | None = getattr(args, "input", None)
     input_file_str: str | None = getattr(args, "input_file", None)
     input_file: Path | None = Path(input_file_str) if input_file_str else None
@@ -204,6 +224,17 @@ def cmd_crawl(args: argparse.Namespace) -> None:
     if dry_run:
         print(f"[dry-run] Output root: {output_root}")
 
+    embedding_model = None
+    embedding_qdrant_client = None
+    if not dry_run:
+        try:
+            from deep_thought.embeddings import create_embedding_model, create_qdrant_client  # noqa: PLC0415
+
+            embedding_model = create_embedding_model()
+            embedding_qdrant_client = create_qdrant_client()
+        except Exception as init_err:
+            logger.error("Embedding infrastructure unavailable, continuing without embeddings: %s", init_err)
+
     database_path = get_data_dir() / "web.db"
     conn = initialize_database(database_path)
 
@@ -211,59 +242,66 @@ def cmd_crawl(args: argparse.Namespace) -> None:
     total_failed = 0
     total_skipped = 0
 
-    if batch_mode:
-        batch_configs_dir = get_batch_config_dir()
-        if not batch_configs_dir.exists():
-            print(f"ERROR: Batch config directory not found: {batch_configs_dir}", file=sys.stderr)
-            sys.exit(1)
+    try:
+        if batch_mode:
+            batch_configs_dir = get_batch_config_dir()
+            if not batch_configs_dir.exists():
+                print(f"ERROR: Batch config directory not found: {batch_configs_dir}", file=sys.stderr)
+                sys.exit(1)
 
-        batch_config_files = sorted(batch_configs_dir.glob("*.yaml"))
-        if not batch_config_files:
-            print(f"No batch config files found in: {batch_configs_dir}")
-            sys.exit(0)
+            batch_config_files = sorted(batch_configs_dir.glob("*.yaml"))
+            if not batch_config_files:
+                print(f"No batch config files found in: {batch_configs_dir}")
+                sys.exit(0)
 
-        for batch_config_path in batch_config_files:
-            batch_config = load_config(batch_config_path)
-            batch_rule_name = batch_config_path.stem
-            batch_input_url: str | None = getattr(batch_config.crawl, "input_url", None)
-            batch_output_root = Path(batch_config.crawl.output_dir)
+            for batch_config_path in batch_config_files:
+                batch_config = load_config(batch_config_path)
+                batch_rule_name = batch_config_path.stem
+                batch_input_url: str | None = getattr(batch_config.crawl, "input_url", None)
+                batch_output_root = Path(batch_config.crawl.output_dir)
 
-            if dry_run:
-                print(f"[dry-run] Would process batch rule: {batch_rule_name}")
+                if dry_run:
+                    print(f"[dry-run] Would process batch rule: {batch_rule_name}")
 
-            try:
-                crawl_result = process(
-                    input_url=batch_input_url,
-                    input_file=None,
-                    mode=batch_config.crawl.mode,
-                    config=batch_config,
-                    conn=conn,
-                    output_root=batch_output_root,
-                    dry_run=dry_run,
-                    force=force,
-                    rule_name=batch_rule_name,
-                )
-                total_succeeded += crawl_result.succeeded
-                total_failed += crawl_result.failed
-                total_skipped += crawl_result.skipped
-            except Exception as batch_error:
-                print(f"  ERROR [{batch_rule_name}]: {batch_error}", file=sys.stderr)
-                total_failed += 1
-    else:
-        crawl_result = process(
-            input_url=input_url,
-            input_file=input_file,
-            mode=config.crawl.mode,
-            config=config,
-            conn=conn,
-            output_root=output_root,
-            dry_run=dry_run,
-            force=force,
-            rule_name=None,
-        )
-        total_succeeded = crawl_result.succeeded
-        total_failed = crawl_result.failed
-        total_skipped = crawl_result.skipped
+                try:
+                    crawl_result = process(
+                        input_url=batch_input_url,
+                        input_file=None,
+                        mode=batch_config.crawl.mode,
+                        config=batch_config,
+                        conn=conn,
+                        output_root=batch_output_root,
+                        dry_run=dry_run,
+                        force=force,
+                        rule_name=batch_rule_name,
+                        embedding_model=embedding_model,
+                        embedding_qdrant_client=embedding_qdrant_client,
+                    )
+                    total_succeeded += crawl_result.succeeded
+                    total_failed += crawl_result.failed
+                    total_skipped += crawl_result.skipped
+                except Exception as batch_error:
+                    print(f"  ERROR [{batch_rule_name}]: {batch_error}", file=sys.stderr)
+                    total_failed += 1
+        else:
+            crawl_result = process(
+                input_url=input_url,
+                input_file=input_file,
+                mode=config.crawl.mode,
+                config=config,
+                conn=conn,
+                output_root=output_root,
+                dry_run=dry_run,
+                force=force,
+                rule_name=None,
+                embedding_model=embedding_model,
+                embedding_qdrant_client=embedding_qdrant_client,
+            )
+            total_succeeded = crawl_result.succeeded
+            total_failed = crawl_result.failed
+            total_skipped = crawl_result.skipped
+    finally:
+        conn.close()
 
     dry_run_prefix = "[dry-run] " if dry_run else ""
     print(f"{dry_run_prefix}Crawl complete:")
@@ -361,8 +399,9 @@ def cmd_init(args: argparse.Namespace) -> None:
             print(f"Batch config already exists:  src/config/web/{filename}")
 
     # 3. Output directories
-    article_output_dir = Path("output/web/")
-    docs_output_dir = Path("docs/")
+    project_root = Path.cwd()
+    article_output_dir = project_root / "output" / "web"
+    docs_output_dir = project_root / "docs"
 
     article_output_dir.mkdir(parents=True, exist_ok=True)
     print(f"Output directory ready:        {article_output_dir}")
@@ -371,7 +410,7 @@ def cmd_init(args: argparse.Namespace) -> None:
     print(f"Output directory ready:        {docs_output_dir}")
 
     # 4. Database
-    data_root = Path(os.environ.get("DEEP_THOUGHT_DATA_DIR", "data"))
+    data_root = Path(os.environ.get("DEEP_THOUGHT_DATA_DIR", str(project_root / "data")))
     database_path = data_root / "web" / "web.db"
     initialize_database(database_path)
     print(f"Database initialized:          {database_path}")
@@ -644,9 +683,15 @@ def main() -> None:
     failures exit with code 1 and a clear message.
     """
     argument_parser = _build_argument_parser()
-    args, _remaining_args = argument_parser.parse_known_args()
+    args, remaining_args = argument_parser.parse_known_args()
 
     _setup_logging(args.verbose)
+
+    if remaining_args:
+        logger.warning(
+            "Unrecognised arguments ignored: %s — check for typos.",
+            " ".join(remaining_args),
+        )
 
     if args.subcommand is None:
         fallback_parser = _build_root_parser_with_crawl_defaults()

@@ -2,7 +2,8 @@
   "private": true,
   "scripts": {
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "lint": "vale $(yq '.paths[]' lint.config.yaml | tr '\\n' ' ') && prettier --check ."
   },
   "devDependencies": {
     "prettier": "^3.8.1"

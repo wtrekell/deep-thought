@@ -7,6 +7,7 @@ export and further use without requiring a full pull.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -22,6 +23,9 @@ if TYPE_CHECKING:
     import sqlite3
 
     from deep_thought.todoist.client import TodoistClient
+
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +122,34 @@ def _resolve_label_ids(
 
 
 # ---------------------------------------------------------------------------
+# Validation helpers
+# ---------------------------------------------------------------------------
+
+_VALID_PRIORITY_RANGE = range(1, 5)  # 1, 2, 3, 4
+
+
+def _validate_priority(priority: int) -> int:
+    """Validate and return a Todoist priority value.
+
+    Todoist API accepts 1 (normal) through 4 (urgent). If the supplied value
+    is outside that range, a warning is logged and the value is clamped to 1.
+
+    Args:
+        priority: The raw priority integer to validate.
+
+    Returns:
+        A valid priority in the range 1–4.
+    """
+    if priority not in _VALID_PRIORITY_RANGE:
+        logger.warning(
+            "Priority %s is out of range (expected 1–4). Defaulting to 1 (normal).",
+            priority,
+        )
+        return 1
+    return priority
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -185,7 +217,7 @@ def create_task(
     if due_string is not None:
         create_kwargs["due_string"] = due_string
     if priority is not None:
-        create_kwargs["priority"] = priority
+        create_kwargs["priority"] = _validate_priority(priority)
     if label_names:
         # The SDK accepts label name strings directly
         create_kwargs["labels"] = label_names

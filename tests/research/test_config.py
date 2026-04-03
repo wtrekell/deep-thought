@@ -49,22 +49,40 @@ class TestLoadConfig:
     def test_default_recency_string_parsed(self, tmp_path: Path) -> None:
         """A default_recency with a valid string value should be parsed correctly."""
         config_file = tmp_path / "recency.yaml"
-        config_file.write_text('api_key_env: "PERPLEXITY_API_KEY"\ndefault_recency: "week"\n')
+        config_file.write_text(
+            'api_key_env: "PERPLEXITY_API_KEY"\n'
+            'search_model: "sonar"\n'
+            'research_model: "sonar-deep-research"\n'
+            'output_dir: "data/research/export/"\n'
+            'default_recency: "week"\n',
+        )
         config = load_config(config_file)
         assert config.default_recency == "week"
 
-    def test_applies_defaults_for_missing_fields(self, tmp_path: Path) -> None:
-        """Should fall back to defaults when fields are absent from the YAML."""
-        minimal_config_file = tmp_path / "minimal.yaml"
-        minimal_config_file.write_text("{}\n")
-        config = load_config(minimal_config_file)
-        assert config.api_key_env == "PERPLEXITY_API_KEY"
+    def test_applies_defaults_for_optional_fields(self, tmp_path: Path) -> None:
+        """Should fall back to defaults for optional fields when absent from the YAML."""
+        # Required fields must be present; only the optional retry fields are omitted here.
+        partial_config_file = tmp_path / "partial.yaml"
+        partial_config_file.write_text(
+            "api_key_env: PERPLEXITY_API_KEY\n"
+            "search_model: sonar\n"
+            "research_model: sonar-deep-research\n"
+            "output_dir: data/research/export/\n",
+        )
+        config = load_config(partial_config_file)
         assert config.retry_max_attempts == 3
         assert config.retry_base_delay_seconds == 1
-        assert config.search_model == "sonar"
-        assert config.research_model == "sonar-deep-research"
         assert config.default_recency is None
-        assert config.output_dir == "data/research/export/"
+
+    def test_raises_value_error_for_missing_required_field(self, tmp_path: Path) -> None:
+        """Should raise ValueError when a required field is absent from the config."""
+        # api_key_env is absent — must raise ValueError with the field name, not silently use a default.
+        config_file = tmp_path / "missing_required.yaml"
+        config_file.write_text(
+            "search_model: sonar\nresearch_model: sonar-deep-research\noutput_dir: data/research/export/\n",
+        )
+        with pytest.raises(ValueError, match="api_key_env"):
+            load_config(config_file)
 
     def test_raises_for_missing_file(self, tmp_path: Path) -> None:
         """Should raise FileNotFoundError when the config file does not exist."""
@@ -156,6 +174,13 @@ class TestValidateConfig:
         config.default_recency = None
         issues = validate_config(config)
         assert issues == []
+
+    def test_catches_empty_output_dir(self) -> None:
+        """Should report an issue when output_dir is an empty string."""
+        config = load_config(FIXTURES_DIR / "test_config.yaml")
+        config.output_dir = ""
+        issues = validate_config(config)
+        assert any("output_dir" in issue for issue in issues)
 
 
 # ---------------------------------------------------------------------------

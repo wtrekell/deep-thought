@@ -1,5 +1,22 @@
 # GCal Tool — Changelog
 
+## 0.1.2 — 2026-04-02
+
+### Changed
+
+- Attendees in exported frontmatter are now rendered as a proper YAML list (`- email: ...` / `display_name: ...`) instead of a JSON-encoded string. `display_name` is omitted when the Calendar API returns no display name for the attendee.
+- `_build_api_event_body` (create) and `_diff_event_fields` (update) now filter attendees through `_validate_attendee_emails` before sending to the API. Invalid entries (missing `@` or `.`) are dropped with a warning log.
+
+### Fixed
+
+- Token file `chmod(0o600)` was already applied after write — confirmed present and covered by `test_saves_token_with_restricted_permissions`.
+
+## 0.1.1 — 2026-03-30
+
+### Changed
+
+- Standardized export filename date prefix from `YYYY-MM-DD_` to `YYMMDD-` (e.g., `260324-team-standup.md`).
+
 ## 0.1.0 — 2026-03-23
 
 ### Added

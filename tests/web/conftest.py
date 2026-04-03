@@ -34,33 +34,6 @@ def in_memory_db() -> Generator[sqlite3.Connection, None, None]:
 
 
 # ---------------------------------------------------------------------------
-# HTML fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture()
-def sample_html() -> str:
-    """Return a simple HTML string with title, links, and image tags."""
-    return """<!DOCTYPE html>
-<html>
-<head><title>Sample Page</title></head>
-<body>
-<h1>Main Heading</h1>
-<p>Some paragraph text here.</p>
-<a href="https://example.com/page-one">Internal Link</a>
-<a href="https://other.com/page">External Link</a>
-<img src="/images/photo.jpg" alt="A photo">
-</body>
-</html>"""
-
-
-@pytest.fixture()
-def blog_index_html() -> str:
-    """Return HTML for a blog index page with 3 article links."""
-    return (Path(__file__).parent / "fixtures" / "blog_index.html").read_text(encoding="utf-8")
-
-
-# ---------------------------------------------------------------------------
 # Output directory fixture
 # ---------------------------------------------------------------------------
 

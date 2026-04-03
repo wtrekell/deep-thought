@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +32,21 @@ from deep_thought.audio.config import (
 
 logger = logging.getLogger(__name__)
 
-_VERSION = "0.1.0"
+
+def _get_version() -> str:
+    """Return the installed package version, falling back to a placeholder.
+
+    Uses importlib.metadata so the version always matches pyproject.toml
+    without requiring a manual string update on each release.
+
+    Returns:
+        Version string from package metadata, or "0.0.0+unknown" if the
+        package is not installed in the current environment.
+    """
+    try:
+        return version("deep-thought")
+    except PackageNotFoundError:
+        return "0.0.0+unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -162,9 +177,22 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
     output_root = _resolve_output_root(args, config)
 
     if args.dry_run:
+        # Collect files and print a preview without touching the DB or loading models.
+        # Engine creation can trigger a model download, so we exit before that point.
+        from deep_thought.audio.filters import collect_input_files
+
+        try:
+            dry_run_files = collect_input_files(input_path)
+        except FileNotFoundError:
+            dry_run_files = []
+
         print(f"[dry-run] Input:  {input_path}")
         print(f"[dry-run] Output: {output_root}")
         print(f"[dry-run] Engine: {config.engine.engine} ({config.engine.model})")
+        print(f"[dry-run] Files found: {len(dry_run_files)}")
+        for dry_run_file in dry_run_files:
+            print(f"  {dry_run_file}")
+        return
 
     # Initialize DB
     from deep_thought.audio.db.schema import initialize_database
@@ -207,7 +235,7 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
     if generate_llms and successful_results and not args.dry_run:
         from deep_thought.audio.llms import (
             TranscriptSummary,
-            _strip_frontmatter,  # noqa: PLC2701
+            strip_frontmatter,
             write_llms_full,
             write_llms_index,
         )
@@ -218,7 +246,7 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
                 md_files = list(successful_result.output_path.glob("*.md"))
                 for md_file in md_files:
                     raw_content = md_file.read_text(encoding="utf-8")
-                    content = _strip_frontmatter(raw_content)
+                    content = strip_frontmatter(raw_content)
                     try:
                         md_relative = md_file.relative_to(output_root).as_posix()
                     except ValueError:
@@ -301,7 +329,6 @@ def cmd_config(args: argparse.Namespace) -> None:
     print("  Hallucination detection:")
     print(f"    score_threshold:     {config.hallucination.score_threshold}")
     print(f"    action:              {config.hallucination.action}")
-    print(f"    use_vad:             {config.hallucination.use_vad}")
     print(f"    blocklist_enabled:   {config.hallucination.blocklist_enabled}")
 
 
@@ -384,7 +411,7 @@ def _add_transcribe_arguments(parser: argparse.ArgumentParser) -> None:
         "--engine",
         choices=["mlx", "whisper", "auto"],
         default=None,
-        help="Transcription engine.",
+        help="Transcription engine: 'mlx' or 'whisper'. 'auto' selects MLX on Apple Silicon and falls back to whisper.",
     )
     parser.add_argument(
         "--model",
@@ -427,7 +454,7 @@ def _add_transcribe_arguments(parser: argparse.ArgumentParser) -> None:
         "--llm",
         action="store_true",
         default=None,
-        help="Generate .llms.txt and .llms-full.txt aggregate files (overrides config).",
+        help="Generate llms.txt and llms-full.txt aggregate files (overrides config).",
     )
     parser.add_argument(
         "--nuke",
@@ -463,7 +490,7 @@ def _build_argument_parser() -> argparse.ArgumentParser:
     root_parser.add_argument(
         "--version",
         action="version",
-        version=f"audio {_VERSION}",
+        version=f"audio {_get_version()}",
     )
     root_parser.add_argument(
         "--verbose",
@@ -524,7 +551,7 @@ def _build_root_parser_with_transcribe_defaults() -> argparse.ArgumentParser:
         add_help=False,
     )
 
-    root_parser.add_argument("--version", action="version", version=f"audio {_VERSION}")
+    root_parser.add_argument("--version", action="version", version=f"audio {_get_version()}")
     root_parser.add_argument("--verbose", "-v", action="store_true", default=False)
     root_parser.add_argument("--config", metavar="PATH", default=None)
 

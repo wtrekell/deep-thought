@@ -10,6 +10,8 @@ import pytest
 
 from deep_thought.gcal.create import (
     _build_api_event_body,
+    _validate_attendee_emails,
+    _validate_start_before_end,
     parse_event_frontmatter,
     run_create,
 )
@@ -340,3 +342,115 @@ class TestRunCreate:
         call_args = mock_gcal_client.insert_event.call_args
         used_calendar_id: str = call_args[0][0]
         assert used_calendar_id == "primary"
+
+
+# ---------------------------------------------------------------------------
+# TestValidateAttendeeEmails
+# ---------------------------------------------------------------------------
+
+
+class TestValidateAttendeeEmails:
+    """Tests for _validate_attendee_emails."""
+
+    def test_valid_emails_pass_through(self) -> None:
+        """Should return all entries that look like valid email addresses."""
+        valid_emails = ["alice@example.com", "bob@company.org"]
+        result = _validate_attendee_emails(valid_emails)
+        assert result == valid_emails
+
+    def test_invalid_entry_without_at_sign_is_filtered(self, caplog: Any) -> None:
+        """Should drop and warn about entries with no '@'."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            result = _validate_attendee_emails(["not-an-email"])
+
+        assert result == []
+        assert "not-an-email" in caplog.text
+
+    def test_invalid_entry_without_dot_is_filtered(self, caplog: Any) -> None:
+        """Should drop and warn about entries with '@' but no '.'."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            result = _validate_attendee_emails(["user@nodot"])
+
+        assert result == []
+        assert "user@nodot" in caplog.text
+
+    def test_mixed_valid_and_invalid_returns_only_valid(self, caplog: Any) -> None:
+        """Should keep valid entries and drop invalid ones."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            result = _validate_attendee_emails(["good@example.com", "bad-entry", "also@good.net"])
+
+        assert result == ["good@example.com", "also@good.net"]
+        assert "bad-entry" in caplog.text
+
+    def test_empty_list_returns_empty(self) -> None:
+        """Should return empty list when given an empty input."""
+        assert _validate_attendee_emails([]) == []
+
+    def test_invalid_attendees_excluded_from_api_body(self) -> None:
+        """_build_api_event_body should exclude invalid email entries via validation."""
+        frontmatter: dict[str, Any] = {
+            "summary": "Team Sync",
+            "start": "2026-03-25T10:00:00-05:00",
+            "end": "2026-03-25T11:00:00-05:00",
+            "attendees": ["valid@example.com", "not-an-email"],
+        }
+
+        event_body = _build_api_event_body(frontmatter, "")
+
+        assert event_body["attendees"] == [{"email": "valid@example.com"}]
+
+
+# ---------------------------------------------------------------------------
+# TestValidateStartBeforeEnd
+# ---------------------------------------------------------------------------
+
+
+class TestValidateStartBeforeEnd:
+    """Tests for _validate_start_before_end."""
+
+    def test_valid_timed_event_does_not_raise(self) -> None:
+        """Should not raise when start is before end for a timed event."""
+        _validate_start_before_end("2026-03-25T14:00:00-05:00", "2026-03-25T15:00:00-05:00")
+
+    def test_valid_all_day_event_does_not_raise(self) -> None:
+        """Should not raise when start is before end for an all-day event."""
+        _validate_start_before_end("2026-03-25", "2026-03-26")
+
+    def test_equal_start_and_end_raises(self) -> None:
+        """Should raise ValueError when start equals end."""
+        with pytest.raises(ValueError, match="start must be before end"):
+            _validate_start_before_end("2026-03-25T14:00:00-05:00", "2026-03-25T14:00:00-05:00")
+
+    def test_start_after_end_raises(self) -> None:
+        """Should raise ValueError when start is after end."""
+        with pytest.raises(ValueError, match="start must be before end"):
+            _validate_start_before_end("2026-03-25T15:00:00-05:00", "2026-03-25T14:00:00-05:00")
+
+    def test_run_create_raises_on_invalid_dates(
+        self, mock_gcal_client: MagicMock, in_memory_db: sqlite3.Connection, tmp_path: Path
+    ) -> None:
+        """run_create should raise ValueError before calling the API when start >= end."""
+        invalid_file = tmp_path / "bad_dates.md"
+        invalid_file.write_text(
+            "---\nsummary: Bad Event\nstart: 2026-03-25T15:00:00-05:00\nend: 2026-03-25T14:00:00-05:00\n---\n",
+            encoding="utf-8",
+        )
+        mock_config = MagicMock()
+        mock_config.output_dir = str(tmp_path)
+        mock_config.flat_output = False
+
+        with pytest.raises(ValueError, match="start must be before end"):
+            run_create(
+                client=mock_gcal_client,
+                config=mock_config,
+                db_conn=in_memory_db,
+                file_path=invalid_file,
+            )
+
+        mock_gcal_client.insert_event.assert_not_called()

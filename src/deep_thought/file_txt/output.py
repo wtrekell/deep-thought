@@ -126,12 +126,12 @@ def _build_frontmatter(
     if page_count is not None:
         lines.append(f"page_count: {page_count}")
     if email_metadata is not None:
-        lines.append(f'from: "{_escape_yaml_string(email_metadata["from_address"])}"')
-        lines.append(f'to: "{_escape_yaml_string(email_metadata["to_address"])}"')
-        lines.append(f'subject: "{_escape_yaml_string(email_metadata["subject"])}"')
-        lines.append(f'date: "{_escape_yaml_string(email_metadata["date"])}"')
-        lines.append(f"has_attachments: {str(email_metadata['has_attachments']).lower()}")
-        lines.append(f"attachment_count: {email_metadata['attachment_count']}")
+        lines.append(f'from: "{_escape_yaml_string(email_metadata.get("from_address", ""))}"')
+        lines.append(f'to: "{_escape_yaml_string(email_metadata.get("to_address", ""))}"')
+        lines.append(f'subject: "{_escape_yaml_string(email_metadata.get("subject", ""))}"')
+        lines.append(f'date: "{_escape_yaml_string(email_metadata.get("date", ""))}"')
+        lines.append(f"has_attachments: {str(email_metadata.get('has_attachments', False)).lower()}")
+        lines.append(f"attachment_count: {email_metadata.get('attachment_count', 0)}")
     lines.append(f"word_count: {word_count}")
     lines.append(f"has_images: {str(has_images).lower()}")
     lines.append(f"processed_date: {processed_date}")
@@ -151,7 +151,7 @@ def _escape_yaml_string(value: str) -> str:
     Returns:
         An escaped string safe for use inside YAML double quotes.
     """
-    return value.replace("\\", "\\\\").replace('"', '\\"')
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
 
 
 def count_words(text: str) -> int:

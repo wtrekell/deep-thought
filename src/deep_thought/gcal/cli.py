@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from dotenv import load_dotenv
+from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
 
 from deep_thought.gcal.config import (
     GcalConfig,
@@ -42,7 +43,18 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_VERSION = "0.1.0"
+
+def _get_version() -> str:
+    """Return the installed package version, falling back to 'unknown'."""
+    try:
+        from importlib.metadata import version
+
+        return version("deep-thought")
+    except Exception:
+        return "unknown"
+
+
+_VERSION = _get_version()
 
 # ---------------------------------------------------------------------------
 # Helpers shared across command handlers
@@ -639,12 +651,16 @@ def _handle_save_config(destination_path_str: str) -> None:
         print(f"ERROR: Default config template not found at {source_path}.", file=sys.stderr)
         sys.exit(1)
 
-    if destination_path.exists():
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        # Use exclusive creation ('xb') so the check and write are atomic —
+        # prevents silent overwrites if another process creates the file between
+        # an existence check and the write (TOCTOU race condition).
+        with destination_path.open("xb") as destination_file:
+            destination_file.write(source_path.read_bytes())
+    except FileExistsError:
         print(f"ERROR: File already exists at {destination_path}. Use --force to overwrite.", file=sys.stderr)
         sys.exit(1)
-
-    destination_path.parent.mkdir(parents=True, exist_ok=True)
-    destination_path.write_bytes(source_path.read_bytes())
     print(f"Default configuration written to: {destination_path}")
 
 
@@ -657,6 +673,14 @@ def _run_command(handler: Callable[[argparse.Namespace], None], args: argparse.N
     """
     try:
         handler(args)
+    except HttpError as http_error:
+        status_code = http_error.resp.status if http_error.resp else "unknown"
+        print(
+            f"ERROR: Google Calendar API returned HTTP {status_code} — {http_error}",
+            file=sys.stderr,
+        )
+        logger.debug("Full traceback:", exc_info=True)
+        sys.exit(1)
     except FileNotFoundError as missing_file_error:
         print(f"ERROR: File not found — {missing_file_error}", file=sys.stderr)
         sys.exit(1)

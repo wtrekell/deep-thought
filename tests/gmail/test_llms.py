@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from deep_thought.gmail.llms import (
-    _strip_frontmatter,
     generate_llms_full,
     generate_llms_index,
+    strip_frontmatter,
     write_llms_files,
 )
 
@@ -21,40 +21,40 @@ if TYPE_CHECKING:
 
 
 class TestStripFrontmatter:
-    """Tests for _strip_frontmatter."""
+    """Tests for strip_frontmatter."""
 
     def test_removes_frontmatter(self) -> None:
         """Should remove YAML frontmatter delimited by ---."""
         text = "---\ntool: gmail\nrule: test\n---\n\nBody content here."
-        result = _strip_frontmatter(text)
+        result = strip_frontmatter(text)
         assert result == "Body content here."
 
     def test_returns_text_without_frontmatter(self) -> None:
         """Should return text unchanged if no frontmatter is present."""
         text = "Just plain text with no frontmatter."
-        result = _strip_frontmatter(text)
+        result = strip_frontmatter(text)
         assert result == text
 
     def test_returns_text_with_unclosed_frontmatter(self) -> None:
         """Should return original text if frontmatter has no closing ---."""
         text = "---\ntool: gmail\nrule: test\nNo closing delimiter."
-        result = _strip_frontmatter(text)
+        result = strip_frontmatter(text)
         assert result == text
 
     def test_empty_string(self) -> None:
         """Should return empty string for empty input."""
-        assert _strip_frontmatter("") == ""
+        assert strip_frontmatter("") == ""
 
     def test_frontmatter_only(self) -> None:
         """Should return empty string when file is only frontmatter."""
         text = "---\ntool: gmail\n---"
-        result = _strip_frontmatter(text)
+        result = strip_frontmatter(text)
         assert result == ""
 
     def test_strips_leading_whitespace_from_body(self) -> None:
         """Should strip leading/trailing whitespace from the body after frontmatter removal."""
         text = "---\nkey: val\n---\n\n\n  Body with leading space.  \n\n"
-        result = _strip_frontmatter(text)
+        result = strip_frontmatter(text)
         assert result == "Body with leading space."
 
 
