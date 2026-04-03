@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from deep_thought.gcal.create import _is_date_only, _validate_start_before_end, parse_event_frontmatter
-from deep_thought.gcal.db.queries import get_calendar, upsert_event
+from deep_thought.gcal.db.queries import clear_sync_token, get_calendar, upsert_event
 from deep_thought.gcal.models import EventLocal, UpdateResult
 from deep_thought.gcal.output import generate_event_markdown, write_event_file
 
@@ -206,6 +206,7 @@ def run_update(
     # Write to the DB only after the file has been successfully updated.
     # The caller (cli.py) is responsible for calling db_conn.commit().
     upsert_event(db_conn, event_local.to_dict())
+    clear_sync_token(db_conn, calendar_id)
 
     logger.info("Event updated: %s (%s)", event_local.event_id, event_local.html_link)
 

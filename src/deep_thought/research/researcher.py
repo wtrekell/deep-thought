@@ -169,9 +169,11 @@ class PerplexityClient:
 
         logger.debug("Submitting deep research job to %s", _ASYNC_SUBMIT_ENDPOINT)
         submit_response = self._execute_with_retry("POST", _ASYNC_SUBMIT_ENDPOINT, json=async_body)
-        if "id" not in submit_response:
-            response_keys = list(submit_response.keys())
-            raise ValueError(f"Async job submission failed: no job ID in API response. Response keys: {response_keys}")
+        if not isinstance(submit_response, dict) or "id" not in submit_response:
+            response_summary = (
+                list(submit_response.keys()) if isinstance(submit_response, dict) else repr(submit_response)
+            )
+            raise ValueError(f"Async job submission failed: no job ID in API response. Response: {response_summary}")
         job_id: str = submit_response["id"]
         logger.debug("Deep research job submitted with ID: %s", job_id)
 
@@ -348,6 +350,13 @@ class PerplexityClient:
                         retry_delay,
                     )
                     time.sleep(retry_delay)
+                else:
+                    logger.warning(
+                        "Perplexity API returned %d (attempt %d/%d), no retries remaining.",
+                        response.status_code,
+                        attempt + 1,
+                        self._config.retry_max_attempts,
+                    )
                 continue
 
             if response.is_client_error:

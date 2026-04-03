@@ -117,7 +117,7 @@ def load_config(config_path: Path | None = None) -> GcalConfig:
     calendars: list[str] = list(raw_calendars) if isinstance(raw_calendars, list) else ["primary"]
 
     return GcalConfig(
-        credentials_path=str(raw_dict.get("credentials_path", "src/config/gmail/credentials.json")),
+        credentials_path=str(raw_dict.get("credentials_path", "src/config/gcal/credentials.json")),
         token_path=str(raw_dict.get("token_path", "data/gcal/token.json")),
         scopes=scopes,
         api_rate_limit_rpm=int(raw_dict.get("api_rate_limit_rpm", 250)),

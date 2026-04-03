@@ -106,10 +106,13 @@ def load_config(config_path: Path | None = None) -> ResearchConfig:
 
     # Required fields: raise KeyError immediately when absent so the caller sees
     # a clear error rather than silently using a baked-in default value.
-    api_key_env = str(raw_dict["api_key_env"])
-    search_model = str(raw_dict["search_model"])
-    research_model = str(raw_dict["research_model"])
-    output_dir = str(raw_dict["output_dir"])
+    try:
+        api_key_env = str(raw_dict["api_key_env"])
+        search_model = str(raw_dict["search_model"])
+        research_model = str(raw_dict["research_model"])
+        output_dir = str(raw_dict["output_dir"])
+    except KeyError as missing_key:
+        raise ValueError(f"Configuration file missing required field: {missing_key}") from missing_key
 
     # Optional fields with documented defaults.
     retry_max_attempts = int(raw_dict.get("retry_max_attempts", 3))

@@ -234,6 +234,17 @@ def cmd_collect(args: argparse.Namespace) -> None:
 
     output_override: Path | None = Path(args.output) if args.output else None
 
+    embedding_model = None
+    embedding_qdrant_client = None
+    if not args.dry_run:
+        try:
+            from deep_thought.embeddings import create_embedding_model, create_qdrant_client  # noqa: PLC0415
+
+            embedding_model = create_embedding_model()
+            embedding_qdrant_client = create_qdrant_client()
+        except Exception as init_err:
+            logger.error("Embedding infrastructure unavailable, continuing without embeddings: %s", init_err)
+
     connection = initialize_database()
     try:
         collection_result: CollectionResult = run_collection(
@@ -244,6 +255,8 @@ def cmd_collect(args: argparse.Namespace) -> None:
             force=args.force,
             rule_name_filter=args.rule,
             output_override=output_override,
+            embedding_model=embedding_model,
+            embedding_qdrant_client=embedding_qdrant_client,
         )
         connection.commit()
     finally:

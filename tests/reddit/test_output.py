@@ -12,7 +12,6 @@ from deep_thought.reddit.config import RuleConfig
 from deep_thought.reddit.output import (
     _build_frontmatter,
     _extract_image_url,
-    _get_author_name,
     _get_comment_depth,
     _render_comment,
     _render_comments_section,
@@ -20,6 +19,7 @@ from deep_thought.reddit.output import (
     generate_markdown,
     write_post_file,
 )
+from deep_thought.reddit.utils import get_author_name as _get_author_name
 from tests.reddit.conftest import make_mock_comment, make_mock_submission
 
 # ---------------------------------------------------------------------------
@@ -78,15 +78,13 @@ class TestCountWords:
 
 class TestGetAuthorName:
     def test_extracts_author_when_present(self) -> None:
-        """Author name should be extracted from a PRAW object."""
+        """Author name should be extracted from a PRAW author object."""
         submission = make_mock_submission(author_name="test_author")
-        assert _get_author_name(submission) == "test_author"
+        assert _get_author_name(submission.author) == "test_author"
 
     def test_returns_deleted_when_author_is_none(self) -> None:
         """None author should produce the '[deleted]' placeholder."""
-        submission = make_mock_submission()
-        submission.author = None
-        assert _get_author_name(submission) == "[deleted]"
+        assert _get_author_name(None) == "[deleted]"
 
 
 # ---------------------------------------------------------------------------

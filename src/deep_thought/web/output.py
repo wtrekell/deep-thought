@@ -125,7 +125,7 @@ def _build_frontmatter(url: str, mode: str, title: str | None, word_count: int) 
     # Titles can contain YAML-unsafe characters (colons, quotes, brackets, '#').
     # Always double-quote the value and escape any internal double quotes.
     def _yaml_quoted_string(value: str) -> str:
-        escaped = value.replace('"', '\\"')
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
         return f'"{escaped}"'
 
     lines: list[str] = ["---"]

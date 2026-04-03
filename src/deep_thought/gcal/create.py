@@ -10,7 +10,7 @@ from typing import Any
 
 import yaml
 
-from deep_thought.gcal.db.queries import get_calendar, upsert_event
+from deep_thought.gcal.db.queries import clear_sync_token, get_calendar, upsert_event
 from deep_thought.gcal.models import CreateResult, EventLocal
 from deep_thought.gcal.output import generate_event_markdown, write_event_file
 
@@ -255,6 +255,7 @@ def run_create(
     # Write to the DB only after the file has been successfully created.
     # The caller (cli.py) is responsible for calling db_conn.commit().
     upsert_event(db_conn, event_local.to_dict())
+    clear_sync_token(db_conn, calendar_id)
 
     logger.info("Event created: %s (%s)", event_local.event_id, event_local.html_link)
 

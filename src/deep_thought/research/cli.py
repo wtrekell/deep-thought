@@ -457,6 +457,19 @@ def cmd_search(args: argparse.Namespace) -> None:
     markdown_content = generate_research_markdown(search_result)
     written_file_path = write_research_file(markdown_content, resolved_output_dir, search_result)
 
+    try:
+        from deep_thought.embeddings import create_embedding_model, create_qdrant_client  # noqa: PLC0415
+        from deep_thought.research.embeddings import write_embedding as _write_research_embedding  # noqa: PLC0415
+
+        _embedding_model = create_embedding_model()
+        _qdrant_client = create_qdrant_client()
+        embed_content = f"Query: {search_result.query}\n\n{search_result.answer}"
+        _write_research_embedding(
+            embed_content, search_result, str(written_file_path), _embedding_model, _qdrant_client
+        )
+    except Exception as embed_err:
+        logger.warning("Embedding failed for query '%s': %s", search_result.query, embed_err)
+
     print("Search complete:")
     print(f"  File:    {written_file_path}")
     print(f"  Sources: {len(search_result.search_results)}")
@@ -515,6 +528,19 @@ def cmd_research(args: argparse.Namespace) -> None:
     resolved_output_dir = Path(args.output) if args.output else Path(config.output_dir)
     markdown_content = generate_research_markdown(research_result)
     written_file_path = write_research_file(markdown_content, resolved_output_dir, research_result)
+
+    try:
+        from deep_thought.embeddings import create_embedding_model, create_qdrant_client  # noqa: PLC0415
+        from deep_thought.research.embeddings import write_embedding as _write_research_embedding  # noqa: PLC0415
+
+        _embedding_model = create_embedding_model()
+        _qdrant_client = create_qdrant_client()
+        embed_content = f"Query: {research_result.query}\n\n{research_result.answer}"
+        _write_research_embedding(
+            embed_content, research_result, str(written_file_path), _embedding_model, _qdrant_client
+        )
+    except Exception as embed_err:
+        logger.warning("Embedding failed for query '%s': %s", research_result.query, embed_err)
 
     print("Research complete:")
     print(f"  File:    {written_file_path}")

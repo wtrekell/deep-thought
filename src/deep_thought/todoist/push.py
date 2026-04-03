@@ -8,6 +8,7 @@ Todoist API. Marks successfully pushed tasks as synced in the database.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Any
@@ -27,6 +28,9 @@ if TYPE_CHECKING:
 
     from deep_thought.todoist.client import TodoistClient
     from deep_thought.todoist.config import TodoistConfig
+
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +66,12 @@ def _task_dict_to_local_model(task_dict: dict[str, Any]) -> TaskLocal:
         A TaskLocal with labels as list[str].
     """
     raw_labels = task_dict.get("labels", "[]")
-    deserialized_labels: list[str] = json.loads(raw_labels) if isinstance(raw_labels, str) else raw_labels
+    try:
+        deserialized_labels: list[str] = json.loads(raw_labels) if isinstance(raw_labels, str) else raw_labels
+    except json.JSONDecodeError:
+        task_id_for_log = task_dict.get("id", "<unknown>")
+        logger.warning("Task %s has malformed JSON in labels column; treating as no labels.", task_id_for_log)
+        deserialized_labels = []
 
     return TaskLocal(
         id=task_dict["id"],
@@ -117,10 +126,16 @@ def _build_update_kwargs(task: TaskLocal) -> dict[str, Any]:
     if task.due_string is not None:
         update_kwargs["due_string"] = task.due_string
     elif task.due_date is not None:
-        update_kwargs["due_date"] = date.fromisoformat(task.due_date)
+        try:
+            update_kwargs["due_date"] = date.fromisoformat(task.due_date)
+        except ValueError:
+            logger.warning("Task %s has malformed due_date %r; skipping field.", task.id, task.due_date)
 
     if task.deadline_date is not None:
-        update_kwargs["deadline_date"] = date.fromisoformat(task.deadline_date)
+        try:
+            update_kwargs["deadline_date"] = date.fromisoformat(task.deadline_date)
+        except ValueError:
+            logger.warning("Task %s has malformed deadline_date %r; skipping field.", task.id, task.deadline_date)
 
     if task.assignee_id is not None:
         update_kwargs["assignee_id"] = task.assignee_id
@@ -274,7 +289,6 @@ def push(
                 print(f"  ERROR: {error_message}")
 
     if not dry_run:
-        conn.commit()
         set_sync_value(conn, "last_sync_time", datetime.now(UTC).isoformat())
         conn.commit()
 

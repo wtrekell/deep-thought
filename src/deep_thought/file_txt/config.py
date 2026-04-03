@@ -11,8 +11,6 @@ import yaml
 
 _KNOWN_CONFIG_KEYS = frozenset(
     {
-        "force_ocr",
-        "torch_device",
         "prefer_html",
         "full_headers",
         "include_attachments",
@@ -31,11 +29,13 @@ _KNOWN_CONFIG_KEYS = frozenset(
 
 
 @dataclass
-class MarkerConfig:
-    """Configuration for the Marker PDF conversion engine."""
+class PdfConfig:
+    """Configuration placeholder for the PyMuPDF PDF conversion engine.
 
-    force_ocr: bool
-    torch_device: str
+    PyMuPDF requires no engine-specific settings. This dataclass is retained
+    so the FileTxtConfig structure remains extensible if PDF options are added
+    in the future.
+    """
 
 
 @dataclass
@@ -75,7 +75,7 @@ class FilterConfig:
 class FileTxtConfig:
     """Top-level configuration for the file-txt tool."""
 
-    marker: MarkerConfig
+    pdf: PdfConfig
     email: EmailConfig
     output: OutputConfig
     limits: LimitsConfig
@@ -120,18 +120,20 @@ def get_default_config_path() -> Path:
 # ---------------------------------------------------------------------------
 
 
-def _parse_marker_config(raw: dict[str, Any]) -> MarkerConfig:
-    """Parse the marker-related fields from the top-level YAML mapping.
+def _parse_pdf_config(raw: dict[str, Any]) -> PdfConfig:  # noqa: ARG001
+    """Parse PDF-related fields from the top-level YAML mapping.
+
+    PyMuPDF requires no engine-specific settings so this always returns an
+    empty PdfConfig. The ``raw`` parameter is accepted to keep the signature
+    consistent with the other parse helpers.
 
     Args:
-        raw: The full YAML mapping as a dict.
+        raw: The full YAML mapping as a dict (unused).
 
     Returns:
-        A MarkerConfig with force_ocr and torch_device populated.
+        An empty PdfConfig.
     """
-    force_ocr: bool = raw.get("force_ocr", False)
-    torch_device: str = raw.get("torch_device", "mps")
-    return MarkerConfig(force_ocr=force_ocr, torch_device=torch_device)
+    return PdfConfig()
 
 
 def _parse_output_config(raw: dict[str, Any]) -> OutputConfig:
@@ -239,7 +241,7 @@ def load_config(config_path: Path | None = None) -> FileTxtConfig:
 
     raw_dict: dict[str, Any] = raw
 
-    marker_config = _parse_marker_config(raw_dict)
+    pdf_config = _parse_pdf_config(raw_dict)
     email_config = _parse_email_config(raw_dict)
     output_config = _parse_output_config(raw_dict)
     limits_config = _parse_limits_config(raw_dict)
@@ -251,15 +253,12 @@ def load_config(config_path: Path | None = None) -> FileTxtConfig:
         config_logger.warning("Unknown configuration keys (possibly misspelled): %s", sorted(unknown_keys))
 
     return FileTxtConfig(
-        marker=marker_config,
+        pdf=pdf_config,
         email=email_config,
         output=output_config,
         limits=limits_config,
         filter=filter_config,
     )
-
-
-_VALID_TORCH_DEVICES = {"mps", "cuda", "cpu"}
 
 
 def validate_config(config: FileTxtConfig) -> list[str]:
@@ -274,11 +273,6 @@ def validate_config(config: FileTxtConfig) -> list[str]:
         A list of human-readable issue strings. Empty list means no issues.
     """
     issues: list[str] = []
-
-    if config.marker.torch_device not in _VALID_TORCH_DEVICES:
-        issues.append(
-            f"torch_device '{config.marker.torch_device}' is not valid. Must be one of: {sorted(_VALID_TORCH_DEVICES)}."
-        )
 
     if config.limits.max_file_size_mb <= 0:
         issues.append(f"max_file_size_mb must be greater than 0, got: {config.limits.max_file_size_mb}.")

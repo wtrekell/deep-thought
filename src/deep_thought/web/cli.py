@@ -224,6 +224,17 @@ def cmd_crawl(args: argparse.Namespace) -> None:
     if dry_run:
         print(f"[dry-run] Output root: {output_root}")
 
+    embedding_model = None
+    embedding_qdrant_client = None
+    if not dry_run:
+        try:
+            from deep_thought.embeddings import create_embedding_model, create_qdrant_client  # noqa: PLC0415
+
+            embedding_model = create_embedding_model()
+            embedding_qdrant_client = create_qdrant_client()
+        except Exception as init_err:
+            logger.error("Embedding infrastructure unavailable, continuing without embeddings: %s", init_err)
+
     database_path = get_data_dir() / "web.db"
     conn = initialize_database(database_path)
 
@@ -263,6 +274,8 @@ def cmd_crawl(args: argparse.Namespace) -> None:
                         dry_run=dry_run,
                         force=force,
                         rule_name=batch_rule_name,
+                        embedding_model=embedding_model,
+                        embedding_qdrant_client=embedding_qdrant_client,
                     )
                     total_succeeded += crawl_result.succeeded
                     total_failed += crawl_result.failed
@@ -281,6 +294,8 @@ def cmd_crawl(args: argparse.Namespace) -> None:
                 dry_run=dry_run,
                 force=force,
                 rule_name=None,
+                embedding_model=embedding_model,
+                embedding_qdrant_client=embedding_qdrant_client,
             )
             total_succeeded = crawl_result.succeeded
             total_failed = crawl_result.failed

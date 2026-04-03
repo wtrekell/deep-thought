@@ -188,7 +188,7 @@ class WebCrawler:
 
                 try:
                     wait_strategy: Literal["networkidle", "domcontentloaded"] = (
-                        "networkidle" if self._config.js_wait < 2.0 else "domcontentloaded"
+                        "domcontentloaded" if self._config.js_wait < 2.0 else "networkidle"
                     )
                     response = page.goto(url, wait_until=wait_strategy, timeout=60000)
                     page.wait_for_timeout(int(self._config.js_wait * 1000))
@@ -274,7 +274,7 @@ class WebCrawler:
 
         try:
             wait_strategy: Literal["networkidle", "domcontentloaded"] = (
-                "networkidle" if self._config.js_wait < 2.0 else "domcontentloaded"
+                "domcontentloaded" if self._config.js_wait < 2.0 else "networkidle"
             )
             response = page.goto(url, wait_until=wait_strategy, timeout=60000)
             page.wait_for_timeout(int(self._config.js_wait * 1000))

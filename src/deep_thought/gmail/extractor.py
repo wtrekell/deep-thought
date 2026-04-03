@@ -29,10 +29,10 @@ class GeminiExtractor:
             model: The model name to use (e.g., 'gemini-2.5-flash').
             rate_limit_rpm: Maximum requests per minute.
         """
-        import google.generativeai as genai
+        import google.genai
 
-        genai.configure(api_key=api_key)  # type: ignore[attr-defined]
-        self._model = genai.GenerativeModel(model)  # type: ignore[attr-defined]
+        self._genai_client = google.genai.Client(api_key=api_key)
+        self._model_name = model
         self._rate_limit_rpm = rate_limit_rpm
         self._last_request_time: float = 0.0
 
@@ -82,7 +82,10 @@ class GeminiExtractor:
         prompt = self._build_prompt(email_text, instructions)
 
         try:
-            response: Any = self._model.generate_content(prompt)
+            response: Any = self._genai_client.models.generate_content(
+                model=self._model_name,
+                contents=prompt,
+            )
             extracted_text: str = response.text
             return extracted_text
         except (ValueError, AttributeError, RuntimeError, OSError) as expected_error:

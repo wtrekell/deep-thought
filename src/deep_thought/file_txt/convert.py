@@ -71,24 +71,18 @@ def _file_type_from_path(source_path: Path) -> str:
     return _EXTENSION_TO_TYPE.get(extension, extension.lstrip("."))
 
 
-def _convert_via_marker(source_path: Path, config: FileTxtConfig) -> tuple[str, int]:
-    """Delegate PDF conversion to the Marker engine.
+def _convert_via_pymupdf(source_path: Path) -> tuple[str, int]:
+    """Delegate PDF conversion to the PyMuPDF engine.
 
     Args:
         source_path: Path to the PDF file.
-        config: The loaded FileTxtConfig supplying Marker settings.
 
     Returns:
-        (markdown_text, page_count) from the Marker engine.
+        (markdown_text, page_count) from the PyMuPDF engine.
     """
-    from deep_thought.file_txt.engines.marker_engine import convert_pdf
+    from deep_thought.file_txt.engines.pymupdf_engine import convert_pdf
 
-    return convert_pdf(
-        source_path,
-        force_ocr=config.marker.force_ocr,
-        torch_device=config.marker.torch_device,
-        include_page_numbers=config.output.include_page_numbers,
-    )
+    return convert_pdf(source_path)
 
 
 def _convert_via_markitdown(source_path: Path) -> tuple[str, None]:
@@ -154,7 +148,7 @@ def convert_file(
     """Convert a single file to markdown and write the output.
 
     Dispatch logic:
-    - .pdf → Marker engine
+    - .pdf → PyMuPDF engine
     - .eml, .msg → Email engines
     - all other allowed types → MarkItDown engine
 
@@ -211,7 +205,7 @@ def convert_file(
 
     try:
         if source_path.suffix.lower() == _PDF_EXTENSION:
-            markdown_text, page_count = _convert_via_marker(source_path, config)
+            markdown_text, page_count = _convert_via_pymupdf(source_path)
         elif source_path.suffix.lower() in _EMAIL_EXTENSIONS:
             markdown_text, email_metadata = _convert_via_email_engine(source_path, config)
         else:

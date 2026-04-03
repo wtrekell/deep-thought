@@ -21,16 +21,17 @@
       - [Reddit](#reddit)
       - [Google Workspace (Gmail + Calendar)](#google-workspace-gmail--calendar)
       - [Gemini](#gemini)
-      - [marker-pdf](#marker-pdf-1)
       - [Whisper (mlx-whisper / openai-whisper)](#whisper-mlx-whisper--openai-whisper)
   - [SDK](#sdk)
     - [Todoist SDK for Python](#todoist-sdk-for-python)
     - [PRAW (Python Reddit API Wrapper)](#praw-python-reddit-api-wrapper)
     - [Google API Python Client](#google-api-python-client)
-    - [google-generativeai](#google-generativeai)
+    - [google-genai](#google-genai)
     - [mlx-whisper](#mlx-whisper)
     - [openai-whisper](#openai-whisper)
-    - [marker-pdf](#marker-pdf)
+    - [pymupdf4llm](#pymupdf4llm)
+    - [qdrant-client](#qdrant-client)
+    - [mlx-embeddings](#mlx-embeddings)
     - [MarkItDown](#markitdown)
     - [Playwright](#playwright)
 
@@ -155,12 +156,6 @@ Best community options:
 - [aliargun/mcp-server-gemini](https://github.com/aliargun/mcp-server-gemini) — ~248 stars, exposes Gemini 2.5 with thinking, vision, and embeddings. Published on npm as `mcp-server-gemini`.
 - [eternnoir/aistudio-mcp-server](https://github.com/eternnoir/aistudio-mcp-server) — supports all Gemini 2.5 models, multimodal file processing, PDF-to-Markdown, image analysis, audio transcription.
 
-#### marker-pdf
-
-No official server. The marker maintainers closed the GitHub issue requesting one as "not planned" ([issue #735](https://github.com/datalab-to/marker/issues/735)).
-
-- [moatasim-kt/marker_mcp_server](https://github.com/moatasim-kt/marker_mcp_server) — ~2 stars, built by the person who filed the above issue. Functional but essentially unadopted.
-
 #### Whisper (mlx-whisper / openai-whisper)
 
 No official server from Apple's MLX team or OpenAI. Community options split across three approaches:
@@ -199,13 +194,13 @@ Used by the **gmail** and **gcal** tools. The standard Python client for all Goo
   - `google-auth-oauthlib>=1.0.0`
   - `google-auth-httplib2>=0.2.0`
 
-### google-generativeai
+### google-genai
 
-Used by the **gmail** tool's attachment extractor to call the Gemini API.
+Used by the **gmail** tool's attachment extractor to call the Gemini API. Replaces the deprecated `google-generativeai` package.
 
 - [Documentation](https://ai.google.dev/gemini-api/docs/sdks)
-- [GitHub](https://github.com/google-gemini/generative-ai-python)
-- Package: `google-generativeai>=0.5.0`
+- [GitHub](https://github.com/googleapis/python-genai)
+- Package: `google-genai>=1.0.0`
 
 ### mlx-whisper
 
@@ -224,12 +219,28 @@ Optional transcription engine for the **audio** tool. Cross-platform fallback wh
 - Package: `openai-whisper` (optional dependency, install with `uv sync --extra whisper`)
 - Default model: `large-v3-turbo`
 
-### marker-pdf
+### pymupdf4llm
 
-Used by the **file-txt** tool to convert PDF files to markdown. Runs local ML models.
+Used by the **file-txt** tool to convert PDF files to markdown. Built on PyMuPDF — fast native text extraction, no ML models, no OCR.
 
-- [GitHub](https://github.com/VikParuchuri/marker)
-- Package: `marker-pdf>=1.0.0`
+- [Documentation](https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/)
+- [GitHub](https://github.com/pymupdf/PyMuPDF)
+- Package: `pymupdf4llm>=0.0.17`
+
+### qdrant-client
+
+Used by the **reddit**, **web**, and **research** tools to write document embeddings to the local Qdrant vector store. Optional — only required when running with embedding support enabled.
+
+- [Documentation](https://python-client.qdrant.tech/)
+- [GitHub](https://github.com/qdrant/qdrant-client)
+- Package: `qdrant-client>=1.9.0` (optional extra: `uv sync --extra embeddings`)
+
+### mlx-embeddings
+
+Used by the **reddit**, **web**, and **research** tools to generate document embeddings on Apple Silicon. Loads `mlx-community/bge-small-en-v1.5-mlx` from HuggingFace. Optional — only required when running with embedding support enabled.
+
+- [GitHub](https://github.com/Blaizzy/mlx-embeddings)
+- Package: `mlx-embeddings>=0.1.0` (optional extra: `uv sync --extra embeddings`)
 
 ### MarkItDown
 

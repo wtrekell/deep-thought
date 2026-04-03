@@ -16,6 +16,7 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path  # noqa: TC003
+from typing import Any
 
 from playwright.sync_api import Error as PlaywrightError
 
@@ -113,6 +114,8 @@ def _process_page(
     output_root: Path,
     rule_name: str | None,
     dry_run: bool,
+    embedding_model: Any | None = None,
+    embedding_qdrant_client: Any | None = None,
 ) -> tuple[CrawledPageLocal, PageSummary | None]:
     """Convert a fetched page to markdown and build its local model.
 
@@ -126,6 +129,10 @@ def _process_page(
         output_root: Root directory for output files.
         rule_name: The batch rule name that triggered this crawl, or None.
         dry_run: If True, skip writing files to disk.
+        embedding_model: Optional MLX embedding model. When provided together
+            with ``embedding_qdrant_client``, the page is embedded after writing.
+        embedding_qdrant_client: Optional Qdrant client. Must be provided
+            together with ``embedding_model`` for embedding to occur.
 
     Returns:
         A tuple of (CrawledPageLocal, PageSummary | None). PageSummary is None
@@ -216,6 +223,17 @@ def _process_page(
         updated_at=now_iso,
         synced_at=now_iso,
     )
+
+    if embedding_model is not None and embedding_qdrant_client is not None:
+        try:
+            from deep_thought.embeddings import strip_frontmatter as _strip_frontmatter  # noqa: PLC0415
+            from deep_thought.web.embeddings import write_embedding as _write_web_embedding  # noqa: PLC0415
+
+            raw_md = written_path.read_text(encoding="utf-8")
+            embed_content = f"Title: {page_model.title or ''}\n\n{_strip_frontmatter(raw_md)}"
+            _write_web_embedding(embed_content, page_model, config.crawl.mode, embedding_model, embedding_qdrant_client)
+        except Exception as embed_err:
+            logger.warning("Embedding failed for page %s: %s", page_result.url, embed_err)
 
     try:
         md_relative_path = written_path.relative_to(output_root).as_posix()
@@ -373,6 +391,8 @@ def run_blog_mode(
     output_root: Path,
     dry_run: bool,
     force: bool,
+    embedding_model: Any | None = None,
+    embedding_qdrant_client: Any | None = None,
 ) -> tuple[CrawlResult, list[PageSummary]]:
     """Traverse index pages according to index_depth, then fetch and capture articles.
 
@@ -389,6 +409,10 @@ def run_blog_mode(
         output_root: Root directory for output files.
         dry_run: If True, skip writing files to disk.
         force: If True, re-crawl URLs that were previously crawled successfully.
+        embedding_model: Optional MLX embedding model. Threaded to ``_process_page``
+            so each page is embedded after writing.
+        embedding_qdrant_client: Optional Qdrant client. Threaded to
+            ``_process_page`` for writing embeddings.
 
     Returns:
         A tuple of (CrawlResult, list[PageSummary]) for the crawled pages.
@@ -435,6 +459,8 @@ def run_blog_mode(
                 output_root=output_root,
                 rule_name=None,
                 dry_run=dry_run,
+                embedding_model=embedding_model,
+                embedding_qdrant_client=embedding_qdrant_client,
             )
             queries.upsert_crawled_page(conn, page_model.to_dict())
             conn.commit()
@@ -489,6 +515,8 @@ def run_documentation_mode(
     output_root: Path,
     dry_run: bool,
     force: bool,
+    embedding_model: Any | None = None,
+    embedding_qdrant_client: Any | None = None,
 ) -> tuple[CrawlResult, list[PageSummary]]:
     """Crawl a documentation site using breadth-first search.
 
@@ -508,6 +536,10 @@ def run_documentation_mode(
         output_root: Root directory for output files.
         dry_run: If True, skip writing files to disk.
         force: If True, re-crawl URLs that were previously crawled successfully.
+        embedding_model: Optional MLX embedding model. Threaded to ``_process_page``
+            so each page is embedded after writing.
+        embedding_qdrant_client: Optional Qdrant client. Threaded to
+            ``_process_page`` for writing embeddings.
 
     Returns:
         A tuple of (CrawlResult, list[PageSummary]) for the crawled pages.
@@ -577,6 +609,8 @@ def run_documentation_mode(
                     output_root=output_root,
                     rule_name=None,
                     dry_run=dry_run,
+                    embedding_model=embedding_model,
+                    embedding_qdrant_client=embedding_qdrant_client,
                 )
                 queries.upsert_crawled_page(conn, page_model.to_dict())
                 conn.commit()
@@ -679,6 +713,8 @@ def run_direct_mode(
     output_root: Path,
     dry_run: bool,
     force: bool,
+    embedding_model: Any | None = None,
+    embedding_qdrant_client: Any | None = None,
 ) -> tuple[CrawlResult, list[PageSummary]]:
     """Fetch each URL listed in a text file.
 
@@ -693,6 +729,10 @@ def run_direct_mode(
         output_root: Root directory for output files.
         dry_run: If True, skip writing files to disk.
         force: If True, re-crawl URLs that were previously crawled successfully.
+        embedding_model: Optional MLX embedding model. Threaded to ``_process_page``
+            so each page is embedded after writing.
+        embedding_qdrant_client: Optional Qdrant client. Threaded to
+            ``_process_page`` for writing embeddings.
 
     Returns:
         A tuple of (CrawlResult, list[PageSummary]) for the crawled pages.
@@ -732,6 +772,8 @@ def run_direct_mode(
                 output_root=output_root,
                 rule_name=None,
                 dry_run=dry_run,
+                embedding_model=embedding_model,
+                embedding_qdrant_client=embedding_qdrant_client,
             )
             queries.upsert_crawled_page(conn, page_model.to_dict())
             conn.commit()
@@ -845,6 +887,8 @@ def process(
     dry_run: bool,
     force: bool,
     rule_name: str | None = None,
+    embedding_model: Any | None = None,
+    embedding_qdrant_client: Any | None = None,
 ) -> CrawlResult:
     """Top-level crawl dispatcher.
 
@@ -861,6 +905,10 @@ def process(
         dry_run: If True, skip writing files to disk.
         force: If True, re-crawl already-visited URLs.
         rule_name: Optional batch rule name that triggered this crawl.
+        embedding_model: Optional MLX embedding model. Passed to the mode runner
+            so each page is embedded after writing. When None, embedding is skipped.
+        embedding_qdrant_client: Optional Qdrant client. Passed to the mode runner
+            for writing embeddings. Must be provided with ``embedding_model``.
 
     Returns:
         A CrawlResult with total, succeeded, failed, and skipped counts.
@@ -883,6 +931,8 @@ def process(
                 output_root=output_root,
                 dry_run=dry_run,
                 force=force,
+                embedding_model=embedding_model,
+                embedding_qdrant_client=embedding_qdrant_client,
             )
         elif mode == "documentation":
             if input_url is None:
@@ -895,6 +945,8 @@ def process(
                 output_root=output_root,
                 dry_run=dry_run,
                 force=force,
+                embedding_model=embedding_model,
+                embedding_qdrant_client=embedding_qdrant_client,
             )
         elif mode == "direct":
             if input_file is None:
@@ -907,6 +959,8 @@ def process(
                 output_root=output_root,
                 dry_run=dry_run,
                 force=force,
+                embedding_model=embedding_model,
+                embedding_qdrant_client=embedding_qdrant_client,
             )
         else:
             raise ValueError(f"Unknown crawl mode: '{mode}'. Must be one of: blog, documentation, direct")

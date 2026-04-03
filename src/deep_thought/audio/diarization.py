@@ -37,7 +37,7 @@ def load_diarization_pipeline(hf_token_env: str = "HF_TOKEN") -> Any:
     if not token:
         raise OSError(f"Environment variable {hf_token_env!r} is not set. Required for speaker diarization.")
 
-    from pyannote.audio import Pipeline  # type: ignore[import-not-found]  # Lazy import — optional dependency
+    from pyannote.audio import Pipeline  # Lazy import — optional dependency
 
     logger.info("Loading PyAnnote diarization pipeline...")
     pipeline: Any = Pipeline.from_pretrained(

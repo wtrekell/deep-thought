@@ -96,6 +96,9 @@ def _process_single_post(
     *,
     dry_run: bool,
     force: bool,
+    pre_fetched_comments: list[Any] | None = None,
+    embedding_model: Any | None = None,
+    embedding_qdrant_client: Any | None = None,
 ) -> tuple[str, bool]:
     """Fetch comments, generate markdown, write output, and upsert the database record.
 
@@ -107,6 +110,10 @@ def _process_single_post(
         output_dir: Root output directory for markdown files.
         dry_run: If True, skip all writes.
         force: If True, reprocess even if the post already exists in the DB.
+        embedding_model: Optional MLX embedding model. When provided together
+            with ``embedding_qdrant_client``, the post is embedded after writing.
+        embedding_qdrant_client: Optional Qdrant client. Must be provided
+            together with ``embedding_model`` for embedding to occur.
 
     Returns:
         A tuple of (action, updated) where action is 'collected', 'updated',
@@ -137,11 +144,16 @@ def _process_single_post(
             live_comment_count,
         )
 
-    # Fetch comments
-    comments = reddit_client.get_comments(
-        submission,
-        max_depth=rule_config.max_comment_depth,
-        max_comments=rule_config.max_comments,
+    # Use pre-fetched comments if provided (avoids redundant API call when comments
+    # were already fetched for keyword filtering), otherwise fetch now.
+    comments = (
+        pre_fetched_comments
+        if pre_fetched_comments is not None
+        else reddit_client.get_comments(
+            submission,
+            max_depth=rule_config.max_comment_depth,
+            max_comments=rule_config.max_comments,
+        )
     )
 
     # Generate markdown
@@ -166,6 +178,20 @@ def _process_single_post(
             output_path=output_path_str,
             word_count=word_count,
         )
+
+        if embedding_model is not None and embedding_qdrant_client is not None:
+            try:
+                from pathlib import Path as _EmbedPath  # noqa: PLC0415
+
+                from deep_thought.embeddings import strip_frontmatter as _strip_frontmatter  # noqa: PLC0415
+                from deep_thought.reddit.embeddings import write_embedding as _write_reddit_embedding  # noqa: PLC0415
+
+                raw_md = _EmbedPath(output_path_str).read_text(encoding="utf-8")
+                embed_content = f"Title: {submission.title}\n\n{_strip_frontmatter(raw_md)}"
+                _write_reddit_embedding(embed_content, local_post, embedding_model, embedding_qdrant_client)
+            except Exception as embed_err:
+                logger.warning("Embedding failed for post %s: %s", state_key, embed_err)
+
         upsert_collected_post(db_conn, local_post.to_dict())
 
     is_update = existing_row is not None
@@ -209,6 +235,8 @@ def process_rule(
     force: bool,
     global_post_count: int,
     max_posts_per_run: int,
+    embedding_model: Any | None = None,
+    embedding_qdrant_client: Any | None = None,
 ) -> CollectionResult:
     """Fetch submissions for a single rule, apply filters, and process each post.
 
@@ -227,6 +255,10 @@ def process_rule(
         force: If True, ignore existing state and reprocess all posts.
         global_post_count: Number of posts already collected in this run (across all rules).
         max_posts_per_run: Hard cap on total posts collected per invocation.
+        embedding_model: Optional MLX embedding model. Threaded through to
+            ``_process_single_post`` to embed each collected post.
+        embedding_qdrant_client: Optional Qdrant client. Threaded through to
+            ``_process_single_post`` for writing embeddings.
 
     Returns:
         A CollectionResult summarising this rule's outcome.
@@ -305,6 +337,9 @@ def process_rule(
                 output_dir=output_dir,
                 dry_run=dry_run,
                 force=force,
+                pre_fetched_comments=pre_fetch_comments,
+                embedding_model=embedding_model,
+                embedding_qdrant_client=embedding_qdrant_client,
             )
 
             if action == "skipped":
@@ -344,6 +379,8 @@ def run_collection(
     force: bool,
     rule_name_filter: str | None,
     output_override: Path | None,
+    embedding_model: Any | None = None,
+    embedding_qdrant_client: Any | None = None,
 ) -> CollectionResult:
     """Run the full collection cycle across all configured rules.
 
@@ -358,6 +395,10 @@ def run_collection(
         force: If True, ignore existing state and reprocess all posts.
         rule_name_filter: If set, only the rule with this name is processed.
         output_override: If set, use this directory instead of config.output_dir.
+        embedding_model: Optional MLX embedding model. Passed through to each
+            ``process_rule`` call so posts are embedded as they are collected.
+        embedding_qdrant_client: Optional Qdrant client. Passed through to
+            each ``process_rule`` call for writing embeddings.
 
     Returns:
         A CollectionResult aggregating counts and errors from all rules.
@@ -389,6 +430,8 @@ def run_collection(
             force=force,
             global_post_count=global_post_count,
             max_posts_per_run=config.max_posts_per_run,
+            embedding_model=embedding_model,
+            embedding_qdrant_client=embedding_qdrant_client,
         )
 
         aggregate_result.posts_collected += rule_result.posts_collected

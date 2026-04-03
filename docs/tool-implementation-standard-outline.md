@@ -1,5 +1,7 @@
 # Tool Implementation Standard — Outline
 
+> **Note:** This outline was written from the Todoist perspective and applies a one-size-fits-all approach. It has been superseded by the tool taxonomy in [`05-tools/spec/260402-tooling-evolution.md`](../05-tools/spec/260402-tooling-evolution.md), which defines Collector, Bidirectional Collector, Converter, and Generative tool types — each with different DB, sync, and embedding requirements. Read that document first when building a new tool.
+
 Expanded document to standardize future tool builds in deep-thought.
 
 ---

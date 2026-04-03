@@ -291,7 +291,7 @@ class GcalClient:
             request = self._service.events().list(**params)
             try:
                 response = self._execute(request)
-            except Exception as page_error:
+            except (HttpError, OSError, TimeoutError) as page_error:
                 if is_first_page:
                     # An error on the first page means we have nothing — re-raise.
                     raise

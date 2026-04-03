@@ -67,7 +67,7 @@ def _save_snapshot(
         Path to the saved snapshot file.
     """
     snapshots_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H%M%S%f")
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H%M%S_%f")
     source_stem = source_path.stem
     snapshot_path = snapshots_dir / f"{timestamp}_{source_stem}.json"
 

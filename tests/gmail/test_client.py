@@ -536,56 +536,53 @@ class TestGeminiExtractorRateLimit:
 
     def test_no_sleep_on_first_call(self) -> None:
         """Should not sleep when no prior extraction has been made."""
-        with patch("google.generativeai.configure"), patch("google.generativeai.GenerativeModel"):
-            from deep_thought.gmail.extractor import GeminiExtractor
+        from deep_thought.gmail.extractor import GeminiExtractor
 
-            extractor = GeminiExtractor.__new__(GeminiExtractor)
-            extractor._rate_limit_rpm = 60
-            extractor._last_request_time = 0.0
+        extractor = GeminiExtractor.__new__(GeminiExtractor)
+        extractor._rate_limit_rpm = 60
+        extractor._last_request_time = 0.0
 
-            with (
-                patch("deep_thought.gmail.extractor.time.sleep") as mock_sleep,
-                patch("deep_thought.gmail.extractor.time.time", return_value=1000.0),
-            ):
-                extractor._rate_limit()
+        with (
+            patch("deep_thought.gmail.extractor.time.sleep") as mock_sleep,
+            patch("deep_thought.gmail.extractor.time.time", return_value=1000.0),
+        ):
+            extractor._rate_limit()
 
-            mock_sleep.assert_not_called()
+        mock_sleep.assert_not_called()
 
     def test_sleeps_when_within_minimum_interval(self) -> None:
         """Should sleep the remaining gap when called too soon after the last extraction."""
-        with patch("google.generativeai.configure"), patch("google.generativeai.GenerativeModel"):
-            from deep_thought.gmail.extractor import GeminiExtractor
+        from deep_thought.gmail.extractor import GeminiExtractor
 
-            extractor = GeminiExtractor.__new__(GeminiExtractor)
-            extractor._rate_limit_rpm = 60  # 1/s → interval = 1.0s
-            extractor._last_request_time = 999.7  # 0.3s ago
+        extractor = GeminiExtractor.__new__(GeminiExtractor)
+        extractor._rate_limit_rpm = 60  # 1/s → interval = 1.0s
+        extractor._last_request_time = 999.7  # 0.3s ago
 
-            with (
-                patch("deep_thought.gmail.extractor.time.sleep") as mock_sleep,
-                patch("deep_thought.gmail.extractor.time.time", side_effect=[1000.0, 1000.0]),
-            ):
-                extractor._rate_limit()
+        with (
+            patch("deep_thought.gmail.extractor.time.sleep") as mock_sleep,
+            patch("deep_thought.gmail.extractor.time.time", side_effect=[1000.0, 1000.0]),
+        ):
+            extractor._rate_limit()
 
-            mock_sleep.assert_called_once()
-            sleep_duration = mock_sleep.call_args[0][0]
-            assert abs(sleep_duration - 0.7) < 0.001
+        mock_sleep.assert_called_once()
+        sleep_duration = mock_sleep.call_args[0][0]
+        assert abs(sleep_duration - 0.7) < 0.001
 
     def test_rate_limit_disabled_when_rpm_is_zero(self) -> None:
         """Should do nothing when rate_limit_rpm is 0."""
-        with patch("google.generativeai.configure"), patch("google.generativeai.GenerativeModel"):
-            from deep_thought.gmail.extractor import GeminiExtractor
+        from deep_thought.gmail.extractor import GeminiExtractor
 
-            extractor = GeminiExtractor.__new__(GeminiExtractor)
-            extractor._rate_limit_rpm = 0
+        extractor = GeminiExtractor.__new__(GeminiExtractor)
+        extractor._rate_limit_rpm = 0
 
-            with (
-                patch("deep_thought.gmail.extractor.time.sleep") as mock_sleep,
-                patch("deep_thought.gmail.extractor.time.time") as mock_time,
-            ):
-                extractor._rate_limit()
+        with (
+            patch("deep_thought.gmail.extractor.time.sleep") as mock_sleep,
+            patch("deep_thought.gmail.extractor.time.time") as mock_time,
+        ):
+            extractor._rate_limit()
 
-            mock_sleep.assert_not_called()
-            mock_time.assert_not_called()
+        mock_sleep.assert_not_called()
+        mock_time.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

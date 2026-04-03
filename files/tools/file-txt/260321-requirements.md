@@ -13,7 +13,7 @@
 ## Requirements
 
 1. Python 3.12 using `uv` as the package manager.
-2. **Marker** (`marker-pdf`) for PDF conversion — fully local, no API key required.
+2. **PyMuPDF4LLM** (`pymupdf4llm`) for PDF conversion — native text extraction, no ML models, no OCR.
 3. **MarkItDown** (`markitdown`) for Office and HTML conversion (DOCX, PPTX, XLSX, HTML, HTM).
 4. **extract-msg** ([`extract-msg`](https://github.com/TeamMsgExtractor/msg-extractor)) for OLE 2 compound document (.msg) parsing.
 5. **html2text** ([`html2text`](https://github.com/Alir3z4/html2text)) for HTML email body conversion.
@@ -38,8 +38,6 @@ Running `file-txt` with no arguments displays usage information. Conversion is t
 | `PATH`                   | Input file or directory (positional; default: `input/`)                  |
 | `--output PATH`          | Output directory (default: `output/`)                                    |
 | `--llm`                  | Also generate `llms-full.txt` and `llms.txt` in the output root          |
-| `--force-ocr`            | Force OCR on all pages regardless of content (PDF only)                  |
-| `--torch-device TEXT`    | Torch device: `mps`, `cuda`, or `cpu` (PDF only; default: `mps`)         |
 | `--include-page-numbers` | Embed page numbers in markdown output (PDF only)                         |
 | `--prefer-html`          | Prefer HTML body over plain text for email files (email only)            |
 | `--full-headers`         | Include additional headers beyond From/To/Date (email only)              |
@@ -51,7 +49,7 @@ Running `file-txt` with no arguments displays usage information. Conversion is t
 | `--config PATH`          | Override default config file path                                        |
 | `--version`              | Show version and exit                                                    |
 
-Boolean flags support `--no-*` variants (e.g., `--no-force-ocr`) to override config-level `true` values.
+Boolean flags support `--no-*` variants (e.g., `--no-include-page-numbers`) to override config-level `true` values.
 
 **Supported input extensions:** `.pdf`, `.docx`, `.pptx`, `.xlsx`, `.html`, `.htm`, `.eml`, `.msg`
 
@@ -80,7 +78,7 @@ src/deep_thought/file_txt/
 └── engines/
     ├── __init__.py
     ├── email_utils.py            # Shared email conversion utilities
-    ├── marker_engine.py          # Marker PDF conversion
+    ├── pymupdf_engine.py         # PyMuPDF4LLM PDF conversion
     ├── markitdown_engine.py      # MarkItDown conversion for Office/HTML
     ├── eml_engine.py             # RFC 822 .eml email conversion
     └── msg_engine.py             # OLE 2 .msg email conversion
@@ -99,10 +97,6 @@ output/                           # Default output root; override with --output
 Configuration is stored in `src/config/file-txt-configuration.yaml`. All values below are required unless marked optional.
 
 ```yaml
-# Marker (PDF)
-force_ocr: false
-torch_device: "mps" # 'mps', 'cuda', or 'cpu'
-
 # Email
 prefer_html: false # true = convert HTML body; false = prefer plain text
 full_headers: false # true = include all MIME headers
@@ -249,4 +243,4 @@ Index file in the output root, following the llmstxt.org convention:
 1. **Subcommand for conversion?** No — conversion is the default operation triggered by `file-txt` directly. `config` and `init` are the only named subcommands. The `--llm` flag modifies the default operation's output.
 2. **Per-document llms files or aggregate?** Aggregate — one `llms-full.txt` and one `llms.txt` per run, written to the output root. Per-document LLM files are not generated.
 3. **Where is the output root?** Defaults to `output/` relative to the working directory; overridable with `--output`.
-4. **Single PDF engine?** Yes — Marker only. Speed difference vs. PyMuPDF4LLM is irrelevant for short documents; Marker produces better quality output.
+4. **Single PDF engine?** Yes — PyMuPDF4LLM only. Native text extraction; no OCR for scanned/image-only PDFs.

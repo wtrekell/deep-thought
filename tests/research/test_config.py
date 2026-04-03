@@ -74,14 +74,14 @@ class TestLoadConfig:
         assert config.retry_base_delay_seconds == 1
         assert config.default_recency is None
 
-    def test_raises_key_error_for_missing_required_field(self, tmp_path: Path) -> None:
-        """Should raise KeyError when a required field is absent from the config."""
-        # api_key_env is absent — this must raise KeyError, not silently use a default.
+    def test_raises_value_error_for_missing_required_field(self, tmp_path: Path) -> None:
+        """Should raise ValueError when a required field is absent from the config."""
+        # api_key_env is absent — must raise ValueError with the field name, not silently use a default.
         config_file = tmp_path / "missing_required.yaml"
         config_file.write_text(
             "search_model: sonar\nresearch_model: sonar-deep-research\noutput_dir: data/research/export/\n",
         )
-        with pytest.raises(KeyError):
+        with pytest.raises(ValueError, match="api_key_env"):
             load_config(config_file)
 
     def test_raises_for_missing_file(self, tmp_path: Path) -> None:

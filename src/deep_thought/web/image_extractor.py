@@ -6,7 +6,9 @@ and returns the paths to successfully downloaded files.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
+import socket
 import urllib.request
 from html.parser import HTMLParser
 from pathlib import Path  # noqa: TC003
@@ -117,6 +119,22 @@ def download_images(image_urls: list[str], output_dir: Path) -> list[Path]:
 
         if parsed_url.scheme not in _ALLOWED_IMAGE_SCHEMES:
             logger.warning("Skipping image %s: disallowed URL scheme %r", image_url, parsed_url.scheme)
+            continue
+
+        try:
+            image_host = parsed_url.hostname or ""
+            resolved_ip = ipaddress.ip_address(socket.gethostbyname(image_host))
+            if (
+                resolved_ip.is_private
+                or resolved_ip.is_loopback
+                or resolved_ip.is_link_local
+                or resolved_ip.is_reserved
+                or resolved_ip.is_multicast
+            ):
+                logger.warning("Skipping image %s: resolved to non-routable IP %s", image_url, resolved_ip)
+                continue
+        except (OSError, ValueError):
+            logger.warning("Skipping image %s: could not resolve hostname", image_url)
             continue
 
         url_extension = Path(parsed_url.path).suffix or ".jpg"

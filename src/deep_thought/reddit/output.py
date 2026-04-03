@@ -21,21 +21,6 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def _get_author_name(obj: Any) -> str:
-    """Extract the author username from a PRAW object safely.
-
-    Delegates to the shared :func:`~deep_thought.reddit.utils.get_author_name`
-    utility. Kept here for backward-compatibility with existing test imports.
-
-    Args:
-        obj: A PRAW Submission or Comment object with an author attribute.
-
-    Returns:
-        The author's username string, or "[deleted]" if the account is gone.
-    """
-    return get_author_name(getattr(obj, "author", None))
-
-
 def _format_date_from_utc(created_utc: float) -> str:
     """Format a Unix UTC timestamp as a YYYY-MM-DD date string.
 
@@ -89,12 +74,14 @@ def _build_frontmatter(
     post_id = str(submission.id)
     subreddit_name = str(submission.subreddit.display_name)
     state_key = f"{post_id}:{subreddit_name}:{rule_config.name}"
-    author_name = _get_author_name(submission)
+    author_name = get_author_name(getattr(submission, "author", None))
     flair_text = submission.link_flair_text
     is_video = bool(getattr(submission, "is_video", False))
 
     # Escape title for YAML (quote it)
-    escaped_title = str(submission.title).replace('"', '\\"')
+    escaped_title = (
+        str(submission.title).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
+    )
 
     lines: list[str] = ["---"]
     lines.append("tool: reddit")
@@ -106,11 +93,16 @@ def _build_frontmatter(
     lines.append(f"author: u/{author_name}")
     lines.append(f"score: {submission.score}")
     lines.append(f"num_comments: {submission.num_comments}")
-    escaped_url = str(submission.url).replace('"', '\\"')
+    escaped_url = (
+        str(submission.url).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
+    )
     lines.append(f'url: "{escaped_url}"')
     lines.append(f"is_video: {str(is_video).lower()}")
     if flair_text is not None:
-        lines.append(f'flair: "{flair_text}"')
+        escaped_flair = (
+            str(flair_text).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
+        )
+        lines.append(f'flair: "{escaped_flair}"')
     else:
         lines.append("flair: null")
     lines.append(f"word_count: {word_count}")
@@ -138,7 +130,7 @@ def _render_comment(comment: Any, depth: int) -> str:
     Returns:
         A rendered markdown string for the comment.
     """
-    author_name = _get_author_name(comment)
+    author_name = get_author_name(getattr(comment, "author", None))
     score = int(getattr(comment, "score", 0))
     body = str(getattr(comment, "body", "")).strip()
 
@@ -273,7 +265,7 @@ def generate_markdown(
     processed_date = datetime.now(tz=UTC).isoformat()
 
     # Build body section
-    author_name = _get_author_name(submission)
+    author_name = get_author_name(getattr(submission, "author", None))
     post_date = _format_date_from_utc(float(submission.created_utc))
     score_formatted = f"{submission.score:,}"
 

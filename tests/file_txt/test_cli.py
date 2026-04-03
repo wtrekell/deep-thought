@@ -20,8 +20,8 @@ from deep_thought.file_txt.config import (
     FileTxtConfig,
     FilterConfig,
     LimitsConfig,
-    MarkerConfig,
     OutputConfig,
+    PdfConfig,
 )
 
 # ---------------------------------------------------------------------------
@@ -30,8 +30,6 @@ from deep_thought.file_txt.config import (
 
 
 def _make_config(
-    force_ocr: bool = False,
-    torch_device: str = "cpu",
     prefer_html: bool = False,
     full_headers: bool = False,
     include_attachments: bool = True,
@@ -41,7 +39,7 @@ def _make_config(
 ) -> FileTxtConfig:
     """Return a FileTxtConfig with sensible test defaults."""
     return FileTxtConfig(
-        marker=MarkerConfig(force_ocr=force_ocr, torch_device=torch_device),
+        pdf=PdfConfig(),
         email=EmailConfig(
             prefer_html=prefer_html,
             full_headers=full_headers,
@@ -67,8 +65,6 @@ def _make_convert_args(**kwargs: object) -> argparse.Namespace:
         "dry_run": False,
         "nuke": False,
         "llm": False,
-        "force_ocr": None,
-        "torch_device": None,
         "include_page_numbers": None,
         "extract_images": None,
         "prefer_html": None,
@@ -85,33 +81,6 @@ def _make_convert_args(**kwargs: object) -> argparse.Namespace:
 
 
 class TestBuildConfigWithOverrides:
-    def test_force_ocr_true_overrides_config(self) -> None:
-        """--force-ocr True must override the config's force_ocr value."""
-        base_config = _make_config(force_ocr=False)
-        args = _make_convert_args(force_ocr=True)
-
-        result_config = _build_config_with_overrides(args, base_config)
-
-        assert result_config.marker.force_ocr is True
-
-    def test_force_ocr_false_overrides_config(self) -> None:
-        """--no-force-ocr (False) must override a config value of True."""
-        base_config = _make_config(force_ocr=True)
-        args = _make_convert_args(force_ocr=False)
-
-        result_config = _build_config_with_overrides(args, base_config)
-
-        assert result_config.marker.force_ocr is False
-
-    def test_force_ocr_none_preserves_config_value(self) -> None:
-        """When force_ocr is None (flag not passed), config value must be kept."""
-        base_config = _make_config(force_ocr=True)
-        args = _make_convert_args(force_ocr=None)
-
-        result_config = _build_config_with_overrides(args, base_config)
-
-        assert result_config.marker.force_ocr is True
-
     def test_include_page_numbers_none_preserves_config(self) -> None:
         """When include_page_numbers is None, config value must be preserved."""
         base_config = _make_config(include_page_numbers=True)
@@ -166,23 +135,6 @@ class TestBuildConfigWithOverrides:
 
         assert result_config.output.extract_images is False
 
-    def test_torch_device_override(self) -> None:
-        """--torch-device must override the config's torch_device value."""
-        base_config = _make_config(torch_device="cpu")
-        args = _make_convert_args(torch_device="cuda")
-
-        result_config = _build_config_with_overrides(args, base_config)
-
-        assert result_config.marker.torch_device == "cuda"
-
-    def test_torch_device_none_preserves_config(self) -> None:
-        """When torch_device is None (not passed), config's value must be kept."""
-        base_config = _make_config(torch_device="mps")
-        args = _make_convert_args(torch_device=None)
-
-        result_config = _build_config_with_overrides(args, base_config)
-
-        assert result_config.marker.torch_device == "mps"
 
 
 # ---------------------------------------------------------------------------
@@ -231,14 +183,17 @@ class TestCmdConvert:
 
         with (
             patch("deep_thought.file_txt.cli._load_config_from_args", return_value=base_config),
-            patch("deep_thought.file_txt.cli.validate_config", return_value=["torch_device 'bad' is not valid."]),
+            patch(
+                "deep_thought.file_txt.cli.validate_config",
+                return_value=["max_file_size_mb must be greater than 0."],
+            ),
             patch("deep_thought.file_txt.cli.collect_input_files", return_value=[fake_source_file]),
             patch("deep_thought.file_txt.cli.convert_file", return_value=fake_result),
         ):
             cmd_convert(args)
 
         captured = capsys.readouterr()
-        assert "WARNING: torch_device" in captured.err
+        assert "WARNING: max_file_size_mb" in captured.err
 
     def test_exit_code_zero_when_all_files_succeed(self) -> None:
         """When all files convert successfully, cmd_convert must not call sys.exit."""
@@ -425,7 +380,10 @@ class TestCmdConfig:
         base_config = _make_config()
         args = argparse.Namespace(config=None)
 
-        validation_issues = ["torch_device 'tpu' is not valid.", "max_file_size_mb must be greater than 0."]
+        validation_issues = [
+            "max_file_size_mb must be greater than 0.",
+            "allowed_extensions is empty — no files will be processed.",
+        ]
 
         with (
             patch("deep_thought.file_txt.cli._load_config_from_args", return_value=base_config),
@@ -434,8 +392,8 @@ class TestCmdConfig:
             cmd_config(args)
 
         captured = capsys.readouterr()
-        assert "torch_device" in captured.out
         assert "max_file_size_mb" in captured.out
+        assert "allowed_extensions" in captured.out
 
 
 # ---------------------------------------------------------------------------
