@@ -97,7 +97,10 @@ src/deep_thought/reddit/
 │       └── 001_init_schema.sql
 ├── filters.py                   # Score, age, keyword, flair filtering
 ├── output.py                    # Markdown + YAML frontmatter generation
+├── image_extractor.py           # Image download: extracts URLs from markdown, saves to img/
+├── embeddings.py                # Qdrant write: embeds collected posts (optional)
 ├── llms.py                      # .llms.txt / .llms-full.txt generation
+├── utils.py                     # Shared helpers: slugify_title (delegates to text_utils), get_author_name
 └── client.py                    # PRAW API client wrapper
 
 data/reddit/
@@ -168,7 +171,7 @@ rules:
 | `search_comments`   | Extend keyword matching to comment bodies                      |
 | `max_comment_depth` | Recursion depth for comment trees (default: 3)                 |
 | `max_comments`      | Max comments to collect per post (default: 200)                |
-| `include_images`    | Include image URLs in output; download linked images to `img/` |
+| `include_images`    | Download direct image links (jpg/png/gif/webp) to `img/` subdirectory and rewrite markdown references to local paths. Failures log a warning and leave the original URL. |
 
 ## Data Format
 

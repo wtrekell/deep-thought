@@ -79,7 +79,7 @@ Located at `data/gcal/gcal.db` by default; respects the `DEEP_THOUGHT_DATA_DIR` 
 | `all_day`     | `bool`        | `True` if the event uses `date` rather than `dateTime`            |
 | `status`      | `str`         | `confirmed`, `tentative`, or `cancelled`                          |
 | `organizer`   | `str \| None` | Organizer email address                                           |
-| `attendees`   | `str \| None` | Serialized JSON list of attendee objects                          |
+| `attendees`   | `str \| None` | Serialized JSON list of attendee objects (internal DB storage; exported to frontmatter as YAML list) |
 | `recurrence`  | `str \| None` | Serialized JSON list of RRULE strings                             |
 | `html_link`   | `str \| None` | URL to event in Google Calendar web UI                            |
 | `created_at`  | `str`         | ISO 8601 timestamp of first sync                                  |
