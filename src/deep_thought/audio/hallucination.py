@@ -185,6 +185,14 @@ def detect_repetition(
     # Concatenate all segment texts (window + target) into one word list and
     # look for any bigram or trigram that appears at a rate suggesting a
     # hallucination phrase has been repeated across segment boundaries.
+    #
+    # Small-window limitation: the scaling factor `max(1, len(window_segments) // 2)`
+    # equals 1 whenever len(window_segments) < 4 (i.e. window_size < 4 after the
+    # half-window slicing in apply_hallucination_detection). At that point the
+    # cross-segment threshold is identical to Check 2's threshold, so this check
+    # provides no additional false-positive protection and is effectively redundant
+    # with Check 2. The default window_size of 10 produces window_segments of up
+    # to 9 entries (factor >= 4), so normal usage is unaffected.
     if window_segments:
         all_window_texts = [_normalize_text(ws.text) for ws in window_segments] + [normalised_target]
         combined_words = [word for text in all_window_texts for word in text.split()]

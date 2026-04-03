@@ -25,7 +25,6 @@ from deep_thought.gmail.db.queries import (
 )
 from deep_thought.gmail.filters import is_already_processed, is_within_max_emails
 from deep_thought.gmail.models import CollectResult, ProcessedEmailLocal, SendResult, _extract_header
-from deep_thought.text_utils import slugify as _shared_slugify
 from deep_thought.gmail.output import (
     append_to_rule_file,
     extract_body_text,
@@ -33,6 +32,7 @@ from deep_thought.gmail.output import (
     write_email_file,
 )
 from deep_thought.progress import track_items
+from deep_thought.text_utils import slugify as _shared_slugify
 
 if TYPE_CHECKING:
     from deep_thought.gmail.client import GmailClient

@@ -1,6 +1,6 @@
 # Research Tool — Known Issues
 
-Issues identified during code review on 2026-03-23. Severity ratings: medium, low.
+No outstanding issues. Last verified 2026-04-03.
 
 ---
 

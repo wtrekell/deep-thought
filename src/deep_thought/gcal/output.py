@@ -84,9 +84,11 @@ def _build_event_frontmatter(event: EventLocal) -> str:
                         email = str(attendee)
                         display_name = ""
                     if email:
-                        lines.append(f"  - email: {email}")
+                        escaped_email = _escape_yaml_value(email)
+                        lines.append(f'  - email: "{escaped_email}"')
                         if display_name:
-                            lines.append(f"    display_name: {display_name}")
+                            escaped_display_name = _escape_yaml_value(display_name)
+                            lines.append(f'    display_name: "{escaped_display_name}"')
         except (json.JSONDecodeError, TypeError) as attendees_error:
             logger.warning(
                 "Event %s: failed to deserialize attendees JSON — field omitted from output. Error: %s",

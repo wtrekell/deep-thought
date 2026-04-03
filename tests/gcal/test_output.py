@@ -152,9 +152,9 @@ class TestGenerateEventMarkdown:
         )
         result = generate_event_markdown(event)
         assert "attendees:" in result
-        assert "  - email: colleague@example.com" in result
-        assert "    display_name: Colleague" in result
-        assert "  - email: boss@example.com" in result
+        assert '  - email: "colleague@example.com"' in result
+        assert '    display_name: "Colleague"' in result
+        assert '  - email: "boss@example.com"' in result
         # display_name line should not appear for an attendee without one
         assert result.count("display_name:") == 1
 
@@ -164,8 +164,26 @@ class TestGenerateEventMarkdown:
 
         event = _make_test_event(attendees=json.dumps([{"email": "user@example.com"}]))
         result = generate_event_markdown(event)
-        assert "  - email: user@example.com" in result
+        assert '  - email: "user@example.com"' in result
         assert "display_name:" not in result
+
+    def test_attendee_display_name_with_colon_is_quoted(self) -> None:
+        """display_name values containing ':' must be double-quoted to produce valid YAML."""
+        import json
+
+        event = _make_test_event(
+            attendees=json.dumps([{"email": "head@example.com", "displayName": "Head: Marketing"}])
+        )
+        result = generate_event_markdown(event)
+        assert '    display_name: "Head: Marketing"' in result
+
+    def test_attendee_email_is_always_quoted(self) -> None:
+        """Email values must always be double-quoted for consistent YAML output."""
+        import json
+
+        event = _make_test_event(attendees=json.dumps([{"email": "plain@example.com"}]))
+        result = generate_event_markdown(event)
+        assert '  - email: "plain@example.com"' in result
 
     def test_includes_recurrence(self) -> None:
         """Should include recurrence rules in frontmatter when present."""

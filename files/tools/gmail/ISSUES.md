@@ -16,6 +16,18 @@ The `google.generativeai` package shows a `FutureWarning` recommending migration
 
 ---
 
+## Resolved (2026-04-02)
+
+### Service init guard missing in client._execute() — FIXED
+
+**File:** `client.py`
+
+`self._service` is initialized to `None` in `__init__` but `_execute()` dereferenced it without checking, raising `AttributeError: 'NoneType' object has no attribute 'users'()` if any API method was called before `authenticate()`. The error message gave no indication that authentication was the cause.
+
+Fixed (2026-04-02): Added a `None` check at the top of `_execute()` that raises `RuntimeError("Must call authenticate() before making API requests.")`. Test added in `tests/gmail/test_client.py`.
+
+---
+
 ## Resolved (2026-03-30)
 
 ### M1: Expired decision cache entries never cleaned up

@@ -142,7 +142,7 @@ def _validate_priority(priority: int) -> int:
     """
     if priority not in _VALID_PRIORITY_RANGE:
         logger.warning(
-            "Priority %d is out of range (expected 1–4). Defaulting to 1 (normal).",
+            "Priority %s is out of range (expected 1–4). Defaulting to 1 (normal).",
             priority,
         )
         return 1

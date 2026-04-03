@@ -12,7 +12,6 @@ if TYPE_CHECKING:
 
 from deep_thought.text_utils import slugify as _shared_slugify
 
-
 # ---------------------------------------------------------------------------
 # Markdown escaping
 # ---------------------------------------------------------------------------

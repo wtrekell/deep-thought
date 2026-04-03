@@ -2,6 +2,13 @@
 
 Outstanding issues from code reviews. Critical and high severity issues were resolved in the 2026-03-30 review cycle.
 
+## Resolved (2026-04-02)
+
+| ID   | Severity | File              | Issue                                                                                                                      | Resolution                                                                                                                                                     |
+| ---- | -------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A-01 | Medium   | `export.py`       | claude config block defined but never rendered — `config.claude.label`, `config.claude.role.repo`, and `config.claude.role.branch` were parsed and stored but `export.py` never included them in task output, making the Claude dispatch metadata invisible. | `_render_task_block()` now emits a `claude:` block when a task has the Claude label applied. `repo:` and `branch:` lines included when configured.               |
+| A-02 | Low      | `create.py`, `push.py` | Priority values not validated — Todoist API expects 1–4 but no validation existed locally; out-of-range values were passed directly to the API, which would reject or silently default them. | Added `_validate_priority()` in `create.py` (clamping out-of-range values to 1 with a warning). Imported and applied in `push.py`. `%d` format specifier changed to `%s` to prevent `TypeError` on unexpected `None` input. |
+
 ## Resolved (2026-03-30)
 
 | ID   | Severity | File                              | Issue                                                                                                                   | Resolution                                                                                                                                                  |

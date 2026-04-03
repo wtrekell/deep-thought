@@ -20,6 +20,38 @@ Additionally, the CLI callers (`cmd_create`, `cmd_update`) also called `connecti
 
 ---
 
+## Resolved (2026-04-02)
+
+### A-01: Attendees stored as JSON string in frontmatter — FIXED
+
+**Files:** `output.py`
+
+Attendees were written to YAML frontmatter as a single JSON-encoded string value, requiring consumers to JSON-decode a value inside YAML. Display names containing `:` also produced invalid YAML.
+
+Fixed (2026-04-02): Attendees now rendered as a proper YAML list. Each entry uses `- email: <addr>` with an optional `display_name: "<name>"` line. Both fields are quoted via `_escape_yaml_value()`. Tests updated.
+
+---
+
+### A-02: No validation of attendee emails before API call — FIXED
+
+**Files:** `create.py`, `update.py`
+
+Attendee entries from markdown frontmatter were passed directly to the Google Calendar API without format validation. Malformed entries (missing `@` or `.`) would fail at API call time with an opaque error.
+
+Fixed (2026-04-02): Added `_validate_attendee_emails()` helper in `create.py`; imported and applied in `update.py`. Invalid entries are skipped with a `logger.warning`, allowing the event write to proceed with valid attendees.
+
+---
+
+### A-03: attendee display_name not YAML-escaped — FIXED
+
+**Files:** `output.py`
+
+Display names were written as unquoted YAML scalars. Names containing `:` (common in business calendar contacts, e.g. "Head: Marketing") produced structurally invalid YAML.
+
+Fixed (2026-04-03): Both `email` and `display_name` fields in the attendee list are now passed through `_escape_yaml_value()`.
+
+---
+
 ## Medium Severity — ALL RESOLVED (2026-03-30)
 
 ### M1: Missing transactions around multi-event upsert loops — FIXED

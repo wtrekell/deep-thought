@@ -18,6 +18,18 @@ Outstanding issues from the 2026-03-23 code review. Critical and high severity i
 
 ---
 
+## Resolved (2026-04-02)
+
+### Cross-segment bigram/trigram hallucination check missing — FIXED
+
+**File:** `hallucination.py`
+
+The repetition detection in `detect_repetition()` only checked for repeated n-grams within a single segment. Hallucinations that span segment boundaries (e.g., a phrase split across the end of segment N and the start of segment N+1) were not detected. The window-level check compared whole segment texts but not their constituent n-grams.
+
+Fixed (2026-04-02): Added Check 3 in `detect_repetition()`: all segment texts in the window are concatenated into a single word list and scanned for cross-boundary bigram/trigram repetition. Threshold scaled by `max(1, len(window_segments) // 2)` to reduce false positives in larger windows. Note: effectiveness of Check 3 relative to Check 2 is reduced when `window_size < 4` (default is 10; unaffected). Tests added in `tests/audio/test_hallucination.py`.
+
+---
+
 ## Resolved (2026-03-30)
 
 All medium, low (except L-07 and L-08), and test coverage issues resolved.

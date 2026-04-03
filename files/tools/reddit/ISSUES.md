@@ -2,18 +2,27 @@
 
 Outstanding issues from the 2026-03-23 code review. Critical and high severity issues were resolved in the same review cycle.
 
-## Open — Low
+## Closed — Won't Fix
 
 ### L-03: `count_words` in output.py uses `len(text.split())`
 
 - **File:** `output.py` (line ~81)
 - `text.split()` already omits empty strings, so the implementation is correct. However, markdown syntax tokens (e.g., `#`, `**`, `---`) are counted as words.
-- **Recommendation:** Acceptable for estimation purposes. No change needed.
+- **Rationale:** Acceptable for estimation/display purposes. No change planned.
 
 ### L-05: `format_duration` in llms.py drops seconds for durations >= 1 hour
 
 - **File:** `llms.py`
 - A 1h 30s recording displays as "1h 0m". Acceptable for display purposes.
+- **Rationale:** Acceptable for estimation/display purposes. No change planned.
+
+## Resolved (2026-04-02)
+
+| ID   | Severity | File                      | Issue                                                                                                                    | Resolution                                                                                                                                                |
+| ---- | -------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M-11 | Medium   | `config.py`               | Rule names not validated for filesystem safety — a rule name containing path separators or traversal sequences could escape the output directory when used as a subdirectory path. | Added `_SAFE_RULE_NAME_PATTERN` validation in `validate_config()`: rule names must match `^[a-zA-Z0-9_-]+$`. Error raised at config load time.            |
+| M-12 | Medium   | `image_extractor.py` (new) | include_images config flag parsed and stored but never acted on — no image download code existed.                      | Implemented `image_extractor.py`: downloads direct image links (jpg/png/gif/webp/jpeg) to `img/` subdirectory, rewrites markdown references to local paths, handles failures gracefully. Called from `processor.py` after `write_post_file()` when `include_images` is True and not dry-run. |
+| M-13 | Low      | `utils.py`                | `slugify_title()` implemented independently in reddit/utils.py; diverged from web tool's implementation.                | `slugify_title()` now delegates to `deep_thought.text_utils.slugify` (shared canonical implementation). Behavior preserved; `max_length=80` passed explicitly. |
 
 ## Resolved (2026-04-01)
 

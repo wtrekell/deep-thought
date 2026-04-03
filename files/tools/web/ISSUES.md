@@ -61,6 +61,12 @@ Outstanding issues from code reviews. Critical and high severity issues were res
 | T-09  | Test     | `tests/web/conftest.py`  | Unused fixtures `sample_html` and `blog_index_html`                                                                        | Removed both fixtures from `conftest.py`                                                                                                     |
 | _VER  | Medium   | `cli.py`                 | `_VERSION` was a hardcoded string instead of reading package metadata                                                      | Added `_get_version()` using `importlib.metadata.version("deep-thought")` with `PackageNotFoundError` fallback                               |
 
+## Resolved (2026-04-02)
+
+| ID   | Severity | File                             | Issue                                                                                                                                                   | Resolution                                                                                                                                                                                                         |
+| ---- | -------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| M-20 | Medium   | `output.py`                      | `url:` field in frontmatter written as unquoted YAML scalar — URLs containing `:` (e.g. with port numbers or protocol-relative references) would produce invalid YAML. `title:` was already quoted via `_yaml_quoted_string()` but `url:` was not. | Applied `_yaml_quoted_string()` to the `url:` field in `_build_frontmatter()`. Both `title:` and `url:` are now consistently quoted. |
+
 ## Resolved (2026-04-01)
 
 | ID   | Severity | File                             | Issue                                                                                                                                                   | Resolution                                                                                                                                                                                                         |

@@ -91,6 +91,11 @@ def _download_single_image(image_url: str, destination_path: Path) -> bool:
 
     try:
         image_host = parsed.hostname or ""
+        # DNS rebinding limitation: this pre-resolution check and the subsequent
+        # urlopen() call each perform their own DNS lookup. A DNS rebinding attack
+        # could return a public IP here and a private IP for the real connection,
+        # bypassing the guard. This is low-risk for a personal tool operating against
+        # known Reddit CDN hostnames, but the check is not a complete SSRF defense.
         resolved_ip = ipaddress.ip_address(socket.gethostbyname(image_host))
         if (
             resolved_ip.is_private
