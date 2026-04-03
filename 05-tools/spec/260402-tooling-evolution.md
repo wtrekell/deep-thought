@@ -209,16 +209,22 @@ These are not the same decision. They should be evaluated and sequenced independ
 
 ### Additive Changes: Embedding Integration
 
-Adding embedding support to existing knowledge collectors (Reddit, Web, Research) requires:
-- A new `embeddings.py` module per tool
-- A call to `write_embedding()` added to the processor after the markdown write
-- New tests mocking the Qdrant client and embedding model
+**Status: Complete (2026-04-02)**
 
-**Nothing existing is modified.** The processor gains one new call. The DB layer, models, CLI, and all existing tests are untouched. If the embedding call fails, the collection run continues — the failure is isolated by design.
+Added embedding support to Reddit, Web, and Research:
+- `src/deep_thought/embeddings.py` — shared infrastructure module (model init, Qdrant client init, `write_embedding()`, `strip_frontmatter()`)
+- `src/deep_thought/reddit/embeddings.py`, `web/embeddings.py`, `research/embeddings.py` — per-tool modules
+- One guarded call added to each processor/CLI after the markdown write
+- 44 new tests across 6 test files
+- Schema reference at `files/tools/embeddings/260402-qdrant-schema.md`
 
-**Prerequisite:** The Workflow Architect must establish the shared embedding interface (Qdrant client, MLX model, upsert contract) before any tool can implement it. The per-tool work cannot begin until that infrastructure exists. Once it does, the per-tool work is mechanical — the same pattern applied three times.
+Infrastructure established by the cross-tool-architect:
+- Qdrant running as a persistent binary service (`~/bin/qdrant`, storage at `~/qdrant_storage`)
+- Collection: `deep_thought_documents`, 384-dim COSINE, 6 indexed payload fields
+- Embedding model: `mlx-community/bge-small-en-v1.5-mlx` via `mlx-embeddings` (optional extra)
+- Both `qdrant-client` and `mlx-embeddings` in `[embeddings]` optional extra — install with `uv sync --extra embeddings`
 
-**Assessment:** Straightforward. Do this when the Workflow Architect work is complete. The risk is low and the value is high — this is the change that makes cross-tool semantic search possible.
+Embedding failures are isolated: logged as a warning, collection continues. Documents exist on disk regardless of embedding outcome.
 
 ---
 
@@ -258,13 +264,13 @@ YouTube is a Collector: flat state DB, embeddings TBD based on content type deci
 
 | Tool | Status | Additive work | Invasive work | Recommendation |
 |---|---|---|---|---|
-| Reddit | Built | Add `embeddings.py` | Simplify DB layer | Add embeddings when infrastructure ready. Skip DB simplification. |
-| Web | Built | Add `embeddings.py` | Simplify DB layer | Add embeddings when infrastructure ready. Skip DB simplification. |
-| Research | Built | Add `embeddings.py` | Nothing (already stateless) | Add embeddings when infrastructure ready. |
+| Reddit | Built | ~~Add `embeddings.py`~~ **Done** | Simplify DB layer | Skip DB simplification. |
+| Web | Built | ~~Add `embeddings.py`~~ **Done** | Simplify DB layer | Skip DB simplification. |
+| Research | Built | ~~Add `embeddings.py`~~ **Done** | Nothing (already stateless) | Complete. |
 | Gmail | Built | None | Simplify DB layer | No changes needed. |
 | GCal | Built | None | Simplify DB layer | No changes needed. |
 | Audio | Built | None | Simplify DB layer | No changes needed. |
-| File-txt | Built | None | None | No changes needed. |
+| File-txt | Built | None | None | Complete. (`marker-pdf` → `pymupdf4llm`, 2026-04-02) |
 | Todoist | Built | None | None | No changes needed. Schema is correct for its type. |
 | Stack Exchange | Not built | N/A | N/A | Build correctly from start: Collector with embeddings. |
 | YouTube | Not built | N/A | N/A | Build correctly from start: Collector, embeddings TBD. |
@@ -280,6 +286,6 @@ YouTube is a Collector: flat state DB, embeddings TBD based on content type deci
 
 **Do not refactor the DB layer as a dedicated effort.** The invasive changes are high cost, zero functional gain, and high risk to a stable test suite. If a tool is being significantly modified for another reason — a new feature that requires touching the DB layer anyway — that is the right moment to simplify it. Not before.
 
-**Do add embedding integration additively** to Reddit, Web, and Research once the Workflow Architect has established the shared infrastructure. This is the change that unlocks cross-tool semantic search and it carries minimal risk because it does not modify anything that exists.
+**Embedding integration is complete** for Reddit, Web, and Research. Cross-tool semantic search is now available via `uv sync --extra embeddings`. The Qdrant collection `deep_thought_documents` is running locally.
 
 **Build all new tools following the updated taxonomy.** The standard outline changes pay off entirely on new builds. Stack Exchange, YouTube, Krea, ElevenLabs, and any future tools get the right architecture from the start without any refactoring cost ever being incurred.
