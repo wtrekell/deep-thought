@@ -1,7 +1,3 @@
-# Marker (PDF conversion engine)
-force_ocr: false # Force OCR even if text is extractable
-torch_device: "mps" # Hardware device: 'mps' (Apple Silicon), 'cuda' (NVIDIA), 'cpu'
-
 # Email (.eml/.msg) extraction
 prefer_html: false # Prefer HTML parts over plain text when both exist
 full_headers: false # Include all MIME headers in output
