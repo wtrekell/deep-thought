@@ -7,16 +7,18 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
+import pytest  # noqa: TC002 — pytest.LogCaptureFixture used at runtime in test signatures
+
 from deep_thought.gcal.models import EventLocal
 from deep_thought.gcal.output import (
     _build_filename,
     _get_calendar_dir_name,
-    _slugify,
     delete_event_file,
     generate_event_markdown,
     get_event_files_for_calendar,
     write_event_file,
 )
+from deep_thought.text_utils import slugify as _slugify
 
 # ---------------------------------------------------------------------------
 # Helper to create a test EventLocal
@@ -60,7 +62,7 @@ def _make_test_event(
 
 
 class TestSlugify:
-    """Tests for _slugify."""
+    """Tests for the shared slugify function as used by the gcal tool."""
 
     def test_normal_text(self) -> None:
         """Should lowercase and replace spaces with hyphens."""
@@ -70,9 +72,9 @@ class TestSlugify:
         """Should replace non-alphanumeric characters with hyphens."""
         assert _slugify("Meeting: Q1 Review!") == "meeting-q1-review"
 
-    def test_empty_string(self) -> None:
-        """Should return 'no-title' for empty input."""
-        assert _slugify("") == "no-title"
+    def test_empty_string_with_no_title_fallback(self) -> None:
+        """Should return 'no-title' when empty_fallback is provided."""
+        assert _slugify("", empty_fallback="no-title") == "no-title"
 
     def test_truncation(self) -> None:
         """Should truncate to max_length."""
@@ -91,12 +93,12 @@ class TestBuildFilename:
     def test_timed_event(self) -> None:
         """Should extract date from datetime start_time."""
         event = _make_test_event(start_time="2026-03-24T09:00:00-05:00")
-        assert _build_filename(event) == "2026-03-24_team-standup.md"
+        assert _build_filename(event) == "260324-team-standup.md"
 
     def test_allday_event(self) -> None:
         """Should extract date from date-only start_time."""
         event = _make_test_event(start_time="2026-03-25", summary="Company Holiday")
-        assert _build_filename(event) == "2026-03-25_company-holiday.md"
+        assert _build_filename(event) == "260325-company-holiday.md"
 
 
 class TestGetCalendarDirName:
@@ -136,16 +138,52 @@ class TestGenerateEventMarkdown:
         result = generate_event_markdown(event)
         assert '\\"Important\\"' in result
 
-    def test_includes_attendees(self) -> None:
-        """Should include attendees in frontmatter when present."""
+    def test_includes_attendees_as_yaml_list(self) -> None:
+        """Should render attendees as a YAML list with email and optional display_name."""
         import json
 
         event = _make_test_event(
-            attendees=json.dumps([{"email": "colleague@example.com"}, {"email": "boss@example.com"}])
+            attendees=json.dumps(
+                [
+                    {"email": "colleague@example.com", "displayName": "Colleague"},
+                    {"email": "boss@example.com"},
+                ]
+            )
         )
         result = generate_event_markdown(event)
         assert "attendees:" in result
-        assert '"colleague@example.com"' in result
+        assert '  - email: "colleague@example.com"' in result
+        assert '    display_name: "Colleague"' in result
+        assert '  - email: "boss@example.com"' in result
+        # display_name line should not appear for an attendee without one
+        assert result.count("display_name:") == 1
+
+    def test_attendees_omits_display_name_when_absent(self) -> None:
+        """Should omit display_name key when displayName is empty or missing."""
+        import json
+
+        event = _make_test_event(attendees=json.dumps([{"email": "user@example.com"}]))
+        result = generate_event_markdown(event)
+        assert '  - email: "user@example.com"' in result
+        assert "display_name:" not in result
+
+    def test_attendee_display_name_with_colon_is_quoted(self) -> None:
+        """display_name values containing ':' must be double-quoted to produce valid YAML."""
+        import json
+
+        event = _make_test_event(
+            attendees=json.dumps([{"email": "head@example.com", "displayName": "Head: Marketing"}])
+        )
+        result = generate_event_markdown(event)
+        assert '    display_name: "Head: Marketing"' in result
+
+    def test_attendee_email_is_always_quoted(self) -> None:
+        """Email values must always be double-quoted for consistent YAML output."""
+        import json
+
+        event = _make_test_event(attendees=json.dumps([{"email": "plain@example.com"}]))
+        result = generate_event_markdown(event)
+        assert '  - email: "plain@example.com"' in result
 
     def test_includes_recurrence(self) -> None:
         """Should include recurrence rules in frontmatter when present."""
@@ -235,3 +273,34 @@ class TestGetEventFilesForCalendar:
     def test_empty_directory(self, tmp_path: Path) -> None:
         """Should return empty list for nonexistent directory."""
         assert get_event_files_for_calendar(tmp_path, "Nonexistent") == []
+
+
+# ---------------------------------------------------------------------------
+# JSON deserialization warning logging (M4)
+# ---------------------------------------------------------------------------
+
+
+class TestBuildEventFrontmatterWarnings:
+    """Tests for warning log output on corrupt JSON fields in _build_event_frontmatter."""
+
+    def test_corrupt_attendees_json_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Should log a warning when attendees JSON is corrupt and omit the field."""
+        import logging
+
+        event = _make_test_event(attendees="not valid JSON {{{{")
+        with caplog.at_level(logging.WARNING, logger="deep_thought.gcal.output"):
+            result = generate_event_markdown(event)
+
+        assert "attendees" in caplog.text.lower()
+        assert "attendees:" not in result
+
+    def test_corrupt_recurrence_json_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Should log a warning when recurrence JSON is corrupt and omit the field."""
+        import logging
+
+        event = _make_test_event(recurrence="not valid JSON {{{{")
+        with caplog.at_level(logging.WARNING, logger="deep_thought.gcal.output"):
+            result = generate_event_markdown(event)
+
+        assert "recurrence" in caplog.text.lower()
+        assert "recurrence:" not in result

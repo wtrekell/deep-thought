@@ -12,6 +12,11 @@ untouched so the original first-seen timestamp is never overwritten.
 Timestamps: `updated_at` is always set to the current UTC time at the moment
 of the write. `created_at` is set only on first insert; subsequent upserts
 leave it unchanged.
+
+Transaction responsibility: Write functions (upsert_processed_file,
+delete_processed_file) do not call conn.commit(). Callers are responsible
+for committing or rolling back as appropriate for their transaction scope.
+This allows multiple writes to be grouped into a single atomic transaction.
 """
 
 from __future__ import annotations

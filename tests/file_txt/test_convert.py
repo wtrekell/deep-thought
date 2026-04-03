@@ -12,8 +12,8 @@ from deep_thought.file_txt.config import (
     FileTxtConfig,
     FilterConfig,
     LimitsConfig,
-    MarkerConfig,
     OutputConfig,
+    PdfConfig,
 )
 from deep_thought.file_txt.convert import convert_file
 
@@ -25,14 +25,12 @@ from deep_thought.file_txt.convert import convert_file
 def _make_config(
     max_file_size_mb: int = 200,
     extract_images: bool = False,
-    force_ocr: bool = False,
-    torch_device: str = "cpu",
     include_page_numbers: bool = False,
     output_dir: str = "output/",
 ) -> FileTxtConfig:
     """Return a FileTxtConfig with sensible test defaults."""
     return FileTxtConfig(
-        marker=MarkerConfig(force_ocr=force_ocr, torch_device=torch_device),
+        pdf=PdfConfig(),
         email=EmailConfig(prefer_html=False, full_headers=False, include_attachments=True),
         output=OutputConfig(
             output_dir=output_dir,
@@ -125,8 +123,8 @@ class TestConvertFileSkip:
 
 
 class TestConvertFilePdf:
-    def test_pdf_dispatches_to_marker_engine(self, tmp_path: Path) -> None:
-        """A .pdf file must trigger a call to the Marker conversion engine."""
+    def test_pdf_dispatches_to_pymupdf_engine(self, tmp_path: Path) -> None:
+        """A .pdf file must trigger a call to the PyMuPDF conversion engine."""
         source_file = tmp_path / "report.pdf"
         _write_small_file(source_file)
         config = _make_config()
@@ -136,7 +134,7 @@ class TestConvertFilePdf:
         mock_page_count = 3
 
         with (
-            patch("deep_thought.file_txt.convert._convert_via_marker") as mock_marker,
+            patch("deep_thought.file_txt.convert._convert_via_pymupdf") as mock_marker,
             patch("deep_thought.file_txt.convert.write_document") as mock_write,
         ):
             mock_marker.return_value = (mock_markdown, mock_page_count)
@@ -144,7 +142,7 @@ class TestConvertFilePdf:
 
             result = convert_file(source_file, output_root, config)
 
-        mock_marker.assert_called_once_with(source_file, config)
+        mock_marker.assert_called_once_with(source_file)
         assert result.page_count == 3
         assert result.file_type == "pdf"
 
@@ -158,7 +156,7 @@ class TestConvertFilePdf:
         mock_markdown = "word1 word2 word3 word4 word5"
 
         with (
-            patch("deep_thought.file_txt.convert._convert_via_marker") as mock_marker,
+            patch("deep_thought.file_txt.convert._convert_via_pymupdf") as mock_marker,
             patch("deep_thought.file_txt.convert.write_document") as mock_write,
         ):
             mock_marker.return_value = (mock_markdown, 1)
@@ -231,7 +229,7 @@ class TestConvertFileErrors:
         config = _make_config()
         output_root = tmp_path / "output"
 
-        with patch("deep_thought.file_txt.convert._convert_via_marker") as mock_marker:
+        with patch("deep_thought.file_txt.convert._convert_via_pymupdf") as mock_marker:
             mock_marker.side_effect = RuntimeError("Marker failed")
 
             result = convert_file(source_file, output_root, config)
@@ -250,7 +248,7 @@ class TestConvertFileErrors:
 
         # Patch the name as it appears in convert.py's namespace (imported directly)
         with (
-            patch("deep_thought.file_txt.convert._convert_via_marker") as mock_marker,
+            patch("deep_thought.file_txt.convert._convert_via_pymupdf") as mock_marker,
             patch("deep_thought.file_txt.convert.write_document") as mock_write,
         ):
             mock_marker.return_value = ("# Content", 1)
@@ -269,7 +267,7 @@ class TestConvertFileErrors:
         config = _make_config()
         output_root = tmp_path / "output"
 
-        with patch("deep_thought.file_txt.convert._convert_via_marker") as mock_marker:
+        with patch("deep_thought.file_txt.convert._convert_via_pymupdf") as mock_marker:
             mock_marker.side_effect = RuntimeError("Engine error")
 
             result = convert_file(source_file, output_root, config)
@@ -292,7 +290,7 @@ class TestConvertFileImageExtraction:
         output_root = tmp_path / "output"
 
         with (
-            patch("deep_thought.file_txt.convert._convert_via_marker") as mock_marker,
+            patch("deep_thought.file_txt.convert._convert_via_pymupdf") as mock_marker,
             patch("deep_thought.file_txt.image_extractor.extract_images") as mock_extract,
             patch("deep_thought.file_txt.convert.write_document") as mock_write,
         ):
@@ -313,7 +311,7 @@ class TestConvertFileImageExtraction:
         output_root = tmp_path / "output"
 
         with (
-            patch("deep_thought.file_txt.convert._convert_via_marker") as mock_marker,
+            patch("deep_thought.file_txt.convert._convert_via_pymupdf") as mock_marker,
             patch("deep_thought.file_txt.image_extractor.extract_images") as mock_extract,
             patch("deep_thought.file_txt.convert.write_document") as mock_write,
         ):

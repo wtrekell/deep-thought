@@ -29,10 +29,10 @@ class GeminiExtractor:
             model: The model name to use (e.g., 'gemini-2.5-flash').
             rate_limit_rpm: Maximum requests per minute.
         """
-        import google.generativeai as genai
+        import google.genai
 
-        genai.configure(api_key=api_key)  # type: ignore[attr-defined]
-        self._model = genai.GenerativeModel(model)  # type: ignore[attr-defined]
+        self._genai_client = google.genai.Client(api_key=api_key)
+        self._model_name = model
         self._rate_limit_rpm = rate_limit_rpm
         self._last_request_time: float = 0.0
 
@@ -82,9 +82,19 @@ class GeminiExtractor:
         prompt = self._build_prompt(email_text, instructions)
 
         try:
-            response: Any = self._model.generate_content(prompt)
+            response: Any = self._genai_client.models.generate_content(
+                model=self._model_name,
+                contents=prompt,
+            )
             extracted_text: str = response.text
             return extracted_text
-        except Exception as extraction_error:
-            logger.warning("Gemini extraction failed: %s", extraction_error)
+        except (ValueError, AttributeError, RuntimeError, OSError) as expected_error:
+            # Expected generation errors: invalid input, empty response, API errors,
+            # rate limit exceeded, network failure.
+            logger.warning("Gemini extraction failed: %s", expected_error)
             return ""
+        except Exception:
+            # Unexpected exceptions (e.g., auth failure, internal SDK bug) should
+            # surface to the caller rather than being silently swallowed.
+            logger.exception("Unexpected error during Gemini extraction — re-raising.")
+            raise

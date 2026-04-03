@@ -79,7 +79,7 @@ Located at `data/gcal/gcal.db` by default; respects the `DEEP_THOUGHT_DATA_DIR` 
 | `all_day`     | `bool`        | `True` if the event uses `date` rather than `dateTime`            |
 | `status`      | `str`         | `confirmed`, `tentative`, or `cancelled`                          |
 | `organizer`   | `str \| None` | Organizer email address                                           |
-| `attendees`   | `str \| None` | Serialized JSON list of attendee objects                          |
+| `attendees`   | `str \| None` | Serialized JSON list of attendee objects (internal DB storage; exported to frontmatter as YAML list) |
 | `recurrence`  | `str \| None` | Serialized JSON list of RRULE strings                             |
 | `html_link`   | `str \| None` | URL to event in Google Calendar web UI                            |
 | `created_at`  | `str`         | ISO 8601 timestamp of first sync                                  |
@@ -283,10 +283,10 @@ The Calendar API supports sync tokens for efficient incremental pulls:
 
 ```
 data/gcal/export/{calendar_name}/
-├── {date}_{summary_slug}.md           # Event with YAML frontmatter
+├── {YYMMDD}-{summary_slug}.md           # Event with YAML frontmatter
 └── llm/
-    ├── {date}_{summary_slug}.llms.txt
-    └── {date}_{summary_slug}.llms-full.txt
+    ├── {YYMMDD}-{summary_slug}.llms.txt
+    └── {YYMMDD}-{summary_slug}.llms-full.txt
 ```
 
 When `flat_output: true`, all events export to `data/gcal/export/` without calendar subdirectories.

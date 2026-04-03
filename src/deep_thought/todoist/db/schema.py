@@ -38,10 +38,15 @@ def get_data_dir() -> Path:
 
     Checks DEEP_THOUGHT_DATA_DIR env var first; falls back to
     <project_root>/data/todoist.
+
+    When the env var is set it points to the shared data root, so we still
+    append the tool-specific ``todoist/`` subdirectory. This matches the
+    convention used by every other tool in the monorepo and avoids collisions
+    between tools when they all read from the same override path.
     """
     env_override = os.environ.get("DEEP_THOUGHT_DATA_DIR")
     if env_override:
-        return Path(env_override)
+        return Path(env_override) / "todoist"
     return _project_root() / "data" / "todoist"
 
 
@@ -181,18 +186,12 @@ def run_migrations(conn: sqlite3.Connection, migrations_dir: Path) -> None:
 
         migration_sql = migration_file.read_text(encoding="utf-8")
 
-        # Strip SQL line comments before splitting on semicolons so that
-        # comment text containing semicolons does not produce false statement
-        # fragments (e.g. "-- sync_token — last token returned by API;").
-        sql_lines_without_comments = [line for line in migration_sql.splitlines() if not line.strip().startswith("--")]
-        migration_sql_stripped = "\n".join(sql_lines_without_comments)
-
         try:
-            conn.execute("BEGIN;")
-            for raw_statement in migration_sql_stripped.split(";"):
-                statement = raw_statement.strip()
-                if statement:
-                    conn.execute(statement)
+            # executescript() handles statement splitting correctly, even when
+            # SQL comments contain semicolons or other special characters.
+            # It also issues an implicit COMMIT before running, so we do not
+            # need to call BEGIN ourselves.
+            conn.executescript(migration_sql)
             _set_schema_version(conn, migration_number)
             conn.commit()
         except sqlite3.Error as database_error:

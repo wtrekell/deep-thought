@@ -92,7 +92,10 @@ def get_calendar(conn: sqlite3.Connection, calendar_id: str) -> dict[str, Any] |
     Returns:
         A dict of column values, or None if no matching row exists.
     """
-    cursor = conn.execute("SELECT * FROM calendars WHERE calendar_id = ?;", (calendar_id,))
+    cursor = conn.execute(
+        "SELECT * FROM calendars WHERE calendar_id = :calendar_id;",
+        {"calendar_id": calendar_id},
+    )
     return _row_to_dict(cursor.fetchone())
 
 
@@ -119,7 +122,10 @@ def delete_calendar(conn: sqlite3.Connection, calendar_id: str) -> int:
     Returns:
         The number of rows deleted (0 or 1).
     """
-    cursor = conn.execute("DELETE FROM calendars WHERE calendar_id = ?;", (calendar_id,))
+    cursor = conn.execute(
+        "DELETE FROM calendars WHERE calendar_id = :calendar_id;",
+        {"calendar_id": calendar_id},
+    )
     return cursor.rowcount
 
 
@@ -186,8 +192,8 @@ def get_event(conn: sqlite3.Connection, event_id: str, calendar_id: str) -> dict
         A dict of column values, or None if no matching row exists.
     """
     cursor = conn.execute(
-        "SELECT * FROM events WHERE event_id = ? AND calendar_id = ?;",
-        (event_id, calendar_id),
+        "SELECT * FROM events WHERE event_id = :event_id AND calendar_id = :calendar_id;",
+        {"event_id": event_id, "calendar_id": calendar_id},
     )
     return _row_to_dict(cursor.fetchone())
 
@@ -203,8 +209,8 @@ def get_events_by_calendar(conn: sqlite3.Connection, calendar_id: str) -> list[d
         List of event dicts. Empty list if no events exist for this calendar.
     """
     cursor = conn.execute(
-        "SELECT * FROM events WHERE calendar_id = ? ORDER BY start_time ASC;",
-        (calendar_id,),
+        "SELECT * FROM events WHERE calendar_id = :calendar_id ORDER BY start_time ASC;",
+        {"calendar_id": calendar_id},
     )
     return _rows_to_dicts(cursor.fetchall())
 
@@ -224,8 +230,14 @@ def get_events_in_range(
         List of event dicts within the range.
     """
     cursor = conn.execute(
-        "SELECT * FROM events WHERE calendar_id = ? AND start_time >= ? AND start_time < ? ORDER BY start_time ASC;",
-        (calendar_id, start_time, end_time),
+        """
+        SELECT * FROM events
+        WHERE calendar_id = :calendar_id
+          AND start_time >= :start_time
+          AND start_time < :end_time
+        ORDER BY start_time ASC;
+        """,
+        {"calendar_id": calendar_id, "start_time": start_time, "end_time": end_time},
     )
     return _rows_to_dicts(cursor.fetchall())
 
@@ -255,8 +267,8 @@ def delete_event(conn: sqlite3.Connection, event_id: str, calendar_id: str) -> i
         The number of rows deleted (0 or 1).
     """
     cursor = conn.execute(
-        "DELETE FROM events WHERE event_id = ? AND calendar_id = ?;",
-        (event_id, calendar_id),
+        "DELETE FROM events WHERE event_id = :event_id AND calendar_id = :calendar_id;",
+        {"event_id": event_id, "calendar_id": calendar_id},
     )
     return cursor.rowcount
 
@@ -271,7 +283,10 @@ def delete_events_by_calendar(conn: sqlite3.Connection, calendar_id: str) -> int
     Returns:
         The number of rows deleted.
     """
-    cursor = conn.execute("DELETE FROM events WHERE calendar_id = ?;", (calendar_id,))
+    cursor = conn.execute(
+        "DELETE FROM events WHERE calendar_id = :calendar_id;",
+        {"calendar_id": calendar_id},
+    )
     return cursor.rowcount
 
 
@@ -286,8 +301,12 @@ def get_cancelled_events(conn: sqlite3.Connection, calendar_id: str) -> list[dic
         List of event dicts with status 'cancelled'.
     """
     cursor = conn.execute(
-        "SELECT * FROM events WHERE calendar_id = ? AND status = 'cancelled' ORDER BY start_time ASC;",
-        (calendar_id,),
+        """
+        SELECT * FROM events
+        WHERE calendar_id = :calendar_id AND status = 'cancelled'
+        ORDER BY start_time ASC;
+        """,
+        {"calendar_id": calendar_id},
     )
     return _rows_to_dicts(cursor.fetchall())
 
@@ -298,7 +317,7 @@ def get_cancelled_events(conn: sqlite3.Connection, calendar_id: str) -> list[dic
 
 
 def upsert_sync_state(conn: sqlite3.Connection, calendar_id: str, sync_token: str | None, last_sync_time: str) -> None:
-    """Insert or update the sync state for a calendar.
+    """Insert or update the sync state for a calendar. Sets updated_at and synced_at to now.
 
     Args:
         conn: An open SQLite connection.
@@ -306,15 +325,24 @@ def upsert_sync_state(conn: sqlite3.Connection, calendar_id: str, sync_token: st
         sync_token: The nextSyncToken from the Calendar API, or None.
         last_sync_time: ISO 8601 timestamp of when the sync completed.
     """
+    now_iso = _now_utc_iso()
     conn.execute(
         """
-        INSERT INTO sync_state (calendar_id, sync_token, last_sync_time)
-        VALUES (?, ?, ?)
+        INSERT INTO sync_state (calendar_id, sync_token, last_sync_time, updated_at, synced_at)
+        VALUES (:calendar_id, :sync_token, :last_sync_time, :updated_at, :synced_at)
         ON CONFLICT(calendar_id) DO UPDATE SET
             sync_token     = excluded.sync_token,
-            last_sync_time = excluded.last_sync_time;
+            last_sync_time = excluded.last_sync_time,
+            updated_at     = excluded.updated_at,
+            synced_at      = excluded.synced_at;
         """,
-        (calendar_id, sync_token, last_sync_time),
+        {
+            "calendar_id": calendar_id,
+            "sync_token": sync_token,
+            "last_sync_time": last_sync_time,
+            "updated_at": now_iso,
+            "synced_at": now_iso,
+        },
     )
 
 
@@ -326,32 +354,38 @@ def get_sync_state(conn: sqlite3.Connection, calendar_id: str) -> dict[str, Any]
         calendar_id: The calendar to look up.
 
     Returns:
-        A dict with sync_token and last_sync_time, or None.
+        A dict with sync_token, last_sync_time, updated_at, and synced_at, or None.
     """
-    cursor = conn.execute("SELECT * FROM sync_state WHERE calendar_id = ?;", (calendar_id,))
+    cursor = conn.execute(
+        "SELECT * FROM sync_state WHERE calendar_id = :calendar_id;",
+        {"calendar_id": calendar_id},
+    )
     return _row_to_dict(cursor.fetchone())
 
 
 def clear_sync_token(conn: sqlite3.Connection, calendar_id: str) -> None:
-    """Clear the sync token for a calendar (e.g., on HTTP 410 Gone).
+    """Clear the sync token for a calendar (e.g., on HTTP 410 Gone). Updates updated_at.
 
     Args:
         conn: An open SQLite connection.
         calendar_id: The calendar whose sync token should be cleared.
     """
     conn.execute(
-        "UPDATE sync_state SET sync_token = NULL WHERE calendar_id = ?;",
-        (calendar_id,),
+        "UPDATE sync_state SET sync_token = NULL, updated_at = :now WHERE calendar_id = :calendar_id;",
+        {"now": _now_utc_iso(), "calendar_id": calendar_id},
     )
 
 
 def clear_all_sync_tokens(conn: sqlite3.Connection) -> None:
-    """Clear all sync tokens. Used by the --force flag.
+    """Clear all sync tokens. Used by the --force flag. Updates updated_at for all rows.
 
     Args:
         conn: An open SQLite connection.
     """
-    conn.execute("UPDATE sync_state SET sync_token = NULL;")
+    conn.execute(
+        "UPDATE sync_state SET sync_token = NULL, updated_at = :now;",
+        {"now": _now_utc_iso()},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -369,7 +403,7 @@ def get_key_value(conn: sqlite3.Connection, key: str) -> str | None:
     Returns:
         The stored string value, or None if the key does not exist.
     """
-    cursor = conn.execute("SELECT value FROM key_value WHERE key = ?;", (key,))
+    cursor = conn.execute("SELECT value FROM key_value WHERE key = :key;", {"key": key})
     row = cursor.fetchone()
     return row["value"] if row is not None else None
 

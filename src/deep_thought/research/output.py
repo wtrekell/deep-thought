@@ -10,31 +10,28 @@ if TYPE_CHECKING:
 
     from deep_thought.research.models import ResearchResult
 
+from deep_thought.text_utils import slugify as _shared_slugify
 
 # ---------------------------------------------------------------------------
-# Slug helpers
+# Markdown escaping
 # ---------------------------------------------------------------------------
 
-_NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
-_MAX_SLUG_LENGTH = 80
+_MARKDOWN_SPECIAL_CHARS_RE = re.compile(r"([`*_\[\]])")
 
 
-def _slugify(text: str, max_length: int = _MAX_SLUG_LENGTH) -> str:
-    """Convert text to a filesystem-safe slug.
+def _escape_markdown(text: str) -> str:
+    """Escape markdown special characters in a plain-text string.
 
-    Lowercases, replaces non-alphanumeric runs with hyphens,
-    strips leading/trailing hyphens, and truncates.
+    Escapes backticks, asterisks, underscores, and square brackets so that
+    the string is safe to embed inside markdown link syntax (``[title](url)``).
 
     Args:
-        text: The text to slugify.
-        max_length: Maximum slug length.
+        text: The raw string to escape.
 
     Returns:
-        A filesystem-safe slug, or "no-title" if the result is empty.
+        The escaped string with ``\\`` prepended to each special character.
     """
-    slug = _NON_ALNUM_RE.sub("-", text.lower()).strip("-")
-    slug = slug[:max_length].rstrip("-")
-    return slug if slug else "no-title"
+    return _MARKDOWN_SPECIAL_CHARS_RE.sub(r"\\\1", text)
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +75,8 @@ def _build_frontmatter(result: ResearchResult) -> str:
 
     lines.append(f"mode: {result.mode}")
     lines.append(f"model: {result.model}")
-    lines.append(f"cost_usd: {result.cost_usd}")
+    cost_formatted = f"{result.cost_usd:.6f}".rstrip("0").rstrip(".")
+    lines.append(f"cost_usd: {cost_formatted}")
     lines.append(f"processed_date: {result.processed_date}")
 
     if result.recency is not None:
@@ -124,9 +122,11 @@ def generate_research_markdown(result: ResearchResult) -> str:
     if result.search_results:
         source_lines = ["## Sources", ""]
         for index, source in enumerate(result.search_results, start=1):
-            source_link = f"[{source.title}]({source.url})"
+            escaped_title = _escape_markdown(source.title)
+            source_link = f"[{escaped_title}]({source.url})"
             if source.snippet is not None:
-                source_lines.append(f"{index}. {source_link} — {source.snippet}")
+                escaped_snippet = _escape_markdown(source.snippet)
+                source_lines.append(f"{index}. {source_link} — {escaped_snippet}")
             else:
                 source_lines.append(f"{index}. {source_link}")
         sections.append("\n".join(source_lines))
@@ -160,9 +160,10 @@ def write_research_file(content: str, output_dir: Path, result: ResearchResult) 
     Returns:
         The Path to the written file.
     """
-    date_prefix = result.processed_date[:10]
-    query_slug = _slugify(result.query)
-    filename = f"{date_prefix}_{query_slug}.md"
+    raw_date = result.processed_date[:10]  # "2026-03-24"
+    date_prefix = raw_date[2:4] + raw_date[5:7] + raw_date[8:10]  # "260324"
+    query_slug = _shared_slugify(result.query, empty_fallback="no-title")
+    filename = f"{date_prefix}-{query_slug}.md"
 
     output_dir.mkdir(parents=True, exist_ok=True)
 

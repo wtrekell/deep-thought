@@ -262,12 +262,15 @@ class TestProcessFile:
         audio_file.write_bytes(b"fake audio data")
         mock_engine = _make_mock_engine()
 
+        # Simulate a diarization runtime failure by making diarize() raise OSError.
+        # The pipeline is pre-loaded by process_batch; process_file receives it as a
+        # parameter and calls diarize() — so we patch that function directly.
         with (
             patch("deep_thought.audio.filters.compute_file_hash", return_value="abc123"),
             patch("deep_thought.audio.filters.check_file", return_value=(True, "")),
             patch(
-                "deep_thought.audio.diarization.load_diarization_pipeline",
-                side_effect=ImportError("pyannote not installed"),
+                "deep_thought.audio.diarization.diarize",
+                side_effect=OSError("diarization runtime error"),
             ),
             patch("deep_thought.audio.hallucination.apply_hallucination_detection") as mock_hal,
             patch("deep_thought.audio.output.write_transcript") as mock_write,
@@ -278,12 +281,14 @@ class TestProcessFile:
             mock_hal.return_value = (mock_engine.transcribe.return_value.segments, [])
             mock_write.return_value = tmp_path / "output" / "interview" / "interview.md"
 
+            # Pass a non-None dummy pipeline so the diarization branch is entered
             result = process_file(
                 audio_file,
                 diarize_config,
                 in_memory_db,
                 tmp_path / "output",
                 engine=mock_engine,
+                diarization_pipeline=MagicMock(),
             )
 
         # Processing must still succeed despite diarization failure

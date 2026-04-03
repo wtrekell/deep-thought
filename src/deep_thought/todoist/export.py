@@ -33,6 +33,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from deep_thought.progress import track_items
 from deep_thought.todoist.db.queries import (
     get_all_projects,
     get_comments_for_task,
@@ -110,7 +111,7 @@ def _task_checkbox(is_completed: bool) -> str:
     return "- [x]" if is_completed else "- [ ]"
 
 
-def _get_poster_name(conn: sqlite3.Connection, poster_id: str) -> str:
+def _get_poster_name(poster_id: str) -> str:
     """Look up a collaborator display name by their Todoist user ID.
 
     Falls back to the raw poster_id if no matching record is found. The
@@ -119,7 +120,6 @@ def _get_poster_name(conn: sqlite3.Connection, poster_id: str) -> str:
     improved when collaborator data is available.
 
     Args:
-        conn: An open SQLite connection.
         poster_id: The Todoist user ID of the comment author.
 
     Returns:
@@ -127,7 +127,6 @@ def _get_poster_name(conn: sqlite3.Connection, poster_id: str) -> str:
     """
     # Placeholder: collaborators are not stored in the current schema.
     # Return the raw ID so comments are still attributable.
-    _ = conn  # conn reserved for future collaborator lookup
     return poster_id
 
 
@@ -149,7 +148,7 @@ def _render_comment_line(conn: sqlite3.Connection, comment: dict[str, Any]) -> s
     """
     posted_at: str = comment.get("posted_at") or ""
     date_part = posted_at[:10] if len(posted_at) >= 10 else posted_at
-    poster_name = _get_poster_name(conn, comment.get("poster_id") or "unknown")
+    poster_name = _get_poster_name(comment.get("poster_id") or "unknown")
     # Keep comment content to the first line for parsability
     content_first_line = (comment.get("content") or "").split("\n")[0]
     return f"[{date_part} {poster_name}] {content_first_line}"
@@ -190,7 +189,8 @@ def _render_task_block(
     lines.append(f"{indent}  - id: {task_id}")
 
     # Priority
-    priority: int = task.get("priority") or 1
+    raw_priority = task.get("priority")
+    priority: int = raw_priority if raw_priority is not None else 1
     lines.append(f"{indent}  - priority: {priority}")
 
     # Labels — stored as JSON string in DB
@@ -221,11 +221,14 @@ def _render_task_block(
         # Use assignee_id directly — no collaborator name table yet
         lines.append(f"{indent}  - assignee: {assignee_id}")
 
-    # Claude involvement marker
+    # Claude involvement marker — rendered as a YAML-structured block so the
+    # consumer can parse repo and branch without splitting an inline string.
     if config.claude.label and config.claude.label in label_list:
-        claude_repo = config.claude.repo or ""
+        lines.append(f"{indent}  - claude:")
+        if config.claude.repo:
+            lines.append(f"{indent}      repo: {config.claude.repo}")
         claude_branch = config.claude.branch or "main"
-        lines.append(f"{indent}  - claude: repo={claude_repo}, branch={claude_branch}")
+        lines.append(f"{indent}      branch: {claude_branch}")
 
     # Description
     description: str = task.get("description") or ""
@@ -338,14 +341,22 @@ def export_to_markdown(
 
     all_project_rows = get_all_projects(conn)
 
-    # Filter to configured opt-in projects, and optionally to a single project
-    configured_project_names = set(config.projects)
-    if project_filter is not None:
-        configured_project_names = {project_filter} & configured_project_names
+    # When config.projects is empty, treat it the same way pull does: no opt-in
+    # restriction, so all projects in the DB are candidates. This mirrors the
+    # behaviour of _filter_api_projects_to_configured in pull.py.
+    if config.projects:
+        configured_project_names: set[str] = set(config.projects)
+        if project_filter is not None:
+            configured_project_names = {project_filter} & configured_project_names
+        projects_to_export = [project for project in all_project_rows if project["name"] in configured_project_names]
+    else:
+        # Empty config.projects → export everything (label filters already applied at pull time)
+        if project_filter is not None:
+            projects_to_export = [project for project in all_project_rows if project["name"] == project_filter]
+        else:
+            projects_to_export = list(all_project_rows)
 
-    projects_to_export = [project for project in all_project_rows if project["name"] in configured_project_names]
-
-    for project_row in projects_to_export:
+    for project_row in track_items(projects_to_export, description="Exporting"):
         project_id: str = project_row["id"]
         project_name: str = project_row["name"]
 

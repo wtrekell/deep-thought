@@ -567,7 +567,7 @@ class TestRunPull:
         )
 
         # get_event_files_for_calendar must return something so write_llms_files is called.
-        dummy_md_file = tmp_path / "personal" / "2026-03-24_meeting.md"
+        dummy_md_file = tmp_path / "personal" / "260324-meeting.md"
         dummy_md_file.parent.mkdir(parents=True, exist_ok=True)
         dummy_md_file.write_text("# Meeting\n\nSome content.", encoding="utf-8")
 

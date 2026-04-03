@@ -11,8 +11,8 @@ from deep_thought.file_txt.config import (
     _parse_email_config,
     _parse_filter_config,
     _parse_limits_config,
-    _parse_marker_config,
     _parse_output_config,
+    _parse_pdf_config,
     load_config,
     save_default_config,
     validate_config,
@@ -29,11 +29,12 @@ class TestLoadConfig:
         config = load_config()
         assert isinstance(config, FileTxtConfig)
 
-    def test_marker_config_parsed(self) -> None:
-        """force_ocr and torch_device must be read from the YAML root."""
+    def test_pdf_config_parsed(self) -> None:
+        """A PdfConfig instance must be present after loading."""
+        from deep_thought.file_txt.config import PdfConfig
+
         config = load_config()
-        assert isinstance(config.marker.force_ocr, bool)
-        assert config.marker.torch_device in {"mps", "cuda", "cpu"}
+        assert isinstance(config.pdf, PdfConfig)
 
     def test_output_config_parsed(self) -> None:
         """Output fields must be read from the YAML root."""
@@ -91,37 +92,32 @@ class TestLoadConfig:
         """A YAML file with only required fields must produce a valid config."""
         minimal_yaml = tmp_path / "minimal.yaml"
         minimal_yaml.write_text(
-            "force_ocr: false\ntorch_device: cpu\n"
             "output_dir: output/\ninclude_page_numbers: false\nextract_images: true\n"
             "max_file_size_mb: 100\nallowed_extensions: ['.pdf']\nexclude_patterns: []\n",
             encoding="utf-8",
         )
         config = load_config(minimal_yaml)
-        assert config.marker.torch_device == "cpu"
         assert config.limits.max_file_size_mb == 100
 
     def test_explicit_config_path_overrides_default(self, tmp_path: Path) -> None:
         """Passing an explicit path must load that file, not the default."""
         custom_yaml = tmp_path / "custom.yaml"
         custom_yaml.write_text(
-            "force_ocr: true\ntorch_device: cuda\n"
             "output_dir: custom_out/\ninclude_page_numbers: true\nextract_images: false\n"
             "max_file_size_mb: 50\nallowed_extensions: ['.pdf']\nexclude_patterns: []\n",
             encoding="utf-8",
         )
         config = load_config(custom_yaml)
-        assert config.marker.force_ocr is True
-        assert config.marker.torch_device == "cuda"
+        assert config.output.output_dir == "custom_out/"
         assert config.limits.max_file_size_mb == 50
 
     def test_unknown_keys_emit_warning(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """Unknown keys in the YAML must emit a WARNING and not raise an error."""
         yaml_with_typo = tmp_path / "typo.yaml"
         yaml_with_typo.write_text(
-            "force_ocr: false\ntorch_device: cpu\n"
             "output_dir: output/\ninclude_page_numbers: false\nextract_images: true\n"
             "max_file_size_mb: 100\nallowed_extensions: ['.pdf']\nexclude_patterns: []\n"
-            "forcc_ocr: true\n",  # misspelled key
+            "ouptut_dir: typo/\n",  # misspelled key
             encoding="utf-8",
         )
         import logging
@@ -130,13 +126,12 @@ class TestLoadConfig:
             config = load_config(yaml_with_typo)
 
         assert isinstance(config, FileTxtConfig)
-        assert any("forcc_ocr" in record.message for record in caplog.records)
+        assert any("ouptut_dir" in record.message for record in caplog.records)
 
     def test_known_keys_do_not_emit_warning(self, tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
         """A config with only known keys must not emit any unknown-key warning."""
         clean_yaml = tmp_path / "clean.yaml"
         clean_yaml.write_text(
-            "force_ocr: false\ntorch_device: cpu\n"
             "output_dir: output/\ninclude_page_numbers: false\nextract_images: true\n"
             "max_file_size_mb: 100\nallowed_extensions: ['.pdf']\nexclude_patterns: []\n",
             encoding="utf-8",
@@ -162,24 +157,10 @@ class TestValidateConfig:
         issues = validate_config(config)
         assert issues == []
 
-    def test_invalid_torch_device_is_flagged(self, tmp_path: Path) -> None:
-        """An unrecognised torch_device value must appear in the issues list."""
-        yaml_file = tmp_path / "config.yaml"
-        yaml_file.write_text(
-            "force_ocr: false\ntorch_device: tpu\n"
-            "output_dir: output/\ninclude_page_numbers: false\nextract_images: true\n"
-            "max_file_size_mb: 200\nallowed_extensions: ['.pdf']\nexclude_patterns: []\n",
-            encoding="utf-8",
-        )
-        config = load_config(yaml_file)
-        issues = validate_config(config)
-        assert any("torch_device" in issue for issue in issues)
-
     def test_zero_max_file_size_is_flagged(self, tmp_path: Path) -> None:
         """A max_file_size_mb of 0 must appear in the issues list."""
         yaml_file = tmp_path / "config.yaml"
         yaml_file.write_text(
-            "force_ocr: false\ntorch_device: cpu\n"
             "output_dir: output/\ninclude_page_numbers: false\nextract_images: true\n"
             "max_file_size_mb: 0\nallowed_extensions: ['.pdf']\nexclude_patterns: []\n",
             encoding="utf-8",
@@ -192,7 +173,6 @@ class TestValidateConfig:
         """An empty allowed_extensions list must appear in the issues list."""
         yaml_file = tmp_path / "config.yaml"
         yaml_file.write_text(
-            "force_ocr: false\ntorch_device: cpu\n"
             "output_dir: output/\ninclude_page_numbers: false\nextract_images: true\n"
             "max_file_size_mb: 200\nallowed_extensions: []\nexclude_patterns: []\n",
             encoding="utf-8",
@@ -205,35 +185,35 @@ class TestValidateConfig:
         """validate_config must collect all issues, not stop at the first one."""
         yaml_file = tmp_path / "config.yaml"
         yaml_file.write_text(
-            "force_ocr: false\ntorch_device: tpu\n"
             "output_dir: output/\ninclude_page_numbers: false\nextract_images: true\n"
             "max_file_size_mb: 0\nallowed_extensions: []\nexclude_patterns: []\n",
             encoding="utf-8",
         )
         config = load_config(yaml_file)
         issues = validate_config(config)
-        # torch_device, max_file_size_mb, and allowed_extensions are all invalid
-        assert len(issues) >= 3
+        # max_file_size_mb and allowed_extensions are both invalid
+        assert len(issues) >= 2
 
 
 # ---------------------------------------------------------------------------
-# _parse_marker_config (internal helper)
+# _parse_pdf_config (internal helper)
 # ---------------------------------------------------------------------------
 
 
-class TestParseMarkerConfig:
-    def test_reads_force_ocr_and_torch_device(self) -> None:
-        """Both marker fields must be parsed from the top-level dict."""
-        raw = {"force_ocr": True, "torch_device": "cuda"}
-        result = _parse_marker_config(raw)
-        assert result.force_ocr is True
-        assert result.torch_device == "cuda"
+class TestParsePdfConfig:
+    def test_returns_pdf_config_instance(self) -> None:
+        """_parse_pdf_config must always return a PdfConfig regardless of input."""
+        from deep_thought.file_txt.config import PdfConfig
 
-    def test_defaults_when_keys_absent(self) -> None:
-        """Missing keys must fall back to sensible defaults."""
-        result = _parse_marker_config({})
-        assert result.force_ocr is False
-        assert result.torch_device == "mps"
+        result = _parse_pdf_config({"some_key": "value"})
+        assert isinstance(result, PdfConfig)
+
+    def test_empty_dict_returns_pdf_config(self) -> None:
+        """An empty dict must produce a valid PdfConfig."""
+        from deep_thought.file_txt.config import PdfConfig
+
+        result = _parse_pdf_config({})
+        assert isinstance(result, PdfConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -324,7 +304,7 @@ class TestSaveDefaultConfig:
         save_default_config(destination_file)
         assert destination_file.exists()
         written_content = destination_file.read_text(encoding="utf-8")
-        assert "force_ocr" in written_content
+        assert "output_dir" in written_content
 
     @pytest.mark.error_handling
     def test_raises_if_file_exists(self, tmp_path: Path) -> None:

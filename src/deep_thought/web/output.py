@@ -7,10 +7,11 @@ within the output root directory.
 
 from __future__ import annotations
 
-import re
 from datetime import UTC, datetime
 from pathlib import Path  # noqa: TC003
 from urllib.parse import urlparse
+
+from deep_thought.text_utils import slugify as _shared_slugify
 
 # ---------------------------------------------------------------------------
 # Path and slug helpers
@@ -20,9 +21,8 @@ from urllib.parse import urlparse
 def slugify(text: str) -> str:
     """Convert a string to a URL-safe slug.
 
-    Lowercases the text, replaces non-alphanumeric characters with hyphens,
-    collapses consecutive hyphens into one, and strips leading/trailing hyphens.
-    Truncates to 100 characters.
+    Delegates to ``deep_thought.text_utils.slugify`` with ``max_length=100``.
+    Kept here for backward compatibility with callers that import from this module.
 
     Args:
         text: The input string to slugify.
@@ -30,11 +30,7 @@ def slugify(text: str) -> str:
     Returns:
         A slug string of at most 100 characters.
     """
-    lowercased = text.lower()
-    non_alnum_replaced = re.sub(r"[^a-z0-9]+", "-", lowercased)
-    collapsed_hyphens = re.sub(r"-{2,}", "-", non_alnum_replaced)
-    stripped = collapsed_hyphens.strip("-")
-    return stripped[:100]
+    return _shared_slugify(text, max_length=100)
 
 
 def url_to_output_path(
@@ -87,7 +83,7 @@ def url_to_output_path(
 
     output_path = output_root if strip_domain else output_root / domain
     for directory_segment in directory_parts:
-        output_path = output_path / directory_segment
+        output_path = output_path / slugify(directory_segment)
 
     output_path = output_path / f"{filename_slug}.md"
 
@@ -122,12 +118,18 @@ def _build_frontmatter(url: str, mode: str, title: str | None, word_count: int) 
     """
     processed_date = datetime.now(tz=UTC).isoformat()
 
+    # Titles can contain YAML-unsafe characters (colons, quotes, brackets, '#').
+    # Always double-quote the value and escape any internal double quotes.
+    def _yaml_quoted_string(value: str) -> str:
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
+        return f'"{escaped}"'
+
     lines: list[str] = ["---"]
     lines.append("tool: web")
-    lines.append(f"url: {url}")
+    lines.append(f"url: {_yaml_quoted_string(url)}")
     lines.append(f"mode: {mode}")
     if title is not None:
-        lines.append(f"title: {title}")
+        lines.append(f"title: {_yaml_quoted_string(title)}")
     lines.append(f"word_count: {word_count}")
     lines.append(f"processed_date: {processed_date}")
     lines.append("---")

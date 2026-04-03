@@ -18,12 +18,17 @@ import html2text
 
 
 class _TitleParser(HTMLParser):
-    """Minimal HTMLParser subclass that captures text inside <title> tags."""
+    """Minimal HTMLParser subclass that captures text inside <title> tags.
+
+    Accumulates all text chunks inside the title element into a list before
+    joining them. This correctly handles titles that contain HTML entities
+    (e.g. ``&mdash;``) which the parser splits into multiple handle_data calls.
+    """
 
     def __init__(self) -> None:
         super().__init__()
         self._in_title_tag: bool = False
-        self._captured_title: str | None = None
+        self._title_chunks: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         """Mark entry into a <title> tag.
@@ -45,20 +50,23 @@ class _TitleParser(HTMLParser):
             self._in_title_tag = False
 
     def handle_data(self, data: str) -> None:
-        """Capture text content when inside a <title> tag.
+        """Accumulate text content when inside a <title> tag.
+
+        Appending to a list rather than assigning to a single variable ensures
+        that titles split across multiple handle_data calls (e.g. due to HTML
+        entities) are all captured.
 
         Args:
             data: Text content found in the current parse position.
         """
-        if self._in_title_tag and self._captured_title is None:
-            stripped_data = data.strip()
-            if stripped_data:
-                self._captured_title = stripped_data
+        if self._in_title_tag:
+            self._title_chunks.append(data)
 
     @property
     def title(self) -> str | None:
         """Return the captured title text, or None if no title was found."""
-        return self._captured_title
+        combined = "".join(self._title_chunks).strip()
+        return combined if combined else None
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +148,9 @@ def unwrap_html_tags(html: str, tag_patterns: list[str]) -> str:
 
     Each pattern is a CSS-like selector in the form ``tag.class`` (e.g.
     ``div.word``).  Matching opening and closing tags are stripped, but the
-    text content they contain is kept in place.
+    text content they contain is kept in place.  Matching is
+    case-insensitive for both tag names and attributes, and supports
+    single- or double-quoted ``class`` values.
 
     This is useful for sites that wrap every word in animation ``<div>``
     elements, which html2text would otherwise treat as block elements and
@@ -163,13 +173,21 @@ def unwrap_html_tags(html: str, tag_patterns: list[str]) -> str:
         class_name = parts[1] if len(parts) > 1 else None
 
         if class_name:
-            # Match <tag ... class="word" ...>content</tag>
-            opening_pattern = rf'<{tag_name}[^>]*\bclass="[^"]*\b{re.escape(class_name)}\b[^"]*"[^>]*>(.*?)</{tag_name}>'
+            escaped_class = re.escape(class_name)
+            # Use a negative lookbehind instead of \b before "class=" so that
+            # hyphenated attributes like data-class="…" are never matched.
+            # HTML attribute names can contain hyphens, and \b treats a hyphen as
+            # a word boundary, so \bclass= would incorrectly match "data-class=".
+            opening_pattern = (
+                rf"<{tag_name}[^>]*(?<![a-zA-Z0-9\-])class=[\"'][^\"']*\b{escaped_class}\b"
+                rf"[^\"']*[\"'][^>]*>(.*?)</{tag_name}>"
+            )
         else:
             opening_pattern = rf"<{tag_name}[^>]*>(.*?)</{tag_name}>"
 
-        cleaned_html = re.sub(opening_pattern, r"\1", cleaned_html, flags=re.DOTALL)
+        cleaned_html = re.sub(opening_pattern, r"\1", cleaned_html, flags=re.DOTALL | re.IGNORECASE)
 
+    cleaned_html = re.sub(r"\n{3,}", "\n\n", cleaned_html)
     return cleaned_html
 
 
@@ -184,4 +202,4 @@ def count_words(markdown_text: str) -> int:
     Returns:
         Number of whitespace-separated, non-empty tokens in markdown_text.
     """
-    return len([token for token in markdown_text.split() if token])
+    return len(markdown_text.split())

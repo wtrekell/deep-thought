@@ -7,22 +7,33 @@ the configured mode. All runners share common page processing logic.
 
 from __future__ import annotations
 
+import contextlib
+import json
 import logging
 import sqlite3  # noqa: TC003 — sqlite3.Connection is used at runtime in function signatures
+import sys
 from collections import deque
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path  # noqa: TC003
+from typing import Any
 
 from playwright.sync_api import Error as PlaywrightError
 
+from deep_thought.progress import create_progress, track_items
 from deep_thought.web.config import WebConfig  # noqa: TC001
-from deep_thought.web.converter import apply_boilerplate_patterns, convert_html_to_markdown, count_words, extract_title, unwrap_html_tags
+from deep_thought.web.converter import (
+    apply_boilerplate_patterns,
+    convert_html_to_markdown,
+    count_words,
+    extract_title,
+    unwrap_html_tags,
+)
 from deep_thought.web.crawler import CrawlerConfig, PageResult, WebCrawler
 from deep_thought.web.db import queries
 from deep_thought.web.filters import extract_internal_links, is_url_allowed
 from deep_thought.web.image_extractor import download_images, extract_image_urls
-from deep_thought.web.llms import PageSummary, write_llms_full, write_llms_index
+from deep_thought.web.llms import PageSummary, strip_frontmatter, write_llms_full, write_llms_index
 from deep_thought.web.models import CrawledPageLocal
 from deep_thought.web.output import url_to_output_path, write_page
 
@@ -65,6 +76,10 @@ def _make_crawler_config(config: WebConfig) -> CrawlerConfig:
         headless=config.crawl.headless,
         retry_attempts=config.crawl.retry_attempts,
         retry_delay=config.crawl.retry_delay,
+        pagination=config.crawl.pagination,
+        pagination_selector=config.crawl.pagination_selector,
+        pagination_wait=config.crawl.pagination_wait,
+        max_paginations=config.crawl.max_paginations,
     )
 
 
@@ -96,10 +111,11 @@ def _is_article_content(word_count: int, min_words: int) -> bool:
 def _process_page(
     page_result: PageResult,
     config: WebConfig,
-    conn: sqlite3.Connection,
     output_root: Path,
     rule_name: str | None,
     dry_run: bool,
+    embedding_model: Any | None = None,
+    embedding_qdrant_client: Any | None = None,
 ) -> tuple[CrawledPageLocal, PageSummary | None]:
     """Convert a fetched page to markdown and build its local model.
 
@@ -110,10 +126,13 @@ def _process_page(
     Args:
         page_result: The fetched page content from the crawler.
         config: The WebConfig controlling output and extraction settings.
-        conn: An open SQLite connection (threaded through for consistency).
         output_root: Root directory for output files.
         rule_name: The batch rule name that triggered this crawl, or None.
         dry_run: If True, skip writing files to disk.
+        embedding_model: Optional MLX embedding model. When provided together
+            with ``embedding_qdrant_client``, the page is embedded after writing.
+        embedding_qdrant_client: Optional Qdrant client. Must be provided
+            together with ``embedding_model`` for embedding to occur.
 
     Returns:
         A tuple of (CrawledPageLocal, PageSummary | None). PageSummary is None
@@ -205,15 +224,24 @@ def _process_page(
         synced_at=now_iso,
     )
 
+    if embedding_model is not None and embedding_qdrant_client is not None:
+        try:
+            from deep_thought.embeddings import strip_frontmatter as _strip_frontmatter  # noqa: PLC0415
+            from deep_thought.web.embeddings import write_embedding as _write_web_embedding  # noqa: PLC0415
+
+            raw_md = written_path.read_text(encoding="utf-8")
+            embed_content = f"Title: {page_model.title or ''}\n\n{_strip_frontmatter(raw_md)}"
+            _write_web_embedding(embed_content, page_model, config.crawl.mode, embedding_model, embedding_qdrant_client)
+        except Exception as embed_err:
+            logger.warning("Embedding failed for page %s: %s", page_result.url, embed_err)
+
     try:
         md_relative_path = written_path.relative_to(output_root).as_posix()
     except ValueError:
         md_relative_path = written_path.name
 
     raw_content = written_path.read_text(encoding="utf-8")
-    from deep_thought.web.llms import _strip_frontmatter  # noqa: PLC2701
-
-    page_content = _strip_frontmatter(raw_content)
+    page_content = strip_frontmatter(raw_content)
 
     page_summary = PageSummary(
         title=html_title,
@@ -266,12 +294,24 @@ def _collect_article_urls(
     exclude_patterns: list[str],
     remaining_depth: int,
     visited: set[str],
+    config: WebConfig | None = None,
+    max_pages: int = 0,
+    collected: list[str] | None = None,
 ) -> list[str]:
     """Recursively follow index pages to collect article URLs at the correct depth.
 
     At remaining_depth=0 the url itself is an article — return it.
     At remaining_depth>0 the url is an index page — fetch it, extract internal
     links, and recurse with remaining_depth-1 for each allowed child link.
+
+    When config is provided and config.crawl.pagination is not "none", index
+    pages are fetched with pagination support so that JS-rendered content
+    (infinite scroll, "load more" buttons) is fully expanded before link
+    extraction.
+
+    Collection stops early once the number of article URLs gathered across all
+    recursion levels reaches max_pages (when max_pages > 0). This avoids
+    fetching unnecessary index pages on wide or deep sites.
 
     Args:
         crawler: An active WebCrawler instance.
@@ -280,16 +320,32 @@ def _collect_article_urls(
         exclude_patterns: URL exclude regex patterns.
         remaining_depth: How many more levels to traverse before capturing.
         visited: Set of already-seen URLs (mutated in place to prevent loops).
+        config: Optional WebConfig. When provided and pagination is enabled,
+            index pages are fetched with fetch_page_with_pagination().
+        max_pages: Stop collecting once this many article URLs are gathered.
+            0 means no limit (collect all).
+        collected: Shared mutable list tracking all collected URLs so far
+            across the recursive call tree. Callers should omit this argument;
+            it is managed internally.
 
     Returns:
         A list of article URLs at the terminal depth.
     """
-    if remaining_depth == 0:
-        return [url]
+    # Use a shared mutable list to track total collected count across recursion.
+    if collected is None:
+        collected = []
 
-    # This URL is an index page — fetch it to extract its links
+    if remaining_depth == 0:
+        if max_pages <= 0 or len(collected) < max_pages:
+            collected.append(url)
+            return [url]
+        return []
+
+    # This URL is an index page — fetch it to extract its links.
+    # Use pagination-aware fetching when a config is provided and pagination is enabled.
+    use_pagination = config is not None and config.crawl.pagination != "none"
     try:
-        page_result = crawler.fetch_page(url)
+        page_result = crawler.fetch_page_with_pagination(url) if use_pagination else crawler.fetch_page(url)
     except (PlaywrightError, ConnectionError) as fetch_error:
         logger.warning("Failed to fetch index page %s: %s", url, fetch_error)
         return []
@@ -298,6 +354,8 @@ def _collect_article_urls(
     article_urls: list[str] = []
 
     for child_url in child_links:
+        if max_pages > 0 and len(collected) >= max_pages:
+            break
         if child_url in visited:
             continue
         if not is_url_allowed(child_url, include_patterns, exclude_patterns):
@@ -311,6 +369,9 @@ def _collect_article_urls(
                 exclude_patterns=exclude_patterns,
                 remaining_depth=remaining_depth - 1,
                 visited=visited,
+                config=config,
+                max_pages=max_pages,
+                collected=collected,
             )
         )
 
@@ -330,6 +391,8 @@ def run_blog_mode(
     output_root: Path,
     dry_run: bool,
     force: bool,
+    embedding_model: Any | None = None,
+    embedding_qdrant_client: Any | None = None,
 ) -> tuple[CrawlResult, list[PageSummary]]:
     """Traverse index pages according to index_depth, then fetch and capture articles.
 
@@ -346,6 +409,10 @@ def run_blog_mode(
         output_root: Root directory for output files.
         dry_run: If True, skip writing files to disk.
         force: If True, re-crawl URLs that were previously crawled successfully.
+        embedding_model: Optional MLX embedding model. Threaded to ``_process_page``
+            so each page is embedded after writing.
+        embedding_qdrant_client: Optional Qdrant client. Threaded to
+            ``_process_page`` for writing embeddings.
 
     Returns:
         A tuple of (CrawlResult, list[PageSummary]) for the crawled pages.
@@ -363,9 +430,11 @@ def run_blog_mode(
         exclude_patterns=config.crawl.exclude_patterns,
         remaining_depth=config.crawl.index_depth,
         visited=visited,
+        config=config,
+        max_pages=config.crawl.max_pages,
     )
 
-    # Deduplicate while preserving order and respect max_pages
+    # Deduplicate while preserving order (max_pages already enforced during collection)
     seen: set[str] = set()
     unique_article_urls: list[str] = []
     for article_url in article_urls:
@@ -373,10 +442,7 @@ def run_blog_mode(
             seen.add(article_url)
             unique_article_urls.append(article_url)
 
-    if config.crawl.max_pages > 0:
-        unique_article_urls = unique_article_urls[: config.crawl.max_pages]
-
-    for page_url in unique_article_urls:
+    for page_url in track_items(unique_article_urls, description="Crawling pages"):
         if not force:
             existing_row = queries.get_crawled_page(conn, page_url)
             if existing_row is not None and existing_row.get("status") == "success":
@@ -390,10 +456,11 @@ def run_blog_mode(
             page_model, page_summary = _process_page(
                 page_result=page_result,
                 config=config,
-                conn=conn,
                 output_root=output_root,
                 rule_name=None,
                 dry_run=dry_run,
+                embedding_model=embedding_model,
+                embedding_qdrant_client=embedding_qdrant_client,
             )
             queries.upsert_crawled_page(conn, page_model.to_dict())
             conn.commit()
@@ -448,6 +515,8 @@ def run_documentation_mode(
     output_root: Path,
     dry_run: bool,
     force: bool,
+    embedding_model: Any | None = None,
+    embedding_qdrant_client: Any | None = None,
 ) -> tuple[CrawlResult, list[PageSummary]]:
     """Crawl a documentation site using breadth-first search.
 
@@ -467,6 +536,10 @@ def run_documentation_mode(
         output_root: Root directory for output files.
         dry_run: If True, skip writing files to disk.
         force: If True, re-crawl URLs that were previously crawled successfully.
+        embedding_model: Optional MLX embedding model. Threaded to ``_process_page``
+            so each page is embedded after writing.
+        embedding_qdrant_client: Optional Qdrant client. Threaded to
+            ``_process_page`` for writing embeddings.
 
     Returns:
         A tuple of (CrawlResult, list[PageSummary]) for the crawled pages.
@@ -492,68 +565,87 @@ def run_documentation_mode(
     url_queue.append((root_url, 0))
     visited_urls.add(root_url)
 
-    while url_queue:
-        current_url, current_depth = url_queue.popleft()
+    use_progress = sys.stderr.isatty()
+    bfs_progress = create_progress() if use_progress else None
+    bfs_task_id = None
 
-        total_processed = succeeded_count + failed_count + skipped_count
-        if config.crawl.max_pages > 0 and total_processed >= config.crawl.max_pages:
-            break
+    with bfs_progress if bfs_progress is not None else contextlib.nullcontext():
+        while url_queue:
+            current_url, current_depth = url_queue.popleft()
 
-        # Skip already-crawled pages unless: force, or this URL is in the changelog changes
-        if not force:
-            is_changelog_changed = current_url in changelog_changed_urls
-            if not is_changelog_changed:
-                existing_row = queries.get_crawled_page(conn, current_url)
-                if existing_row is not None and existing_row.get("status") == "success":
+            total_processed = succeeded_count + failed_count + skipped_count
+            if config.crawl.max_pages > 0 and total_processed >= config.crawl.max_pages:
+                break
+
+            if bfs_progress is not None:
+                if bfs_task_id is None:
+                    bfs_task_id = bfs_progress.add_task("Crawling pages", total=None)
+                else:
+                    bfs_progress.update(bfs_task_id, total=len(visited_urls))
+
+            # Skip already-crawled pages unless: force, or this URL is in the changelog changes
+            if not force:
+                is_changelog_changed = current_url in changelog_changed_urls
+                if not is_changelog_changed:
+                    existing_row = queries.get_crawled_page(conn, current_url)
+                    if existing_row is not None and existing_row.get("status") == "success":
+                        skipped_count += 1
+                        logger.debug("Skipping already-crawled URL: %s", current_url)
+                        # Still enqueue children so the BFS graph stays complete
+                        if current_depth < config.crawl.max_depth:
+                            _enqueue_children_from_db(
+                                existing_row, url_queue, visited_urls, config, root_url, current_depth
+                            )
+                        if bfs_progress is not None and bfs_task_id is not None:
+                            bfs_progress.advance(bfs_task_id)
+                        continue
+
+            try:
+                page_result = crawler.fetch_page(current_url)
+
+                page_model, page_summary = _process_page(
+                    page_result=page_result,
+                    config=config,
+                    output_root=output_root,
+                    rule_name=None,
+                    dry_run=dry_run,
+                    embedding_model=embedding_model,
+                    embedding_qdrant_client=embedding_qdrant_client,
+                )
+                queries.upsert_crawled_page(conn, page_model.to_dict())
+                conn.commit()
+
+                if page_model.status == "skipped":
                     skipped_count += 1
-                    logger.debug("Skipping already-crawled URL: %s", current_url)
-                    # Still enqueue children so the BFS graph stays complete
-                    if current_depth < config.crawl.max_depth:
-                        _enqueue_children_from_db(
-                            existing_row, url_queue, visited_urls, config, root_url, current_depth
-                        )
-                    continue
+                else:
+                    succeeded_count += 1
+                    if page_summary is not None:
+                        summaries.append(page_summary)
 
-        try:
-            page_result = crawler.fetch_page(current_url)
+                # Enqueue child links if we have not reached max depth
+                if current_depth < config.crawl.max_depth:
+                    child_links = extract_internal_links(page_result.html, root_url)
+                    queries.update_page_child_links(conn, current_url, json.dumps(list(child_links)))
+                    conn.commit()
+                    for child_url in child_links:
+                        if child_url not in visited_urls and is_url_allowed(
+                            child_url,
+                            config.crawl.include_patterns,
+                            config.crawl.exclude_patterns,
+                        ):
+                            visited_urls.add(child_url)
+                            url_queue.append((child_url, current_depth + 1))
 
-            page_model, page_summary = _process_page(
-                page_result=page_result,
-                config=config,
-                conn=conn,
-                output_root=output_root,
-                rule_name=None,
-                dry_run=dry_run,
-            )
-            queries.upsert_crawled_page(conn, page_model.to_dict())
-            conn.commit()
+            except (PlaywrightError, ConnectionError) as fetch_error:
+                _record_error_page(current_url, None, fetch_error, conn)
+                failed_count += 1
+            except Exception as unexpected_error:
+                logger.error("Unexpected error processing %s: %s", current_url, unexpected_error)
+                _record_error_page(current_url, None, unexpected_error, conn)
+                failed_count += 1
 
-            if page_model.status == "skipped":
-                skipped_count += 1
-            else:
-                succeeded_count += 1
-                if page_summary is not None:
-                    summaries.append(page_summary)
-
-            # Enqueue child links if we have not reached max depth
-            if current_depth < config.crawl.max_depth:
-                child_links = extract_internal_links(page_result.html, root_url)
-                for child_url in child_links:
-                    if child_url not in visited_urls and is_url_allowed(
-                        child_url,
-                        config.crawl.include_patterns,
-                        config.crawl.exclude_patterns,
-                    ):
-                        visited_urls.add(child_url)
-                        url_queue.append((child_url, current_depth + 1))
-
-        except (PlaywrightError, ConnectionError) as fetch_error:
-            _record_error_page(current_url, None, fetch_error, conn)
-            failed_count += 1
-        except Exception as unexpected_error:
-            logger.error("Unexpected error processing %s: %s", current_url, unexpected_error)
-            _record_error_page(current_url, None, unexpected_error, conn)
-            failed_count += 1
+            if bfs_progress is not None and bfs_task_id is not None:
+                bfs_progress.advance(bfs_task_id)
 
     total_count = succeeded_count + failed_count + skipped_count
     crawl_result = CrawlResult(total=total_count, succeeded=succeeded_count, failed=failed_count, skipped=skipped_count)
@@ -568,21 +660,49 @@ def _enqueue_children_from_db(
     root_url: str,
     current_depth: int,
 ) -> None:
-    """No-op stub: when a page is skipped via DB cache, its children cannot be re-enqueued
-    without re-fetching the HTML. This function is a placeholder for future enhancement
-    (e.g., storing extracted links in the DB). Currently skipped pages do not contribute
-    children to the BFS queue.
+    """Re-enqueue child links for a cached page using stored link data.
+
+    When a page is skipped because it was already successfully crawled, its
+    previously-extracted child links (stored as JSON in the ``child_links``
+    column) are parsed and filtered against the current crawl config, then
+    added to the BFS queue. This preserves full BFS graph traversal without
+    re-fetching the cached page.
+
+    If ``child_links`` is absent (rows pre-dating migration 002), the page's
+    children are silently skipped at DEBUG level — they will be discovered
+    naturally when those URLs are reached via other paths, or on the next
+    full crawl.
 
     Args:
         existing_row: The cached DB row for the skipped page.
-        url_queue: The BFS queue to potentially add children to.
+        url_queue: The BFS queue to add children to.
         visited_urls: Set of already-visited URLs.
         config: The WebConfig for filter settings.
         root_url: The crawl root URL.
         current_depth: The depth of the skipped page.
     """
-    # Children cannot be recovered without storing them in the DB — left for future work.
-    pass
+    child_links_json = existing_row.get("child_links")
+    if not child_links_json:
+        logger.debug(
+            "Cached page %r has no stored child links (pre-migration row); children not traversed.",
+            existing_row.get("url", "<unknown>"),
+        )
+        return
+
+    try:
+        child_links: list[str] = json.loads(str(child_links_json))
+    except (ValueError, TypeError):
+        logger.debug("Could not parse child_links for %r; skipping.", existing_row.get("url"))
+        return
+
+    for child_url in child_links:
+        if child_url not in visited_urls and is_url_allowed(
+            child_url,
+            config.crawl.include_patterns,
+            config.crawl.exclude_patterns,
+        ):
+            visited_urls.add(child_url)
+            url_queue.append((child_url, current_depth + 1))
 
 
 def run_direct_mode(
@@ -593,6 +713,8 @@ def run_direct_mode(
     output_root: Path,
     dry_run: bool,
     force: bool,
+    embedding_model: Any | None = None,
+    embedding_qdrant_client: Any | None = None,
 ) -> tuple[CrawlResult, list[PageSummary]]:
     """Fetch each URL listed in a text file.
 
@@ -607,6 +729,10 @@ def run_direct_mode(
         output_root: Root directory for output files.
         dry_run: If True, skip writing files to disk.
         force: If True, re-crawl URLs that were previously crawled successfully.
+        embedding_model: Optional MLX embedding model. Threaded to ``_process_page``
+            so each page is embedded after writing.
+        embedding_qdrant_client: Optional Qdrant client. Threaded to
+            ``_process_page`` for writing embeddings.
 
     Returns:
         A tuple of (CrawlResult, list[PageSummary]) for the crawled pages.
@@ -629,7 +755,7 @@ def run_direct_mode(
     skipped_count = 0
     summaries: list[PageSummary] = []
 
-    for page_url in urls_to_crawl:
+    for page_url in track_items(urls_to_crawl, description="Crawling pages"):
         if not force:
             existing_row = queries.get_crawled_page(conn, page_url)
             if existing_row is not None and existing_row.get("status") == "success":
@@ -643,10 +769,11 @@ def run_direct_mode(
             page_model, page_summary = _process_page(
                 page_result=page_result,
                 config=config,
-                conn=conn,
                 output_root=output_root,
                 rule_name=None,
                 dry_run=dry_run,
+                embedding_model=embedding_model,
+                embedding_qdrant_client=embedding_qdrant_client,
             )
             queries.upsert_crawled_page(conn, page_model.to_dict())
             conn.commit()
@@ -700,8 +827,6 @@ def _build_lookback_summaries(
     Returns:
         A merged, deduplicated list of PageSummary objects sorted by URL.
     """
-    from deep_thought.web.llms import _strip_frontmatter  # noqa: PLC2701
-
     cutoff = datetime.now(UTC) - timedelta(days=lookback_days)
     since_iso = cutoff.isoformat()
 
@@ -728,7 +853,7 @@ def _build_lookback_summaries(
             continue
 
         raw_content = md_file.read_text(encoding="utf-8")
-        content = _strip_frontmatter(raw_content)
+        content = strip_frontmatter(raw_content)
 
         try:
             md_relative_path = md_file.relative_to(output_root).as_posix()
@@ -762,6 +887,8 @@ def process(
     dry_run: bool,
     force: bool,
     rule_name: str | None = None,
+    embedding_model: Any | None = None,
+    embedding_qdrant_client: Any | None = None,
 ) -> CrawlResult:
     """Top-level crawl dispatcher.
 
@@ -778,6 +905,10 @@ def process(
         dry_run: If True, skip writing files to disk.
         force: If True, re-crawl already-visited URLs.
         rule_name: Optional batch rule name that triggered this crawl.
+        embedding_model: Optional MLX embedding model. Passed to the mode runner
+            so each page is embedded after writing. When None, embedding is skipped.
+        embedding_qdrant_client: Optional Qdrant client. Passed to the mode runner
+            for writing embeddings. Must be provided with ``embedding_model``.
 
     Returns:
         A CrawlResult with total, succeeded, failed, and skipped counts.
@@ -800,6 +931,8 @@ def process(
                 output_root=output_root,
                 dry_run=dry_run,
                 force=force,
+                embedding_model=embedding_model,
+                embedding_qdrant_client=embedding_qdrant_client,
             )
         elif mode == "documentation":
             if input_url is None:
@@ -812,6 +945,8 @@ def process(
                 output_root=output_root,
                 dry_run=dry_run,
                 force=force,
+                embedding_model=embedding_model,
+                embedding_qdrant_client=embedding_qdrant_client,
             )
         elif mode == "direct":
             if input_file is None:
@@ -824,6 +959,8 @@ def process(
                 output_root=output_root,
                 dry_run=dry_run,
                 force=force,
+                embedding_model=embedding_model,
+                embedding_qdrant_client=embedding_qdrant_client,
             )
         else:
             raise ValueError(f"Unknown crawl mode: '{mode}'. Must be one of: blog, documentation, direct")

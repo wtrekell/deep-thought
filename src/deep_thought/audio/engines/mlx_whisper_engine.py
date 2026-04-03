@@ -168,21 +168,26 @@ def _get_audio_duration(audio_path: Path) -> float:
     Raises:
         subprocess.CalledProcessError: If ffprobe exits with a non-zero status.
     """
-    result = subprocess.run(
-        [
-            "ffprobe",
-            "-v",
-            "quiet",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "json",
-            str(audio_path),
-        ],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "quiet",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "json",
+                str(audio_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except FileNotFoundError:
+        raise RuntimeError(
+            "ffprobe not found. Install FFmpeg: brew install ffmpeg (macOS) or apt install ffmpeg (Linux)"
+        ) from None
     data: dict[str, Any] = json.loads(result.stdout)
     return float(data["format"]["duration"])
 
@@ -205,23 +210,28 @@ def _split_audio(audio_path: Path, chunk_minutes: int) -> list[Path]:
     chunk_seconds = chunk_minutes * 60
     output_pattern = str(chunk_dir / f"chunk_%03d{audio_path.suffix}")
 
-    subprocess.run(
-        [
-            "ffmpeg",
-            "-i",
-            str(audio_path),
-            "-f",
-            "segment",
-            "-segment_time",
-            str(chunk_seconds),
-            "-c",
-            "copy",
-            "-v",
-            "quiet",
-            output_pattern,
-        ],
-        check=True,
-    )
+    try:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-i",
+                str(audio_path),
+                "-f",
+                "segment",
+                "-segment_time",
+                str(chunk_seconds),
+                "-c",
+                "copy",
+                "-v",
+                "quiet",
+                output_pattern,
+            ],
+            check=True,
+        )
+    except FileNotFoundError:
+        raise RuntimeError(
+            "ffmpeg not found. Install FFmpeg: brew install ffmpeg (macOS) or apt install ffmpeg (Linux)"
+        ) from None
 
     chunks = sorted(chunk_dir.glob(f"chunk_*{audio_path.suffix}"))
     if not chunks:

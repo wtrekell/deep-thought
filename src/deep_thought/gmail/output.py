@@ -10,7 +10,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from deep_thought.gmail.models import _extract_header, _slugify_subject
+from deep_thought.gmail.models import _extract_header
+from deep_thought.text_utils import slugify as _shared_slugify
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -150,25 +151,34 @@ def write_email_file(
     """Write a single email's markdown content to a file.
 
     Creates the rule subdirectory if it does not exist. The filename is
-    built from the date and a slugified subject.
+    built from the date and a slugified subject. If a file with the same
+    name already exists (e.g., two subjects that truncate identically at
+    80 characters), a counter suffix (_1, _2, ...) is appended before the
+    .md extension to avoid overwriting.
 
     Args:
         content: The full markdown content to write.
         output_dir: The root output directory.
         rule_name: The rule name (used as subdirectory).
         subject: The email subject (slugified for the filename).
-        date_str: A date string for the filename prefix (YYYY-MM-DD).
+        date_str: A date string for the filename prefix (YYMMDD).
 
     Returns:
         The Path to the written file.
     """
-    subject_slug = _slugify_subject(subject)
-    filename = f"{date_str}_{subject_slug}.md" if subject_slug else f"{date_str}_no-subject.md"
+    subject_slug = _shared_slugify(subject)
+    base_stem = f"{date_str}-{subject_slug}" if subject_slug else f"{date_str}-no-subject"
 
     rule_dir = output_dir / rule_name
     rule_dir.mkdir(parents=True, exist_ok=True)
 
-    file_path = rule_dir / filename
+    # Resolve filename collisions by appending a counter suffix
+    file_path = rule_dir / f"{base_stem}.md"
+    collision_counter = 1
+    while file_path.exists():
+        file_path = rule_dir / f"{base_stem}_{collision_counter}.md"
+        collision_counter += 1
+
     file_path.write_text(content, encoding="utf-8")
     return file_path
 

@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from deep_thought.progress import track_items
+
 if TYPE_CHECKING:
     import sqlite3
     from pathlib import Path
@@ -65,8 +67,9 @@ def _save_snapshot(
         Path to the saved snapshot file.
     """
     snapshots_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H%M%S")
-    snapshot_path = snapshots_dir / f"{timestamp}.json"
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H%M%S_%f")
+    source_stem = source_path.stem
+    snapshot_path = snapshots_dir / f"{timestamp}_{source_stem}.json"
 
     snapshot_data: dict[str, Any] = {
         "source_file": str(source_path),
@@ -107,6 +110,7 @@ def process_file(
     output_root: Path,
     *,
     engine: TranscriptionEngine,
+    diarization_pipeline: Any | None = None,
     dry_run: bool = False,
     force: bool = False,
 ) -> ProcessResult:
@@ -118,7 +122,7 @@ def process_file(
     3. If dry_run, return early with skip_reason="dry-run"
     4. Transcribe via engine
     5. Save raw snapshot with hallucination scores
-    6. Optionally run diarization
+    6. Optionally run diarization (uses pre-loaded pipeline from process_batch)
     7. Run hallucination detection
     8. Apply filler removal if configured
     9. Write markdown output with frontmatter
@@ -133,6 +137,9 @@ def process_file(
         conn: Open SQLite connection for recording results.
         output_root: Root directory where markdown output is written.
         engine: Transcription engine to use for this file.
+        diarization_pipeline: Pre-loaded diarization pipeline, or None when
+            diarization is disabled. Loading is expensive; callers should load
+            once via process_batch and pass it here to avoid per-file reloads.
         dry_run: If True, skip actual processing and return a "dry-run" skip.
         force: If True, bypass the duplicate-hash filter and reprocess.
 
@@ -140,6 +147,8 @@ def process_file(
         A ProcessResult describing the outcome for this file.
     """
     result = ProcessResult(source_path=source_path)
+    # Initialise to None so the error handler can reuse it if Step 1 succeeded
+    file_hash: str | None = None
 
     try:
         # Step 1: Hash
@@ -189,16 +198,15 @@ def process_file(
         # so the snapshot captures both raw segments and scores together.
 
         # Step 6: Diarization (optional)
+        # Uses the pre-loaded pipeline from process_batch to avoid reloading per file.
         segments = transcription_result.segments
-        if config.diarization.diarize:
+        if config.diarization.diarize and diarization_pipeline is not None:
             try:
                 from deep_thought.audio.diarization import (
                     diarize,
-                    load_diarization_pipeline,
                     merge_transcript_with_speakers,
                 )
 
-                diarization_pipeline = load_diarization_pipeline(config.diarization.hf_token_env)
                 speaker_segments = diarize(source_path, diarization_pipeline)
                 segments = merge_transcript_with_speakers(segments, speaker_segments)
                 result.speaker_count = len({speaker_seg.speaker_label for speaker_seg in speaker_segments})
@@ -282,16 +290,19 @@ def process_file(
         result.errors.append(str(pipeline_error))
         logger.error("Error processing %s: %s", source_path, pipeline_error, exc_info=True)
 
-        # Attempt to record the error in the DB so it appears in status queries
+        # Attempt to record the error in the DB so it appears in status queries.
+        # Reuse the hash computed in Step 1 when available — avoids re-reading a
+        # file that may have been removed or may fail a second time.
         try:
             from deep_thought.audio.db.queries import upsert_processed_file
             from deep_thought.audio.filters import compute_file_hash
 
+            error_file_hash = file_hash if file_hash is not None else compute_file_hash(source_path)
             upsert_processed_file(
                 conn,
                 {
                     "file_path": str(source_path),
-                    "file_hash": compute_file_hash(source_path),
+                    "file_hash": error_file_hash,
                     "engine": config.engine.engine,
                     "model": config.engine.model,
                     "duration_seconds": 0.0,
@@ -347,15 +358,32 @@ def process_batch(
         return []
 
     logger.info("Found %d audio file(s) to process", len(input_files))
+
+    # Load the diarization pipeline once for the whole batch rather than
+    # per file. PyAnnote model loading is expensive (model download + GPU init),
+    # so reloading it on every file in a large batch is wasteful.
+    loaded_diarization_pipeline: Any | None = None
+    if config.diarization.diarize and not dry_run:
+        try:
+            from deep_thought.audio.diarization import load_diarization_pipeline
+
+            loaded_diarization_pipeline = load_diarization_pipeline(config.diarization.hf_token_env)
+        except (ImportError, OSError) as diarization_load_error:
+            logger.warning(
+                "Could not load diarization pipeline: %s. All files will be processed without speaker labels.",
+                diarization_load_error,
+            )
+
     results: list[ProcessResult] = []
 
-    for source_file in input_files:
+    for source_file in track_items(input_files, description="Transcribing"):
         file_result = process_file(
             source_file,
             config,
             conn,
             output_root,
             engine=engine,
+            diarization_pipeline=loaded_diarization_pipeline,
             dry_run=dry_run,
             force=force,
         )

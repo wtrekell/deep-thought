@@ -37,7 +37,12 @@ class WhisperEngine:
             ImportError: If openai-whisper is not installed.
         """
         if self._model is None:
-            import whisper  # type: ignore[import-not-found]  # Lazy import — optional dependency
+            try:
+                import whisper  # type: ignore[import-not-found]  # Lazy import — optional dependency
+            except ImportError:
+                raise ImportError(
+                    "openai-whisper is not installed. Install it with: pip install 'deep-thought[whisper]'"
+                ) from None
 
             logger.info("Loading Whisper model: %s", self._model_name)
             self._model = whisper.load_model(self._model_name)

@@ -60,6 +60,7 @@ Configuration lives at `src/config/todoist_configuration.yaml`. Key settings:
 | `sync.py` | Orchestrator: pull then push |
 | `export.py` | DB → structured markdown files |
 | `create.py` | Create a new task via API and write it to DB immediately |
+| `complete.py` | Close a task via API and update DB (is_completed, completed_at, updated_at, synced_at) |
 | `db/` | SQLite schema, migrations, and query functions |
 
 ## Data Storage

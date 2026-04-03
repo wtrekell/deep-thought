@@ -181,18 +181,13 @@ def run_migrations(conn: sqlite3.Connection, migrations_dir: Path) -> None:
 
         migration_sql = migration_file.read_text(encoding="utf-8")
 
-        # Strip SQL line comments before splitting on semicolons so that
-        # comment text containing semicolons does not produce false statement
-        # fragments.
-        sql_lines_without_comments = [line for line in migration_sql.splitlines() if not line.strip().startswith("--")]
-        migration_sql_stripped = "\n".join(sql_lines_without_comments)
-
         try:
-            conn.execute("BEGIN;")
-            for raw_statement in migration_sql_stripped.split(";"):
-                statement = raw_statement.strip()
-                if statement:
-                    conn.execute(statement)
+            # executescript handles multiple statements and implicit semicolons
+            # correctly, avoiding the fragility of manual comment-stripping and
+            # split-on-semicolon. It also issues an implicit COMMIT before
+            # execution, so we call _set_schema_version and conn.commit()
+            # afterwards to record the applied version in the same transaction.
+            conn.executescript(migration_sql)
             _set_schema_version(conn, migration_number)
             conn.commit()
         except sqlite3.Error as database_error:

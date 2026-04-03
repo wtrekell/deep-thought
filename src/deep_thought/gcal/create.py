@@ -10,11 +10,60 @@ from typing import Any
 
 import yaml
 
-from deep_thought.gcal.db.queries import get_calendar, upsert_event
+from deep_thought.gcal.db.queries import clear_sync_token, get_calendar, upsert_event
 from deep_thought.gcal.models import CreateResult, EventLocal
 from deep_thought.gcal.output import generate_event_markdown, write_event_file
 
+# ---------------------------------------------------------------------------
+# Validation helpers
+# ---------------------------------------------------------------------------
+
+_DATETIME_COMPARISON_STRIP_TZ_RE = re.compile(r"[+-]\d{2}:\d{2}$|Z$")
+
 logger = logging.getLogger(__name__)
+
+
+def _validate_attendee_emails(attendees: list[str]) -> list[str]:
+    """Filter attendee entries to those that look like valid email addresses.
+
+    Applies a minimal structural check (contains '@' and '.') to each entry.
+    Entries that fail the check are dropped and a warning is logged for each.
+
+    Args:
+        attendees: A list of candidate email address strings.
+
+    Returns:
+        A new list containing only the entries that pass the email check.
+    """
+    valid_attendees: list[str] = []
+    for candidate_email in attendees:
+        if "@" in candidate_email and "." in candidate_email:
+            valid_attendees.append(candidate_email)
+        else:
+            logger.warning(
+                "Attendee entry %r does not look like a valid email address — skipping.",
+                candidate_email,
+            )
+    return valid_attendees
+
+
+def _validate_start_before_end(start_value: str, end_value: str) -> None:
+    """Raise ValueError if start_value is not strictly before end_value.
+
+    Compares the raw string values lexicographically, which is correct for
+    both ISO 8601 date-only (YYYY-MM-DD) and datetime strings that share the
+    same time zone representation.
+
+    Args:
+        start_value: The event start as an ISO 8601 string.
+        end_value: The event end as an ISO 8601 string.
+
+    Raises:
+        ValueError: If start_value >= end_value.
+    """
+    if start_value >= end_value:
+        raise ValueError(f"Event start must be before end. Got start='{start_value}', end='{end_value}'.")
+
 
 # ---------------------------------------------------------------------------
 # Frontmatter parsing
@@ -143,10 +192,12 @@ def _build_api_event_body(frontmatter: dict[str, Any], body_text: str) -> dict[s
     elif body_text:
         event_body["description"] = body_text
 
-    # --- Attendees: convert email strings to API dicts ---
+    # --- Attendees: validate then convert email strings to API dicts ---
     raw_attendees: list[str] | None = frontmatter.get("attendees")
     if raw_attendees:
-        event_body["attendees"] = [{"email": email_address} for email_address in raw_attendees]
+        valid_attendee_emails = _validate_attendee_emails(raw_attendees)
+        if valid_attendee_emails:
+            event_body["attendees"] = [{"email": email_address} for email_address in valid_attendee_emails]
 
     # --- Recurrence: pass RRULE strings through as-is ---
     raw_recurrence: list[str] | None = frontmatter.get("recurrence")
@@ -190,6 +241,13 @@ def run_create(
         or empty strings when dry_run is True.
     """
     frontmatter, body_text = parse_event_frontmatter(file_path)
+
+    # Validate start < end before calling the API so the user gets a clear
+    # local error rather than a cryptic API rejection.
+    start_value: str = str(frontmatter["start"])
+    end_value: str = str(frontmatter["end"])
+    _validate_start_before_end(start_value, end_value)
+
     event_api_body = _build_api_event_body(frontmatter, body_text)
 
     calendar_id: str = str(frontmatter.get("calendar_id", "primary"))
@@ -202,10 +260,9 @@ def run_create(
     api_response: dict[str, Any] = client.insert_event(calendar_id, event_api_body)
 
     event_local = EventLocal.from_api_response(api_response, calendar_id)
-    upsert_event(db_conn, event_local.to_dict())
-    db_conn.commit()
 
     # Resolve the calendar display name for the output directory structure
+    # before the DB write so the commit only happens after all I/O succeeds.
     calendar_row = get_calendar(db_conn, calendar_id)
     calendar_display_name: str = calendar_row["summary"] if calendar_row else calendar_id
 
@@ -220,6 +277,11 @@ def run_create(
         event=event_local,
         flat_output=flat_output,
     )
+
+    # Write to the DB only after the file has been successfully created.
+    # The caller (cli.py) is responsible for calling db_conn.commit().
+    upsert_event(db_conn, event_local.to_dict())
+    clear_sync_token(db_conn, calendar_id)
 
     logger.info("Event created: %s (%s)", event_local.event_id, event_local.html_link)
 

@@ -28,6 +28,7 @@ from deep_thought.file_txt.config import (
 from deep_thought.file_txt.convert import ConvertResult, convert_file
 from deep_thought.file_txt.filters import collect_input_files
 from deep_thought.file_txt.llms import DocumentSummary, write_llms_full, write_llms_index
+from deep_thought.progress import track_items
 
 logger = logging.getLogger(__name__)
 
@@ -101,8 +102,8 @@ def _resolve_output_root(args: argparse.Namespace, config: FileTxtConfig) -> Pat
 def _build_config_with_overrides(args: argparse.Namespace, config: FileTxtConfig) -> FileTxtConfig:
     """Return a new FileTxtConfig with CLI flag overrides applied.
 
-    --force-ocr, --torch-device, and email flags override config settings
-    so that ad-hoc CLI invocations do not require editing the YAML file.
+    Email flags and output flags override config settings so that ad-hoc CLI
+    invocations do not require editing the YAML file.
 
     Args:
         args: Parsed argparse namespace.
@@ -113,11 +114,6 @@ def _build_config_with_overrides(args: argparse.Namespace, config: FileTxtConfig
     """
     from dataclasses import replace
 
-    updated_marker = replace(
-        config.marker,
-        force_ocr=args.force_ocr if args.force_ocr is not None else config.marker.force_ocr,
-        torch_device=args.torch_device if args.torch_device else config.marker.torch_device,
-    )
     updated_output = replace(
         config.output,
         include_page_numbers=(
@@ -133,7 +129,7 @@ def _build_config_with_overrides(args: argparse.Namespace, config: FileTxtConfig
             args.include_attachments if args.include_attachments is not None else config.email.include_attachments
         ),
     )
-    return replace(config, marker=updated_marker, output=updated_output, email=updated_email)
+    return replace(config, output=updated_output, email=updated_email)
 
 
 def _result_to_document_summary(result: ConvertResult, output_root: Path) -> DocumentSummary | None:
@@ -220,7 +216,7 @@ def cmd_convert(args: argparse.Namespace) -> None:
     error_count = 0
     successful_results: list[ConvertResult] = []
 
-    for source_path in input_files:
+    for source_path in track_items(input_files, description="Converting files"):
         if args.verbose:
             dry_run_label = "[dry-run] " if args.dry_run else ""
             print(f"{dry_run_label}Converting: {source_path}")
@@ -293,9 +289,6 @@ def cmd_config(args: argparse.Namespace) -> None:
         print()
 
     print("Loaded configuration:")
-    print(f"  torch_device:          {config.marker.torch_device}")
-    print(f"  force_ocr:             {config.marker.force_ocr}")
-    print()
     print(f"  prefer_html:           {config.email.prefer_html}")
     print(f"  full_headers:          {config.email.full_headers}")
     print(f"  include_attachments:   {config.email.include_attachments}")
@@ -475,18 +468,6 @@ def _add_convert_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         default=False,
         help="Also generate llms-full.txt and llms.txt aggregate files.",
-    )
-    parser.add_argument(
-        "--force-ocr",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="Force OCR for PDF files even when text is extractable directly.",
-    )
-    parser.add_argument(
-        "--torch-device",
-        choices=["mps", "cuda", "cpu"],
-        default=None,
-        help="Hardware device for Marker: 'mps', 'cuda', or 'cpu'.",
     )
     parser.add_argument(
         "--include-page-numbers",

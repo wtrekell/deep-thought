@@ -104,17 +104,31 @@ def load_config(config_path: Path | None = None) -> ResearchConfig:
 
     raw_dict: dict[str, Any] = raw
 
+    # Required fields: raise KeyError immediately when absent so the caller sees
+    # a clear error rather than silently using a baked-in default value.
+    try:
+        api_key_env = str(raw_dict["api_key_env"])
+        search_model = str(raw_dict["search_model"])
+        research_model = str(raw_dict["research_model"])
+        output_dir = str(raw_dict["output_dir"])
+    except KeyError as missing_key:
+        raise ValueError(f"Configuration file missing required field: {missing_key}") from missing_key
+
+    # Optional fields with documented defaults.
+    retry_max_attempts = int(raw_dict.get("retry_max_attempts", 3))
+    retry_base_delay_seconds = int(raw_dict.get("retry_base_delay_seconds", 1))
+
     raw_default_recency = raw_dict.get("default_recency")
     default_recency: str | None = str(raw_default_recency) if raw_default_recency is not None else None
 
     return ResearchConfig(
-        api_key_env=str(raw_dict.get("api_key_env", "PERPLEXITY_API_KEY")),
-        retry_max_attempts=int(raw_dict.get("retry_max_attempts", 3)),
-        retry_base_delay_seconds=int(raw_dict.get("retry_base_delay_seconds", 1)),
-        search_model=str(raw_dict.get("search_model", "sonar")),
-        research_model=str(raw_dict.get("research_model", "sonar-deep-research")),
+        api_key_env=api_key_env,
+        retry_max_attempts=retry_max_attempts,
+        retry_base_delay_seconds=retry_base_delay_seconds,
+        search_model=search_model,
+        research_model=research_model,
         default_recency=default_recency,
-        output_dir=str(raw_dict.get("output_dir", "data/research/export/")),
+        output_dir=output_dir,
     )
 
 
@@ -145,6 +159,9 @@ def validate_config(config: ResearchConfig) -> list[str]:
 
     if config.retry_base_delay_seconds <= 0:
         issues.append(f"retry_base_delay_seconds must be > 0, got: {config.retry_base_delay_seconds}.")
+
+    if not config.output_dir:
+        issues.append("output_dir is empty — cannot determine where to write output files.")
 
     if config.default_recency is not None and config.default_recency not in _VALID_RECENCY_VALUES:
         valid_options = ", ".join(f'"{value}"' for value in sorted(_VALID_RECENCY_VALUES))

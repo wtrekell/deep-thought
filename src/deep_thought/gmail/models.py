@@ -23,25 +23,6 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 
-def _slugify_subject(subject: str, max_length: int = 80) -> str:
-    """Convert an email subject line to a filesystem-safe slug.
-
-    Lowercases, replaces non-alphanumeric characters with hyphens, collapses
-    repeated hyphens, strips leading/trailing hyphens, and truncates.
-
-    Args:
-        subject: The raw subject string.
-        max_length: Maximum length of the resulting slug.
-
-    Returns:
-        A cleaned slug suitable for use in a filename.
-    """
-    slug = subject.lower()
-    slug = re.sub(r"[^a-z0-9]+", "-", slug)
-    slug = slug.strip("-")
-    return slug[:max_length] if len(slug) > max_length else slug
-
-
 def _extract_header(message: dict[str, Any], header_name: str) -> str | None:
     """Extract a header value from a Gmail API message dict.
 
@@ -134,7 +115,8 @@ class ProcessedEmailLocal:
 
         message_id: str = message.get("id", "")
         subject: str = _extract_header(message, "Subject") or "(no subject)"
-        from_address: str = _extract_header(message, "From") or "(unknown sender)"
+        raw_from_header: str = _extract_header(message, "From") or "(unknown sender)"
+        from_address: str = _parse_email_address(raw_from_header)
         current_timestamp: str = datetime.now(tz=UTC).isoformat()
 
         return cls(

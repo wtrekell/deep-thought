@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from deep_thought.progress import track_items
 from deep_thought.todoist.db.queries import (
     get_all_labels,
     set_sync_value,
@@ -70,6 +71,23 @@ def _snapshots_dir() -> Path:
     snapshots_directory = get_data_dir() / "snapshots"
     snapshots_directory.mkdir(parents=True, exist_ok=True)
     return snapshots_directory
+
+
+def _prune_old_snapshots(snapshots_directory: Path, keep_count: int = 10) -> None:
+    """Delete snapshot files beyond the most recent keep_count.
+
+    Files are sorted by name, which is lexicographically equivalent to
+    chronological order because the filenames use ISO-8601 timestamps
+    (e.g., 2026-03-30T120000.json). The oldest files are removed first.
+
+    Args:
+        snapshots_directory: Directory containing timestamped .json snapshot files.
+        keep_count: Number of most-recent snapshots to retain. Defaults to 10.
+    """
+    all_snapshot_files = sorted(snapshots_directory.glob("*.json"))
+    files_to_delete = all_snapshot_files[:-keep_count] if len(all_snapshot_files) > keep_count else []
+    for old_snapshot_file in files_to_delete:
+        old_snapshot_file.unlink(missing_ok=True)
 
 
 def _iso_timestamp_filename() -> str:
@@ -135,6 +153,7 @@ def pull(
     dry_run: bool = False,
     verbose: bool = False,
     project_filter: str | None = None,
+    keep_snapshots: int = 10,
 ) -> PullResult:
     """Pull data from the Todoist API and store it in the local database.
 
@@ -155,6 +174,9 @@ def pull(
         dry_run: If True, fetch and count data but do not write to DB or snapshot.
         verbose: If True, print progress messages to stdout.
         project_filter: If provided, only sync this one project name.
+        keep_snapshots: Number of most-recent snapshot files to retain after
+                        writing a new one. Older snapshots are deleted. Defaults
+                        to 10. Pass 0 to keep all snapshots (no pruning).
 
     Returns:
         A PullResult with counts of synced and filtered items.
@@ -204,7 +226,7 @@ def pull(
     # ------------------------------------------------------------------
     # Per-project fetch, convert, filter, and upsert
     # ------------------------------------------------------------------
-    for api_project in configured_projects:
+    for api_project in track_items(configured_projects, description="Pulling projects"):
         local_project = ProjectLocal.from_sdk(api_project)
 
         if verbose:
@@ -282,10 +304,14 @@ def pull(
     # Save JSON snapshot
     # ------------------------------------------------------------------
     if not dry_run:
+        resolved_snapshots_dir = _snapshots_dir()
         snapshot_filename = f"{_iso_timestamp_filename()}.json"
-        snapshot_path = _snapshots_dir() / snapshot_filename
+        snapshot_path = resolved_snapshots_dir / snapshot_filename
         snapshot_path.write_text(json.dumps(snapshot_data, indent=2), encoding="utf-8")
         result.snapshot_path = str(snapshot_path)
+
+        if keep_snapshots > 0:
+            _prune_old_snapshots(resolved_snapshots_dir, keep_count=keep_snapshots)
 
         if verbose:
             print(f"  Snapshot saved: {result.snapshot_path}")

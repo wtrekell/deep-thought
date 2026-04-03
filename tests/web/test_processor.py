@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import sqlite3  # noqa: TC003
+from pathlib import Path  # noqa: TC003
 from unittest.mock import MagicMock
-
-if TYPE_CHECKING:
-    import sqlite3
-    from pathlib import Path
 
 from deep_thought.web.config import CrawlConfig, WebConfig
 from deep_thought.web.crawler import PageResult, WebCrawler
@@ -17,6 +14,9 @@ from deep_thought.web.processor import (
     _get_changelog_changed_urls,
     _is_article_content,
     _process_page,
+    run_blog_mode,
+    run_direct_mode,
+    run_documentation_mode,
 )
 
 # ---------------------------------------------------------------------------
@@ -71,10 +71,12 @@ def _make_web_config(
     mode: str = "blog",
     min_article_words: int = 200,
     index_depth: int = 1,
+    max_pages: int = 100,
     changelog_url: str | None = None,
     include_patterns: list[str] | None = None,
     exclude_patterns: list[str] | None = None,
     strip_boilerplate: list[str] | None = None,
+    unwrap_tags: list[str] | None = None,
 ) -> WebConfig:
     """Create a minimal WebConfig for use in tests."""
     return WebConfig(
@@ -82,7 +84,7 @@ def _make_web_config(
             mode=mode,
             input_url=None,
             max_depth=3,
-            max_pages=100,
+            max_pages=max_pages,
             js_wait=0.0,
             browser_channel=None,
             stealth=False,
@@ -101,6 +103,11 @@ def _make_web_config(
             strip_domain=False,
             llms_lookback_days=30,
             strip_boilerplate=strip_boilerplate or [],
+            unwrap_tags=unwrap_tags or [],
+            pagination="none",
+            pagination_selector=None,
+            pagination_wait=2.0,
+            max_paginations=10,
         )
     )
 
@@ -283,7 +290,6 @@ class TestProcessPageQualityGate:
         page_model, summary = _process_page(
             page_result=page_result,
             config=config,
-            conn=in_memory_db,
             output_root=tmp_path,
             rule_name=None,
             dry_run=True,
@@ -303,7 +309,6 @@ class TestProcessPageQualityGate:
         page_model, summary = _process_page(
             page_result=page_result,
             config=config,
-            conn=in_memory_db,
             output_root=tmp_path,
             rule_name=None,
             dry_run=True,
@@ -319,7 +324,6 @@ class TestProcessPageQualityGate:
         _process_page(
             page_result=page_result,
             config=config,
-            conn=in_memory_db,
             output_root=tmp_path,
             rule_name=None,
             dry_run=False,
@@ -328,6 +332,105 @@ class TestProcessPageQualityGate:
         # No markdown files should exist in the output directory
         md_files = list(tmp_path.rglob("*.md"))
         assert md_files == []
+
+
+# ---------------------------------------------------------------------------
+# TestProcessPageWritePath (T-08: dry_run=False)
+# ---------------------------------------------------------------------------
+
+
+class TestProcessPageWritePath:
+    """Tests for _process_page with dry_run=False (file writing path)."""
+
+    def test_rich_page_writes_markdown_file_to_disk(self, tmp_path: Path) -> None:
+        """A page above min_article_words must produce a .md file on disk when dry_run=False."""
+        page_result = _make_page_result(url="https://example.com/blog/post-one", html=_RICH_ARTICLE_HTML)
+        config = _make_web_config(min_article_words=50)
+
+        page_model, page_summary = _process_page(
+            page_result=page_result,
+            config=config,
+            output_root=tmp_path,
+            rule_name=None,
+            dry_run=False,
+        )
+
+        assert page_model.status == "success"
+        assert page_model.output_path != ""
+        written_file = tmp_path / page_model.output_path
+        # The output_path may already be absolute
+        if not written_file.exists():
+            written_file = Path(page_model.output_path)
+        assert written_file.exists(), f"Expected output file at {page_model.output_path}"
+
+    def test_rich_page_returns_page_summary_with_content(self, tmp_path: Path) -> None:
+        """A successfully written page must return a PageSummary with non-empty content."""
+        page_result = _make_page_result(url="https://example.com/blog/post-one", html=_RICH_ARTICLE_HTML)
+        config = _make_web_config(min_article_words=50)
+
+        _page_model, page_summary = _process_page(
+            page_result=page_result,
+            config=config,
+            output_root=tmp_path,
+            rule_name=None,
+            dry_run=False,
+        )
+
+        assert page_summary is not None
+        assert page_summary.url == "https://example.com/blog/post-one"
+        assert page_summary.word_count > 0
+        assert len(page_summary.content) > 0
+
+    def test_written_file_contains_frontmatter(self, tmp_path: Path) -> None:
+        """The written markdown file must start with a YAML frontmatter block."""
+        page_result = _make_page_result(url="https://example.com/blog/post-one", html=_RICH_ARTICLE_HTML)
+        config = _make_web_config(min_article_words=50)
+
+        page_model, _page_summary = _process_page(
+            page_result=page_result,
+            config=config,
+            output_root=tmp_path,
+            rule_name=None,
+            dry_run=False,
+        )
+
+        written_file = Path(page_model.output_path)
+        file_content = written_file.read_text(encoding="utf-8")
+        assert file_content.startswith("---\n"), "Output file must begin with YAML frontmatter"
+        assert "url:" in file_content
+        assert "tool: web" in file_content
+
+    def test_page_summary_content_has_frontmatter_stripped(self, tmp_path: Path) -> None:
+        """The PageSummary content must not include the YAML frontmatter block."""
+        page_result = _make_page_result(url="https://example.com/blog/post-one", html=_RICH_ARTICLE_HTML)
+        config = _make_web_config(min_article_words=50)
+
+        _page_model, page_summary = _process_page(
+            page_result=page_result,
+            config=config,
+            output_root=tmp_path,
+            rule_name=None,
+            dry_run=False,
+        )
+
+        assert page_summary is not None
+        # Frontmatter-stripped content must not start with "---"
+        assert not page_summary.content.startswith("---")
+
+    def test_rule_name_stored_in_page_model(self, tmp_path: Path) -> None:
+        """A rule_name passed to _process_page must appear in the returned page model."""
+        page_result = _make_page_result(url="https://example.com/blog/post-one", html=_RICH_ARTICLE_HTML)
+        config = _make_web_config(min_article_words=50)
+
+        page_model, _page_summary = _process_page(
+            page_result=page_result,
+            config=config,
+            output_root=tmp_path,
+            rule_name="my-site",
+            dry_run=False,
+        )
+
+        assert page_model.rule_name == "my-site"
 
 
 # ---------------------------------------------------------------------------
@@ -500,3 +603,214 @@ class TestBuildLookbackSummaries:
         result = _build_lookback_summaries(in_memory_db, [], output_root, lookback_days=30, mode="blog")
 
         assert len(result) == 0
+
+
+# ---------------------------------------------------------------------------
+# TestModeRunners (T-06)
+# ---------------------------------------------------------------------------
+
+
+class TestRunBlogMode:
+    """Tests for run_blog_mode orchestration."""
+
+    def test_returns_crawl_result_and_summaries(self, in_memory_db: sqlite3.Connection, tmp_path: Path) -> None:
+        """run_blog_mode must return a (CrawlResult, list[PageSummary]) tuple."""
+        mock_crawler = MagicMock(spec=WebCrawler)
+        # Index page linking to one article
+        index_html = (
+            "<!DOCTYPE html><html><head><title>Index</title></head><body>"
+            '<a href="https://example.com/post">Post</a></body></html>'
+        )
+        article_html = (
+            "<!DOCTYPE html><html><head><title>Post</title></head><body>"
+            "<p>" + " ".join(["word"] * 300) + "</p></body></html>"
+        )
+        mock_crawler.fetch_page.side_effect = [
+            PageResult(url="https://example.com/", html=index_html, status_code=200, title="Index"),
+            PageResult(url="https://example.com/post", html=article_html, status_code=200, title="Post"),
+        ]
+
+        config = _make_web_config(mode="blog", min_article_words=50, index_depth=1)
+        crawl_result, summaries = run_blog_mode(
+            crawler=mock_crawler,
+            config=config,
+            conn=in_memory_db,
+            root_url="https://example.com/",
+            output_root=tmp_path,
+            dry_run=True,
+            force=False,
+        )
+
+        assert crawl_result.succeeded >= 0
+        assert isinstance(summaries, list)
+
+    def test_skips_already_crawled_urls_without_force(self, in_memory_db: sqlite3.Connection, tmp_path: Path) -> None:
+        """Existing 'success' URLs must be skipped when force=False."""
+        from deep_thought.web.db.queries import upsert_crawled_page
+
+        already_crawled_url = "https://example.com/post"
+        upsert_crawled_page(
+            in_memory_db,
+            {
+                "url": already_crawled_url,
+                "rule_name": None,
+                "title": "Post",
+                "status_code": 200,
+                "word_count": 300,
+                "output_path": "output/example.com/post.md",
+                "status": "success",
+                "created_at": "2026-03-01T00:00:00+00:00",
+                "updated_at": "2026-03-01T00:00:00+00:00",
+            },
+        )
+        in_memory_db.commit()
+
+        mock_crawler = MagicMock(spec=WebCrawler)
+        index_html = f'<!DOCTYPE html><html><body><a href="{already_crawled_url}">Post</a></body></html>'
+        mock_crawler.fetch_page.return_value = PageResult(
+            url="https://example.com/", html=index_html, status_code=200, title="Index"
+        )
+
+        config = _make_web_config(mode="blog", min_article_words=50, index_depth=1)
+        crawl_result, _summaries = run_blog_mode(
+            crawler=mock_crawler,
+            config=config,
+            conn=in_memory_db,
+            root_url="https://example.com/",
+            output_root=tmp_path,
+            dry_run=True,
+            force=False,
+        )
+
+        assert crawl_result.skipped >= 1
+
+
+class TestRunDirectMode:
+    """Tests for run_direct_mode orchestration."""
+
+    def test_raises_file_not_found_for_missing_url_file(self, in_memory_db: sqlite3.Connection, tmp_path: Path) -> None:
+        """run_direct_mode must raise FileNotFoundError when the URL file does not exist."""
+        import pytest
+
+        mock_crawler = MagicMock(spec=WebCrawler)
+        config = _make_web_config(mode="direct")
+        missing_file = tmp_path / "urls.txt"
+
+        with pytest.raises(FileNotFoundError):
+            run_direct_mode(
+                crawler=mock_crawler,
+                config=config,
+                conn=in_memory_db,
+                url_file=missing_file,
+                output_root=tmp_path,
+                dry_run=True,
+                force=False,
+            )
+
+    def test_skips_blank_lines_and_comments_in_url_file(self, in_memory_db: sqlite3.Connection, tmp_path: Path) -> None:
+        """Blank lines and comment lines starting with # must not be crawled."""
+        url_file = tmp_path / "urls.txt"
+        url_file.write_text(
+            "# This is a comment\n\nhttps://example.com/page\n\n",
+            encoding="utf-8",
+        )
+
+        article_html = (
+            "<!DOCTYPE html><html><head><title>Page</title></head><body>"
+            "<p>" + " ".join(["word"] * 300) + "</p></body></html>"
+        )
+        mock_crawler = MagicMock(spec=WebCrawler)
+        mock_crawler.fetch_page.return_value = PageResult(
+            url="https://example.com/page", html=article_html, status_code=200, title="Page"
+        )
+
+        config = _make_web_config(mode="direct", min_article_words=50)
+        crawl_result, _summaries = run_direct_mode(
+            crawler=mock_crawler,
+            config=config,
+            conn=in_memory_db,
+            url_file=url_file,
+            output_root=tmp_path,
+            dry_run=True,
+            force=False,
+        )
+
+        # Only one real URL should have been attempted
+        assert mock_crawler.fetch_page.call_count == 1
+        assert crawl_result.total == 1
+
+    def test_records_error_on_fetch_failure(self, in_memory_db: sqlite3.Connection, tmp_path: Path) -> None:
+        """A fetch failure must increment the failed count and not raise."""
+        url_file = tmp_path / "urls.txt"
+        url_file.write_text("https://example.com/broken\n", encoding="utf-8")
+
+        mock_crawler = MagicMock(spec=WebCrawler)
+        mock_crawler.fetch_page.side_effect = ConnectionError("Timeout")
+
+        config = _make_web_config(mode="direct", min_article_words=50)
+        crawl_result, _summaries = run_direct_mode(
+            crawler=mock_crawler,
+            config=config,
+            conn=in_memory_db,
+            url_file=url_file,
+            output_root=tmp_path,
+            dry_run=True,
+            force=False,
+        )
+
+        assert crawl_result.failed == 1
+        assert crawl_result.succeeded == 0
+
+
+class TestRunDocumentationMode:
+    """Tests for run_documentation_mode orchestration."""
+
+    def test_returns_crawl_result(self, in_memory_db: sqlite3.Connection, tmp_path: Path) -> None:
+        """run_documentation_mode must return a (CrawlResult, list[PageSummary]) tuple."""
+        article_html = (
+            "<!DOCTYPE html><html><head><title>Doc</title></head><body>"
+            "<p>" + " ".join(["word"] * 300) + "</p></body></html>"
+        )
+        mock_crawler = MagicMock(spec=WebCrawler)
+        mock_crawler.fetch_page.return_value = PageResult(
+            url="https://docs.example.com/", html=article_html, status_code=200, title="Doc"
+        )
+
+        config = _make_web_config(mode="documentation", min_article_words=50)
+        crawl_result, summaries = run_documentation_mode(
+            crawler=mock_crawler,
+            config=config,
+            conn=in_memory_db,
+            root_url="https://docs.example.com/",
+            output_root=tmp_path,
+            dry_run=True,
+            force=False,
+        )
+
+        assert crawl_result.total >= 0
+        assert isinstance(summaries, list)
+
+    def test_stops_at_max_pages(self, in_memory_db: sqlite3.Connection, tmp_path: Path) -> None:
+        """run_documentation_mode must not process more pages than max_pages."""
+        article_html = (
+            "<!DOCTYPE html><html><head><title>Doc</title></head><body>"
+            "<p>" + " ".join(["word"] * 300) + "</p></body></html>"
+        )
+        mock_crawler = MagicMock(spec=WebCrawler)
+        mock_crawler.fetch_page.return_value = PageResult(
+            url="https://docs.example.com/", html=article_html, status_code=200, title="Doc"
+        )
+
+        # max_pages=1 means only the root page is processed
+        config = _make_web_config(mode="documentation", min_article_words=50, max_pages=1)
+        crawl_result, _summaries = run_documentation_mode(
+            crawler=mock_crawler,
+            config=config,
+            conn=in_memory_db,
+            root_url="https://docs.example.com/",
+            output_root=tmp_path,
+            dry_run=True,
+            force=False,
+        )
+
+        assert crawl_result.total <= 1

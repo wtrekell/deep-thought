@@ -6,10 +6,11 @@ markdown file with machine-readable YAML frontmatter.
 
 from __future__ import annotations
 
-import re
 from datetime import UTC, datetime
 from pathlib import Path  # noqa: TC003
 from typing import TYPE_CHECKING, Any
+
+from deep_thought.reddit.utils import get_author_name, slugify_title
 
 if TYPE_CHECKING:
     from deep_thought.reddit.config import RuleConfig
@@ -18,40 +19,6 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-def _slugify_title(title: str, max_length: int = 60) -> str:
-    """Convert a post title to a filesystem-safe slug.
-
-    Lowercases, replaces non-alphanumeric characters with hyphens, collapses
-    repeated hyphens, and strips leading/trailing hyphens.
-
-    Args:
-        title: The raw post title string.
-        max_length: Maximum slug length before truncation.
-
-    Returns:
-        A cleaned slug suitable for use in a filename.
-    """
-    slug = title.lower()
-    slug = re.sub(r"[^a-z0-9]+", "-", slug)
-    slug = slug.strip("-")
-    return slug[:max_length] if len(slug) > max_length else slug
-
-
-def _get_author_name(obj: Any) -> str:
-    """Extract the author username from a PRAW object safely.
-
-    Args:
-        obj: A PRAW Submission or Comment object with an author attribute.
-
-    Returns:
-        The author's username string, or "[deleted]" if the account is gone.
-    """
-    author = getattr(obj, "author", None)
-    if author is None:
-        return "[deleted]"
-    return str(author)
 
 
 def _format_date_from_utc(created_utc: float) -> str:
@@ -107,12 +74,14 @@ def _build_frontmatter(
     post_id = str(submission.id)
     subreddit_name = str(submission.subreddit.display_name)
     state_key = f"{post_id}:{subreddit_name}:{rule_config.name}"
-    author_name = _get_author_name(submission)
+    author_name = get_author_name(getattr(submission, "author", None))
     flair_text = submission.link_flair_text
     is_video = bool(getattr(submission, "is_video", False))
 
     # Escape title for YAML (quote it)
-    escaped_title = str(submission.title).replace('"', '\\"')
+    escaped_title = (
+        str(submission.title).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
+    )
 
     lines: list[str] = ["---"]
     lines.append("tool: reddit")
@@ -124,10 +93,16 @@ def _build_frontmatter(
     lines.append(f"author: u/{author_name}")
     lines.append(f"score: {submission.score}")
     lines.append(f"num_comments: {submission.num_comments}")
-    lines.append(f"url: {submission.url}")
+    escaped_url = (
+        str(submission.url).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
+    )
+    lines.append(f'url: "{escaped_url}"')
     lines.append(f"is_video: {str(is_video).lower()}")
     if flair_text is not None:
-        lines.append(f'flair: "{flair_text}"')
+        escaped_flair = (
+            str(flair_text).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
+        )
+        lines.append(f'flair: "{escaped_flair}"')
     else:
         lines.append("flair: null")
     lines.append(f"word_count: {word_count}")
@@ -155,7 +130,7 @@ def _render_comment(comment: Any, depth: int) -> str:
     Returns:
         A rendered markdown string for the comment.
     """
-    author_name = _get_author_name(comment)
+    author_name = get_author_name(getattr(comment, "author", None))
     score = int(getattr(comment, "score", 0))
     body = str(getattr(comment, "body", "")).strip()
 
@@ -290,7 +265,7 @@ def generate_markdown(
     processed_date = datetime.now(tz=UTC).isoformat()
 
     # Build body section
-    author_name = _get_author_name(submission)
+    author_name = get_author_name(getattr(submission, "author", None))
     post_date = _format_date_from_utc(float(submission.created_utc))
     score_formatted = f"{submission.score:,}"
 
@@ -357,9 +332,9 @@ def write_post_file(
     rule_output_dir = output_dir / rule_name
     rule_output_dir.mkdir(parents=True, exist_ok=True)
 
-    date_prefix = datetime.now(tz=UTC).strftime("%Y-%m-%d")
-    title_slug = _slugify_title(title)
-    filename = f"{date_prefix}_{post_id}_{title_slug}.md"
+    date_prefix = datetime.now(tz=UTC).strftime("%y%m%d")
+    title_slug = slugify_title(title)
+    filename = f"{date_prefix}-{post_id}_{title_slug}.md"
 
     output_path = rule_output_dir / filename
     output_path.write_text(content, encoding="utf-8")

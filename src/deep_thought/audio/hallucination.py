@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import string
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -28,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 # These phrases frequently appear in Whisper output as artifacts from its
 # YouTube training data, even when the audio contains nothing of the sort.
-KNOWN_HALLUCINATION_PHRASES: frozenset[str] = frozenset(
+_KNOWN_HALLUCINATION_PHRASES: frozenset[str] = frozenset(
     {
         "thank you for watching",
         "thanks for watching",
@@ -100,47 +101,106 @@ def _normalize_text(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _check_ngram_repetition_in_word_list(words: list[str], threshold: int) -> bool:
+    """Return True if any bigram or trigram appears >= threshold times in words.
+
+    Used both for within-segment checks and cross-segment window checks.
+
+    Args:
+        words: Pre-normalised, whitespace-split word list to scan.
+        threshold: Minimum occurrence count to consider repetitive.
+
+    Returns:
+        True if any bigram or trigram meets or exceeds the threshold, False otherwise.
+    """
+    if len(words) >= 2:
+        bigrams = [f"{words[i]} {words[i + 1]}" for i in range(len(words) - 1)]
+        bigram_counts = Counter(bigrams)
+        if any(count >= threshold for count in bigram_counts.values()):
+            return True
+
+    if len(words) >= 3:
+        trigrams = [f"{words[i]} {words[i + 1]} {words[i + 2]}" for i in range(len(words) - 2)]
+        trigram_counts = Counter(trigrams)
+        if any(count >= threshold for count in trigram_counts.values()):
+            return True
+
+    return False
+
+
 def detect_repetition(
     segment: TranscriptSegment,
     window_segments: list[TranscriptSegment],
     threshold: int = 3,
 ) -> float:
-    """Detect repeated phrases using bigram/trigram matching.
+    """Detect repeated phrases using bigram and trigram matching.
 
-    Two checks are performed:
+    Three checks are performed:
 
     1. **Window repetition** — counts how many times the normalised text of
        ``segment`` appears verbatim among ``window_segments``. If the count
        meets or exceeds ``threshold``, the segment is flagged.
 
-    2. **Internal repetition** — splits the segment into bigrams and checks
-       whether any single bigram appears more than ``threshold`` times within
-       the segment itself.
+    2. **Internal repetition** — splits the segment into bigrams and trigrams
+       and checks whether any single n-gram appears more than ``threshold``
+       times within the segment itself.
+
+    3. **Cross-segment n-gram repetition** — concatenates all window segment
+       texts (including the target segment) into a single word list and checks
+       whether any bigram or trigram appears at an elevated rate across the
+       entire window. The cross-segment threshold is scaled by window size so
+       that a phrase appearing once per segment in a large window does not
+       produce false positives: a n-gram must appear more than
+       ``threshold * max(1, len(window_segments) // 2)`` times to be flagged.
+       This catches hallucinations that span segment boundaries, such as
+       "thank you for watching" split across the end of one segment and the
+       start of the next.
 
     Args:
         segment: The segment being evaluated.
         window_segments: Surrounding segments used as the repetition window.
         threshold: Minimum occurrence count to flag as a hallucination.
+            Used directly for checks 1 and 2. For check 3 (cross-segment),
+            the threshold is scaled by half the window size to avoid false
+            positives on naturally varied speech.
 
     Returns:
         1.0 if repetition exceeds the threshold, 0.0 otherwise.
     """
     normalised_target = _normalize_text(segment.text)
 
-    # Check how many window segments share the same normalised text
+    # Check 1: How many window segments share the same normalised text
     window_match_count = sum(
         1 for window_segment in window_segments if _normalize_text(window_segment.text) == normalised_target
     )
     if window_match_count >= threshold:
         return 1.0
 
-    # Check for internal bigram repetition within the segment itself
-    words = normalised_target.split()
-    if len(words) >= 2:
-        bigrams = [f"{words[word_index]} {words[word_index + 1]}" for word_index in range(len(words) - 1)]
-        for bigram in bigrams:
-            if bigrams.count(bigram) >= threshold:
-                return 1.0
+    # Check 2: Internal bigram and trigram repetition within this segment alone
+    target_words = normalised_target.split()
+    if _check_ngram_repetition_in_word_list(target_words, threshold):
+        return 1.0
+
+    # Check 3: Cross-segment n-gram repetition across the full window.
+    # Concatenate all segment texts (window + target) into one word list and
+    # look for any bigram or trigram that appears at a rate suggesting a
+    # hallucination phrase has been repeated across segment boundaries.
+    #
+    # Small-window limitation: the scaling factor `max(1, len(window_segments) // 2)`
+    # equals 1 whenever len(window_segments) < 4 (i.e. window_size < 4 after the
+    # half-window slicing in apply_hallucination_detection). At that point the
+    # cross-segment threshold is identical to Check 2's threshold, so this check
+    # provides no additional false-positive protection and is effectively redundant
+    # with Check 2. The default window_size of 10 produces window_segments of up
+    # to 9 entries (factor >= 4), so normal usage is unaffected.
+    if window_segments:
+        all_window_texts = [_normalize_text(ws.text) for ws in window_segments] + [normalised_target]
+        combined_words = [word for text in all_window_texts for word in text.split()]
+        # Scale threshold by half the window size so a phrase must recur more
+        # densely than "once per two segments" before being flagged.
+        cross_segment_threshold = threshold * max(1, len(window_segments) // 2)
+        if _check_ngram_repetition_in_word_list(combined_words, cross_segment_threshold):
+            return 1.0
 
     return 0.0
 
@@ -250,10 +310,16 @@ def check_compression_ratio(
 def check_blocklist(segment: TranscriptSegment) -> float:
     """Check whether the segment text matches a known hallucination phrase.
 
-    Normalises the segment text and checks for substring matches against
-    ``KNOWN_HALLUCINATION_PHRASES``. A partial match (e.g. "Thank you for
-    watching this video" matches "thank you for watching") is sufficient to
-    flag the segment.
+    Normalises the segment text and checks against ``_KNOWN_HALLUCINATION_PHRASES``.
+    The matching strategy depends on phrase length:
+
+    - **Short phrases (3 words or fewer):** require an approximate exact match —
+      the normalised segment text must equal the phrase, or the phrase must equal
+      the entire normalised segment text. This avoids false positives where common
+      short words like "music" or "bye bye" appear inside legitimate speech.
+    - **Longer phrases (4+ words):** use substring matching, since multi-word
+      phrases like "thank you for watching" are specific enough to flag reliably
+      even when embedded in a longer sentence.
 
     Args:
         segment: The segment being evaluated.
@@ -262,9 +328,16 @@ def check_blocklist(segment: TranscriptSegment) -> float:
         1.0 if a known hallucination phrase is found, 0.0 otherwise.
     """
     normalised_segment_text = _normalize_text(segment.text)
-    for known_phrase in KNOWN_HALLUCINATION_PHRASES:
-        if known_phrase in normalised_segment_text:
-            return 1.0
+    for known_phrase in _KNOWN_HALLUCINATION_PHRASES:
+        phrase_word_count = len(known_phrase.split())
+        if phrase_word_count <= 3:
+            # Require approximate exact match for short phrases to avoid false positives
+            if normalised_segment_text == known_phrase:
+                return 1.0
+        else:
+            # Substring match is safe for longer, more specific phrases
+            if known_phrase in normalised_segment_text:
+                return 1.0
     return 0.0
 
 

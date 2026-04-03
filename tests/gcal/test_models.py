@@ -16,48 +16,48 @@ from deep_thought.gcal.models import (
     _parse_event_time,
     _serialize_attendees,
     _serialize_recurrence,
-    _slugify_summary,
 )
+from deep_thought.text_utils import slugify as _shared_slugify
 
 from .conftest import make_api_calendar, make_api_event
 
 # ---------------------------------------------------------------------------
-# _slugify_summary
+# slugify (shared) — gcal summary behaviour
 # ---------------------------------------------------------------------------
 
 
 class TestSlugifySummary:
-    """Tests for the _slugify_summary helper."""
+    """Tests for shared slugify as used by the gcal models."""
 
     def test_basic_summary(self) -> None:
         """Should lowercase and replace spaces with hyphens."""
-        assert _slugify_summary("Team Standup") == "team-standup"
+        assert _shared_slugify("Team Standup") == "team-standup"
 
     def test_special_characters(self) -> None:
         """Should replace non-alphanumeric characters with hyphens."""
-        assert _slugify_summary("Q1 Planning — Budget & Roadmap!") == "q1-planning-budget-roadmap"
+        assert _shared_slugify("Q1 Planning — Budget & Roadmap!") == "q1-planning-budget-roadmap"
 
     def test_collapses_consecutive_hyphens(self) -> None:
         """Should collapse multiple consecutive hyphens into one."""
-        assert _slugify_summary("a---b---c") == "a-b-c"
+        assert _shared_slugify("a---b---c") == "a-b-c"
 
     def test_strips_leading_trailing_hyphens(self) -> None:
         """Should strip hyphens from start and end."""
-        assert _slugify_summary("---hello---") == "hello"
+        assert _shared_slugify("---hello---") == "hello"
 
     def test_truncates_to_max_length(self) -> None:
         """Should truncate long slugs to the specified max length."""
         long_summary = "a" * 100
-        result = _slugify_summary(long_summary, max_length=80)
+        result = _shared_slugify(long_summary, max_length=80)
         assert len(result) == 80
 
     def test_empty_string_returns_no_title(self) -> None:
-        """Should return 'no-title' for an empty summary."""
-        assert _slugify_summary("") == "no-title"
+        """Should return 'no-title' when empty_fallback is provided."""
+        assert _shared_slugify("", empty_fallback="no-title") == "no-title"
 
     def test_only_special_chars_returns_no_title(self) -> None:
         """Should return 'no-title' when summary reduces to only hyphens."""
-        assert _slugify_summary("---!!!---") == "no-title"
+        assert _shared_slugify("---!!!---", empty_fallback="no-title") == "no-title"
 
 
 # ---------------------------------------------------------------------------

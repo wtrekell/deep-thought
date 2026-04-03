@@ -114,6 +114,7 @@ exclude_patterns:
   - ".*login.*"
 
 # Content stripping
+unwrap_tags: [] # tag.class patterns to unwrap before HTML→markdown conversion (e.g., div.word)
 strip_boilerplate: [] # Regex patterns to remove from converted markdown
 
 # Retry
@@ -157,6 +158,8 @@ Place YAML files in `src/config/web/` for use with `--batch`. Each file is one c
 **`strip_path_prefix`** — removes a URL path prefix when computing output file paths. For example, setting `strip_path_prefix: "/docs/en"` turns `https://example.com/docs/en/guide/setup` into `example.com/guide/setup.md` instead of `example.com/docs/en/guide/setup.md`.
 
 **`strip_domain`** — when `true`, omits the domain directory from output file paths. For example, `example.com/guide/setup.md` becomes `guide/setup.md`.
+
+**`unwrap_tags`** — a list of `tag.class` patterns applied to the raw HTML before conversion to markdown. Each entry strips matching wrapper tags while keeping their text content in place. For example, `div.word` removes `<div class="word">...</div>` elements that wrap individual words for animation purposes, which html2text would otherwise render as one word per line. Only `tag.class` patterns are supported (e.g. `div.word`, `span.char`); bare tag names without a class are also accepted but will match all instances of that tag. Matching is case-insensitive (so `div.word` also matches `<DIV class="word">`) and handles both single- and double-quoted class attributes. Any excess newlines introduced by unwrapping are collapsed before the output is saved. Invalid HTML tag names in patterns are reported by `web config`.
 
 **`strip_boilerplate`** — a list of regex patterns applied to the converted markdown before saving. Matches are removed before word counting, so boilerplate text (nav menus, cookie banners, "Subscribe" blocks, footer links) doesn't inflate word counts or trigger the `min_article_words` quality gate. Patterns use `re.DOTALL`, so `.` matches newlines for multi-line blocks. Use `[^\n]*` instead of `.*` to match within a single line only.
 

@@ -553,3 +553,123 @@ class TestGcalClientDeleteEvent:
         client.delete_event(calendar_id="primary", event_id="evt_001")
 
         mock_service.events().delete.assert_called_with(calendarId="primary", eventId="evt_001")
+
+
+# ---------------------------------------------------------------------------
+# GcalClient._execute — service-initialized guard (L2)
+# ---------------------------------------------------------------------------
+
+
+class TestGcalClientExecuteGuard:
+    """Tests for the service-initialized check in _execute."""
+
+    def test_raises_runtime_error_when_service_is_none(self) -> None:
+        """Should raise RuntimeError if authenticate() has not been called."""
+        from deep_thought.gcal.client import GcalClient
+
+        client = GcalClient.__new__(GcalClient)
+        client._rate_limit_rpm = 0
+        client._retry_max_attempts = 1
+        client._retry_base_delay = 0.0
+        client._last_request_time = 0.0
+        client._service = None
+
+        mock_request = MagicMock()
+        with pytest.raises(RuntimeError, match="authenticate"):
+            client._execute(mock_request)
+
+
+# ---------------------------------------------------------------------------
+# GcalClient.list_events — partial pagination results (M5)
+# ---------------------------------------------------------------------------
+
+
+class TestGcalClientListEventsPartialPagination:
+    """Tests for partial-results behaviour on pagination errors."""
+
+    def test_returns_partial_results_on_page_two_error(self) -> None:
+        """Should return events from page 1 when page 2+ raises an error."""
+        from googleapiclient.errors import HttpError
+
+        from deep_thought.gcal.client import GcalClient
+
+        client = GcalClient.__new__(GcalClient)
+        client._rate_limit_rpm = 0
+        client._retry_max_attempts = 1
+        client._retry_base_delay = 0.0
+        client._last_request_time = 0.0
+
+        page1 = {"items": [{"id": "evt_page1"}], "nextPageToken": "token_p2"}
+        mock_resp = MagicMock()
+        mock_resp.status = 500
+        page2_error = HttpError(resp=mock_resp, content=b"Server error")
+
+        mock_service = MagicMock()
+        mock_list_request = MagicMock()
+        mock_list_request.execute.side_effect = [page1, page2_error]
+        mock_service.events().list.return_value = mock_list_request
+        client._service = mock_service
+
+        events, sync_token = client.list_events(calendar_id="primary")
+
+        # Should return the one event from page 1, not raise
+        assert len(events) == 1
+        assert events[0]["id"] == "evt_page1"
+        assert sync_token is None
+
+    def test_raises_on_first_page_error(self) -> None:
+        """Should propagate the error when the first page fails."""
+        from googleapiclient.errors import HttpError
+
+        from deep_thought.gcal.client import GcalClient
+
+        client = GcalClient.__new__(GcalClient)
+        client._rate_limit_rpm = 0
+        client._retry_max_attempts = 1
+        client._retry_base_delay = 0.0
+        client._last_request_time = 0.0
+
+        mock_resp = MagicMock()
+        mock_resp.status = 403
+        first_page_error = HttpError(resp=mock_resp, content=b"Forbidden")
+
+        mock_service = MagicMock()
+        mock_list_request = MagicMock()
+        mock_list_request.execute.side_effect = first_page_error
+        mock_service.events().list.return_value = mock_list_request
+        client._service = mock_service
+
+        with pytest.raises(HttpError):
+            client.list_events(calendar_id="primary")
+
+
+# ---------------------------------------------------------------------------
+# _retry_with_backoff — final failure log (L4)
+# ---------------------------------------------------------------------------
+
+
+class TestRetryFinalFailureLog:
+    """Tests for the final-failure log message in _retry_with_backoff."""
+
+    def test_logs_error_after_all_attempts_exhausted(self) -> None:
+        """Should call logger.error once when all retry attempts fail."""
+
+        from googleapiclient.errors import HttpError
+
+        from deep_thought.gcal.client import _retry_with_backoff
+
+        mock_resp = MagicMock()
+        mock_resp.status = 503
+        error = HttpError(resp=mock_resp, content=b"Unavailable")
+        func = MagicMock(side_effect=error)
+
+        with (
+            patch("deep_thought.gcal.client.time.sleep"),
+            patch("deep_thought.gcal.client.logger") as mock_logger,
+            pytest.raises(HttpError),
+        ):
+            _retry_with_backoff(func, max_attempts=2, base_delay=0.01)
+
+        mock_logger.error.assert_called_once()
+        error_call_args = mock_logger.error.call_args[0]
+        assert "attempt" in error_call_args[0].lower() or "fail" in error_call_args[0].lower()

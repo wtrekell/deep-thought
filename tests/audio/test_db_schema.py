@@ -12,27 +12,13 @@ from typing import Any
 import pytest
 
 from deep_thought.audio.db.schema import (
+    get_connection,
     get_data_dir,
+    get_database_path,
     get_schema_version,
     initialize_database,
     run_migrations,
 )
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture()
-def in_memory_db() -> sqlite3.Connection:
-    """Return a fully initialized in-memory SQLite connection.
-
-    All migrations are applied. Closes automatically after each test.
-    """
-    connection = initialize_database(":memory:")
-    yield connection
-    connection.close()
-
 
 # ---------------------------------------------------------------------------
 # initialize_database
@@ -92,11 +78,15 @@ class TestRunMigrations:
         assert version >= 1
 
     def test_run_migrations_is_idempotent(self) -> None:
-        """Calling initialize_database twice on fresh in-memory DBs must not raise."""
-        conn1 = initialize_database(":memory:")
-        conn1.close()
-        conn2 = initialize_database(":memory:")
-        conn2.close()
+        """Running run_migrations twice on the SAME connection must not raise or duplicate work."""
+        conn = initialize_database(":memory:")
+        migrations_dir = Path(__file__).parents[2] / "src" / "deep_thought" / "audio" / "db" / "migrations"
+        version_before_second_run = get_schema_version(conn)
+        # A second call must be a no-op — no errors, no version change
+        run_migrations(conn, migrations_dir)
+        version_after_second_run = get_schema_version(conn)
+        conn.close()
+        assert version_before_second_run == version_after_second_run
 
     def test_run_migrations_does_not_reapply_applied_migrations(self) -> None:
         """Running run_migrations a second time on the same connection must be a no-op."""
@@ -160,7 +150,71 @@ class TestGetDataDir:
         assert result.parts[-2:] == ("data", "audio")
 
     def test_returns_env_override_when_set(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-        """When DEEP_THOUGHT_DATA_DIR is set, get_data_dir must return that path."""
+        """When DEEP_THOUGHT_DATA_DIR is set, get_data_dir must return that path with /audio appended."""
         monkeypatch.setenv("DEEP_THOUGHT_DATA_DIR", str(tmp_path))
         result = get_data_dir()
-        assert result == tmp_path
+        assert result == tmp_path / "audio"
+
+
+# ---------------------------------------------------------------------------
+# get_connection / get_database_path (T-07)
+# ---------------------------------------------------------------------------
+
+
+class TestGetConnection:
+    def test_returns_connection_with_row_factory(self, tmp_path: Path) -> None:
+        """get_connection must return a connection with sqlite3.Row as row_factory."""
+        db_path = tmp_path / "test.db"
+        conn = get_connection(db_path)
+        assert conn.row_factory is sqlite3.Row
+        conn.close()
+
+    def test_row_accessible_by_column_name(self, tmp_path: Path) -> None:
+        """Rows returned via the connection must support column-name access."""
+        db_path = tmp_path / "test.db"
+        conn = get_connection(db_path)
+        conn.execute("CREATE TABLE t (id INTEGER, name TEXT)")
+        conn.execute("INSERT INTO t VALUES (1, 'hello')")
+        conn.commit()
+        row = conn.execute("SELECT id, name FROM t").fetchone()
+        conn.close()
+        assert row is not None
+        assert row["name"] == "hello"
+
+    def test_foreign_keys_pragma_is_on(self, tmp_path: Path) -> None:
+        """get_connection must enable foreign key enforcement."""
+        db_path = tmp_path / "test.db"
+        conn = get_connection(db_path)
+        cursor = conn.execute("PRAGMA foreign_keys;")
+        foreign_keys_value = cursor.fetchone()[0]
+        conn.close()
+        assert foreign_keys_value == 1
+
+    def test_defaults_to_database_path_when_none(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """get_connection() with no argument must open the canonical database path."""
+        monkeypatch.setenv("DEEP_THOUGHT_DATA_DIR", str(tmp_path))
+        conn = get_connection()
+        # The connection must be usable — execute a no-op statement without error
+        conn.execute("SELECT 1;")
+        conn.close()
+
+
+class TestGetDatabasePath:
+    def test_returns_path_ending_in_audio_db(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """get_database_path() must return a path ending in audio.db."""
+        monkeypatch.setenv("DEEP_THOUGHT_DATA_DIR", str(tmp_path))
+        db_path = get_database_path()
+        assert db_path.name == "audio.db"
+
+    def test_creates_parent_directory(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """get_database_path() must create the parent directory if it does not exist."""
+        monkeypatch.setenv("DEEP_THOUGHT_DATA_DIR", str(tmp_path / "new_data"))
+        db_path = get_database_path()
+        assert db_path.parent.exists()
+
+    def test_path_is_inside_data_dir(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """The database path must reside inside the configured data directory."""
+        monkeypatch.setenv("DEEP_THOUGHT_DATA_DIR", str(tmp_path))
+        db_path = get_database_path()
+        data_dir = get_data_dir()
+        assert db_path.parent == data_dir

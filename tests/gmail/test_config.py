@@ -54,10 +54,17 @@ class TestLoadConfig:
         assert config.scopes == ["https://mail.google.com/"]
 
     def test_parses_all_top_level_fields(self) -> None:
-        """Should correctly parse all top-level configuration fields."""
+        """Should correctly parse all top-level configuration fields.
+
+        credentials_path and token_path are resolved to absolute paths
+        at load time (L1 fix), so we check they end with the expected
+        relative suffix rather than asserting the literal string.
+        """
         config = load_config(FIXTURES_DIR / "test_config.yaml")
-        assert config.credentials_path == "src/config/gmail/credentials.json"
-        assert config.token_path == "data/gmail/token.json"
+        assert Path(config.credentials_path).is_absolute()
+        assert config.credentials_path.endswith("src/config/gmail/credentials.json")
+        assert Path(config.token_path).is_absolute()
+        assert config.token_path.endswith("data/gmail/token.json")
         assert config.gemini_api_key_env == "GEMINI_API_KEY"
         assert config.gemini_model == "gemini-2.5-flash"
         assert config.gemini_rate_limit_rpm == 15

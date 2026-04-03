@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -66,7 +69,6 @@ class HallucinationConfig:
     no_speech_prob_threshold: float
     duration_chars_per_sec_max: int
     duration_chars_per_sec_min: int
-    use_vad: bool
     blocklist_enabled: bool
     score_threshold: int
     action: str
@@ -130,9 +132,20 @@ def _parse_engine_config(raw: dict[str, Any]) -> EngineConfig:
 
     Returns:
         An EngineConfig with engine, model, and language populated.
+
+    Raises:
+        ValueError: If any field is of the wrong type.
     """
-    engine: str = raw.get("engine", "mlx")
-    model: str = raw.get("model", "large-v3-turbo")
+    raw_engine = raw.get("engine", "mlx")
+    if not isinstance(raw_engine, str):
+        raise ValueError(f"engine must be a string, got: {type(raw_engine).__name__}")
+    engine: str = raw_engine
+
+    raw_model = raw.get("model", "large-v3-turbo")
+    if not isinstance(raw_model, str):
+        raise ValueError(f"model must be a string, got: {type(raw_model).__name__}")
+    model: str = raw_model
+
     language_raw = raw.get("language")
     language: str | None = str(language_raw) if language_raw is not None else None
     return EngineConfig(engine=engine, model=model, language=language)
@@ -147,11 +160,30 @@ def _parse_output_config(raw: dict[str, Any]) -> OutputConfig:
     Returns:
         An OutputConfig with output_mode, pause_threshold, output_dir, and
         generate_llms_files populated.
+
+    Raises:
+        ValueError: If any field is of the wrong type.
     """
-    output_mode: str = raw.get("output_mode", "paragraph")
-    pause_threshold: float = raw.get("pause_threshold", 1.5)
-    output_dir: str = raw.get("output_dir", "data/audio/export/")
-    generate_llms_files: bool = raw.get("generate_llms_files", False)
+    raw_output_mode = raw.get("output_mode", "paragraph")
+    if not isinstance(raw_output_mode, str):
+        raise ValueError(f"output_mode must be a string, got: {type(raw_output_mode).__name__}")
+    output_mode: str = raw_output_mode
+
+    raw_pause_threshold = raw.get("pause_threshold", 1.5)
+    if not isinstance(raw_pause_threshold, (int, float)):
+        raise ValueError(f"pause_threshold must be a number, got: {type(raw_pause_threshold).__name__}")
+    pause_threshold: float = float(raw_pause_threshold)
+
+    raw_output_dir = raw.get("output_dir", "data/audio/export/")
+    if not isinstance(raw_output_dir, str):
+        raise ValueError(f"output_dir must be a string, got: {type(raw_output_dir).__name__}")
+    output_dir: str = raw_output_dir
+
+    raw_generate_llms = raw.get("generate_llms_files", False)
+    if not isinstance(raw_generate_llms, bool):
+        raise ValueError(f"generate_llms_files must be a boolean, got: {type(raw_generate_llms).__name__}")
+    generate_llms_files: bool = raw_generate_llms
+
     return OutputConfig(
         output_mode=output_mode,
         pause_threshold=pause_threshold,
@@ -168,9 +200,20 @@ def _parse_diarization_config(raw: dict[str, Any]) -> DiarizationConfig:
 
     Returns:
         A DiarizationConfig with diarize and hf_token_env populated.
+
+    Raises:
+        ValueError: If any field is of the wrong type.
     """
-    diarize: bool = raw.get("diarize", False)
-    hf_token_env: str = raw.get("hf_token_env", "HF_TOKEN")
+    raw_diarize = raw.get("diarize", False)
+    if not isinstance(raw_diarize, bool):
+        raise ValueError(f"diarize must be a boolean, got: {type(raw_diarize).__name__}")
+    diarize: bool = raw_diarize
+
+    raw_hf_token_env = raw.get("hf_token_env", "HF_TOKEN")
+    if not isinstance(raw_hf_token_env, str):
+        raise ValueError(f"hf_token_env must be a string, got: {type(raw_hf_token_env).__name__}")
+    hf_token_env: str = raw_hf_token_env
+
     return DiarizationConfig(diarize=diarize, hf_token_env=hf_token_env)
 
 
@@ -182,8 +225,14 @@ def _parse_filler_config(raw: dict[str, Any]) -> FillerConfig:
 
     Returns:
         A FillerConfig with remove_fillers populated.
+
+    Raises:
+        ValueError: If any field is of the wrong type.
     """
-    remove_fillers: bool = raw.get("remove_fillers", False)
+    raw_remove_fillers = raw.get("remove_fillers", False)
+    if not isinstance(raw_remove_fillers, bool):
+        raise ValueError(f"remove_fillers must be a boolean, got: {type(raw_remove_fillers).__name__}")
+    remove_fillers: bool = raw_remove_fillers
     return FillerConfig(remove_fillers=remove_fillers)
 
 
@@ -218,21 +267,85 @@ def _parse_hallucination_config(raw: dict[str, Any]) -> HallucinationConfig:
 
     Returns:
         A HallucinationConfig with all detection thresholds populated.
+
+    Raises:
+        ValueError: If any field is of the wrong type.
     """
     nested: dict[str, Any] = raw.get("hallucination_detection", {})
     if not isinstance(nested, dict):
         nested = {}
 
-    repetition_threshold: int = nested.get("repetition_threshold", 3)
-    compression_ratio_threshold: float = nested.get("compression_ratio_threshold", 2.4)
-    confidence_floor: float = nested.get("confidence_floor", -1.0)
-    no_speech_prob_threshold: float = nested.get("no_speech_prob_threshold", 0.6)
-    duration_chars_per_sec_max: int = nested.get("duration_chars_per_sec_max", 25)
-    duration_chars_per_sec_min: int = nested.get("duration_chars_per_sec_min", 2)
-    use_vad: bool = nested.get("use_vad", True)
-    blocklist_enabled: bool = nested.get("blocklist_enabled", True)
-    score_threshold: int = nested.get("score_threshold", 2)
-    action: str = nested.get("action", "remove")
+    # Warn if the deprecated use_vad field is present in the config
+    if "use_vad" in nested:
+        logger.warning(
+            "hallucination_detection.use_vad is deprecated and has no effect. Remove it from your configuration file."
+        )
+
+    raw_repetition_threshold = nested.get("repetition_threshold", 3)
+    if not isinstance(raw_repetition_threshold, int):
+        raise ValueError(
+            f"hallucination_detection.repetition_threshold must be an integer, "
+            f"got: {type(raw_repetition_threshold).__name__}"
+        )
+    repetition_threshold: int = raw_repetition_threshold
+
+    raw_compression_ratio = nested.get("compression_ratio_threshold", 2.4)
+    if not isinstance(raw_compression_ratio, (int, float)):
+        raise ValueError(
+            f"hallucination_detection.compression_ratio_threshold must be a number, "
+            f"got: {type(raw_compression_ratio).__name__}"
+        )
+    compression_ratio_threshold: float = float(raw_compression_ratio)
+
+    raw_confidence_floor = nested.get("confidence_floor", -1.0)
+    if not isinstance(raw_confidence_floor, (int, float)):
+        raise ValueError(
+            f"hallucination_detection.confidence_floor must be a number, got: {type(raw_confidence_floor).__name__}"
+        )
+    confidence_floor: float = float(raw_confidence_floor)
+
+    raw_no_speech_prob = nested.get("no_speech_prob_threshold", 0.6)
+    if not isinstance(raw_no_speech_prob, (int, float)):
+        raise ValueError(
+            f"hallucination_detection.no_speech_prob_threshold must be a number, "
+            f"got: {type(raw_no_speech_prob).__name__}"
+        )
+    no_speech_prob_threshold: float = float(raw_no_speech_prob)
+
+    raw_chars_max = nested.get("duration_chars_per_sec_max", 25)
+    if not isinstance(raw_chars_max, int):
+        raise ValueError(
+            f"hallucination_detection.duration_chars_per_sec_max must be an integer, "
+            f"got: {type(raw_chars_max).__name__}"
+        )
+    duration_chars_per_sec_max: int = raw_chars_max
+
+    raw_chars_min = nested.get("duration_chars_per_sec_min", 2)
+    if not isinstance(raw_chars_min, int):
+        raise ValueError(
+            f"hallucination_detection.duration_chars_per_sec_min must be an integer, "
+            f"got: {type(raw_chars_min).__name__}"
+        )
+    duration_chars_per_sec_min: int = raw_chars_min
+
+    raw_blocklist_enabled = nested.get("blocklist_enabled", True)
+    if not isinstance(raw_blocklist_enabled, bool):
+        raise ValueError(
+            f"hallucination_detection.blocklist_enabled must be a boolean, got: {type(raw_blocklist_enabled).__name__}"
+        )
+    blocklist_enabled: bool = raw_blocklist_enabled
+
+    raw_score_threshold = nested.get("score_threshold", 2)
+    if not isinstance(raw_score_threshold, int):
+        raise ValueError(
+            f"hallucination_detection.score_threshold must be an integer, got: {type(raw_score_threshold).__name__}"
+        )
+    score_threshold: int = raw_score_threshold
+
+    raw_action = nested.get("action", "remove")
+    if not isinstance(raw_action, str):
+        raise ValueError(f"hallucination_detection.action must be a string, got: {type(raw_action).__name__}")
+    action: str = raw_action
 
     return HallucinationConfig(
         repetition_threshold=repetition_threshold,
@@ -241,7 +354,6 @@ def _parse_hallucination_config(raw: dict[str, Any]) -> HallucinationConfig:
         no_speech_prob_threshold=no_speech_prob_threshold,
         duration_chars_per_sec_max=duration_chars_per_sec_max,
         duration_chars_per_sec_min=duration_chars_per_sec_min,
-        use_vad=use_vad,
         blocklist_enabled=blocklist_enabled,
         score_threshold=score_threshold,
         action=action,

@@ -17,7 +17,9 @@ from deep_thought.todoist.cli import (
     _build_argument_parser,
     _load_config_from_args,
     _setup_logging,
+    cmd_complete,
     cmd_config,
+    cmd_create,
     cmd_diff,
     cmd_export,
     cmd_init,
@@ -35,6 +37,7 @@ from deep_thought.todoist.config import (
     PushFilters,
     TodoistConfig,
 )
+from deep_thought.todoist.create import CreateResult
 from deep_thought.todoist.export import ExportResult
 from deep_thought.todoist.pull import PullResult
 from deep_thought.todoist.push import PushResult
@@ -96,11 +99,32 @@ class TestArgumentParser:
 
     def test_all_subcommands_are_registered(self) -> None:
         """Every expected subcommand must be parseable without error."""
-        expected_subcommands = ["init", "config", "pull", "push", "sync", "status", "diff", "export"]
+        expected_subcommands = [
+            "init",
+            "config",
+            "pull",
+            "push",
+            "sync",
+            "status",
+            "diff",
+            "export",
+        ]
         parser = _build_argument_parser()
         for subcommand_name in expected_subcommands:
             parsed = parser.parse_args([subcommand_name])
             assert parsed.subcommand == subcommand_name
+
+    def test_create_and_complete_subcommands_are_registered(self) -> None:
+        """create and complete must be parseable with their required positional arguments."""
+        parser = _build_argument_parser()
+
+        parsed_create = parser.parse_args(["create", "Write unit tests"])
+        assert parsed_create.subcommand == "create"
+        assert parsed_create.content == "Write unit tests"
+
+        parsed_complete = parser.parse_args(["complete", "task-99"])
+        assert parsed_complete.subcommand == "complete"
+        assert parsed_complete.task_id == "task-99"
 
     def test_global_flags_are_parsed_correctly(self) -> None:
         """Global flags must appear on the parsed namespace for any subcommand."""
@@ -615,6 +639,178 @@ class TestCmdExport:
         assert "Files:    3" in captured_output
         assert "Tasks:    12" in captured_output
         mock_conn.close.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# cmd_create
+# ---------------------------------------------------------------------------
+
+
+class TestCmdCreate:
+    def test_prints_created_task_id_and_content(
+        self,
+        args_base: argparse.Namespace,
+        minimal_config: TodoistConfig,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """create must print the new task ID and content on success."""
+        args_base.project = "Work"
+        args_base.content = "Write release notes"
+        args_base.description = None
+        args_base.due = None
+        args_base.priority = None
+        args_base.label = None
+        args_base.section = None
+        fake_result = CreateResult(task_id="task-42", task_content="Write release notes", created=True, dry_run=False)
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.todoist.cli.load_config", return_value=minimal_config),
+            patch("deep_thought.todoist.cli.get_api_token", return_value="tok"),
+            patch("deep_thought.todoist.cli.TodoistClient"),
+            patch("deep_thought.todoist.cli.initialize_database", return_value=mock_conn),
+            patch("deep_thought.todoist.cli.create_task", return_value=fake_result),
+        ):
+            cmd_create(args_base)
+
+        captured_output = capsys.readouterr().out
+        assert "task-42" in captured_output
+        assert "Write release notes" in captured_output
+        mock_conn.close.assert_called_once()
+
+    def test_dry_run_prints_would_create_message(
+        self,
+        args_base: argparse.Namespace,
+        minimal_config: TodoistConfig,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """create --dry-run must print a [dry-run] prefix without creating the task."""
+        args_base.dry_run = True
+        args_base.project = "Work"
+        args_base.content = "A dry-run task"
+        args_base.description = None
+        args_base.due = None
+        args_base.priority = None
+        args_base.label = None
+        args_base.section = None
+        fake_result = CreateResult(task_id="", task_content="A dry-run task", created=False, dry_run=True)
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.todoist.cli.load_config", return_value=minimal_config),
+            patch("deep_thought.todoist.cli.get_api_token", return_value="tok"),
+            patch("deep_thought.todoist.cli.TodoistClient"),
+            patch("deep_thought.todoist.cli.initialize_database", return_value=mock_conn),
+            patch("deep_thought.todoist.cli.create_task", return_value=fake_result),
+        ):
+            cmd_create(args_base)
+
+        captured_output = capsys.readouterr().out
+        assert "[dry-run]" in captured_output
+        assert "A dry-run task" in captured_output
+
+    def test_exits_when_project_flag_missing(
+        self,
+        args_base: argparse.Namespace,
+        minimal_config: TodoistConfig,
+    ) -> None:
+        """create must exit with code 1 when --project is not provided."""
+        args_base.project = None
+        args_base.content = "Task without project"
+
+        with (
+            patch("deep_thought.todoist.cli.load_config", return_value=minimal_config),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            cmd_create(args_base)
+
+        assert exc_info.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# cmd_complete
+# ---------------------------------------------------------------------------
+
+
+class TestCmdComplete:
+    def test_prints_completed_task_content(
+        self,
+        args_base: argparse.Namespace,
+        minimal_config: TodoistConfig,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """complete must print the task ID and content when the task is closed."""
+        args_base.task_id = "task-55"
+        fake_task_row = {"id": "task-55", "content": "Deploy to production"}
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.todoist.cli.load_config", return_value=minimal_config),
+            patch("deep_thought.todoist.cli.get_api_token", return_value="tok"),
+            patch("deep_thought.todoist.cli.TodoistClient") as mock_client_class,
+            patch("deep_thought.todoist.cli.initialize_database", return_value=mock_conn),
+            patch("deep_thought.todoist.cli.get_task_by_id", return_value=fake_task_row),
+            patch("deep_thought.todoist.cli.mark_task_completed"),
+        ):
+            mock_api_client = mock_client_class.return_value
+            cmd_complete(args_base)
+
+        captured_output = capsys.readouterr().out
+        assert "task-55" in captured_output
+        assert "Deploy to production" in captured_output
+        mock_api_client.close_task.assert_called_once_with("task-55")
+        mock_conn.close.assert_called_once()
+
+    def test_dry_run_does_not_close_task(
+        self,
+        args_base: argparse.Namespace,
+        minimal_config: TodoistConfig,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """complete --dry-run must print [dry-run] and not call close_task or commit."""
+        args_base.dry_run = True
+        args_base.task_id = "task-55"
+        fake_task_row = {"id": "task-55", "content": "Deploy to production"}
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.todoist.cli.load_config", return_value=minimal_config),
+            patch("deep_thought.todoist.cli.get_api_token", return_value="tok"),
+            patch("deep_thought.todoist.cli.TodoistClient") as mock_client_class,
+            patch("deep_thought.todoist.cli.initialize_database", return_value=mock_conn),
+            patch("deep_thought.todoist.cli.get_task_by_id", return_value=fake_task_row),
+        ):
+            mock_api_client = mock_client_class.return_value
+            cmd_complete(args_base)
+
+        captured_output = capsys.readouterr().out
+        assert "[dry-run]" in captured_output
+        mock_api_client.close_task.assert_not_called()
+        mock_conn.commit.assert_not_called()
+
+    @pytest.mark.error_handling
+    def test_exits_when_task_not_found(
+        self,
+        args_base: argparse.Namespace,
+        minimal_config: TodoistConfig,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """complete must exit with code 1 when the task ID is not in the database."""
+        args_base.task_id = "nonexistent-task"
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.todoist.cli.load_config", return_value=minimal_config),
+            patch("deep_thought.todoist.cli.get_api_token", return_value="tok"),
+            patch("deep_thought.todoist.cli.TodoistClient"),
+            patch("deep_thought.todoist.cli.initialize_database", return_value=mock_conn),
+            patch("deep_thought.todoist.cli.get_task_by_id", return_value=None),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            cmd_complete(args_base)
+
+        assert exc_info.value.code == 1
+        assert "nonexistent-task" in capsys.readouterr().err
 
 
 # ---------------------------------------------------------------------------

@@ -73,6 +73,11 @@ def _retry_with_backoff(
                 delay *= 2
 
     if last_error is not None:
+        logger.error(
+            "Calendar API call failed after %d attempt(s). Final error: %s",
+            max_attempts,
+            last_error,
+        )
         raise last_error
     raise RuntimeError("Unexpected state in _retry_with_backoff")  # pragma: no cover
 
@@ -157,6 +162,10 @@ class GcalClient:
 
             token_path.parent.mkdir(parents=True, exist_ok=True)
             token_path.write_text(credentials.to_json())
+            # NOTE: chmod(0o600) restricts token file access to the owner only.
+            # This call has no effect on Windows, where POSIX-style file
+            # permissions are not enforced. On Windows the token file will
+            # retain default permissions. This is a known platform limitation.
             token_path.chmod(0o600)
             logger.debug("OAuth token saved to %s", token_path)
 
@@ -184,7 +193,12 @@ class GcalClient:
 
         Returns:
             The API response dict.
+
+        Raises:
+            RuntimeError: If authenticate() has not been called before this method.
         """
+        if self._service is None:
+            raise RuntimeError("Must call authenticate() before making API requests.")
         self._rate_limit()
         return _retry_with_backoff(
             request.execute,
@@ -253,6 +267,7 @@ class GcalClient:
         events: list[dict[str, Any]] = []
         page_token: str | None = None
         next_sync_token: str | None = None
+        is_first_page = True
 
         while True:
             if sync_token is not None:
@@ -274,8 +289,23 @@ class GcalClient:
                     params["timeMax"] = time_max
 
             request = self._service.events().list(**params)
-            response = self._execute(request)
+            try:
+                response = self._execute(request)
+            except (HttpError, OSError, TimeoutError) as page_error:
+                if is_first_page:
+                    # An error on the first page means we have nothing — re-raise.
+                    raise
+                # For page 2+, we already have partial results. Log a warning
+                # and return what we have rather than discarding all prior pages.
+                logger.warning(
+                    "Calendar %s: pagination error on page 2+ — returning %d event(s) fetched so far. Error: %s",
+                    calendar_id,
+                    len(events),
+                    page_error,
+                )
+                break
 
+            is_first_page = False
             batch: list[dict[str, Any]] = response.get("items", [])
             events.extend(batch)
 

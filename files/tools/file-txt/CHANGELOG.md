@@ -1,5 +1,26 @@
 # file-txt Changelog
 
+## 0.3.0 — 2026-04-02
+
+### Changed
+
+- **Replaced `marker-pdf` with `pymupdf4llm`** for PDF conversion. `pymupdf4llm` uses PyMuPDF (fitz) to extract markdown from native PDFs — no ML models, no GPU, no transformers dependency.
+- `MarkerConfig` dataclass replaced by `PdfConfig` (no fields); `FileTxtConfig.marker` field renamed to `FileTxtConfig.pdf`.
+- `_parse_marker_config` config helper replaced by `_parse_pdf_config`.
+- `engines/marker_engine.py` replaced by `engines/pymupdf_engine.py`.
+
+### Removed
+
+- `force_ocr` config key and `--force-ocr` CLI flag (OCR on scanned PDFs is not supported by pymupdf4llm).
+- `torch_device` config key, `--torch-device` CLI flag, and `torch_device` validation (no device selection needed — pymupdf4llm has no model).
+- `include_page_numbers` option for the PDF path (pymupdf4llm does not inject page number markers).
+- Model loading / caching logic that was specific to marker-pdf.
+- `transformers` and all other marker-pdf transitive dependencies are no longer installed.
+
+### Why
+
+`marker-pdf` requires `transformers<5.0.0`; `mlx-embeddings` (in the `[embeddings]` extra) requires `transformers>=5.0.0`. The conflict caused an import failure (`No module named 'transformers.onnx'`) at runtime. `pymupdf4llm` has no ML dependencies and eliminates the conflict entirely.
+
 ## 0.2.0 — 2026-03-22
 
 ### Added

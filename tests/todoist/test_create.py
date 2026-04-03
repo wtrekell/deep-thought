@@ -6,7 +6,7 @@ client via the shared `mock_client` fixture. No real API calls are made.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -14,6 +14,7 @@ from deep_thought.todoist.create import (
     _resolve_label_ids,
     _resolve_project_id,
     _resolve_section_id,
+    _validate_priority,
     create_task,
 )
 
@@ -59,6 +60,74 @@ def insert_label(
         (label_id, name),
     )
     conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# TestValidatePriority
+# ---------------------------------------------------------------------------
+
+
+class TestValidatePriority:
+    """Tests for _validate_priority."""
+
+    def test_valid_priority_1_passes_through(self) -> None:
+        """Priority 1 (normal) should be returned unchanged."""
+        assert _validate_priority(1) == 1
+
+    def test_valid_priority_4_passes_through(self) -> None:
+        """Priority 4 (urgent) should be returned unchanged."""
+        assert _validate_priority(4) == 4
+
+    def test_priority_zero_defaults_to_one(self, caplog: Any) -> None:
+        """Out-of-range priority 0 should log a warning and return 1."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            result = _validate_priority(0)
+
+        assert result == 1
+        assert "out of range" in caplog.text.lower()
+
+    def test_priority_five_defaults_to_one(self, caplog: Any) -> None:
+        """Out-of-range priority 5 should log a warning and return 1."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            result = _validate_priority(5)
+
+        assert result == 1
+        assert "out of range" in caplog.text.lower()
+
+    def test_negative_priority_defaults_to_one(self, caplog: Any) -> None:
+        """Negative priority should log a warning and return 1."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            result = _validate_priority(-1)
+
+        assert result == 1
+
+    def test_create_task_clamps_invalid_priority(
+        self,
+        mock_client: Any,
+        in_memory_db: Any,
+        sample_task_sdk: Any,
+        caplog: Any,
+    ) -> None:
+        """create_task should clamp an out-of-range priority to 1 via _validate_priority."""
+        import logging
+
+        insert_project(in_memory_db, project_id="proj-1", name="Work")
+        sample_task_sdk.section_id = None
+        sample_task_sdk.labels = []
+        mock_client.create_task.return_value = sample_task_sdk
+
+        with caplog.at_level(logging.WARNING):
+            create_task(mock_client, in_memory_db, "Task", "Work", priority=99)
+
+        call_kwargs = mock_client.create_task.call_args.kwargs
+        assert call_kwargs["priority"] == 1
+        assert "out of range" in caplog.text.lower()
 
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,3 @@
-# Marker (PDF)
-force_ocr: false
-torch_device: "mps" # 'mps', 'cuda', or 'cpu'
-
 # Email
 prefer_html: false
 full_headers: false

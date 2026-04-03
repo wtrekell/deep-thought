@@ -18,7 +18,42 @@ _VALID_MODES = {"blog", "documentation", "direct"}
 
 @dataclass
 class CrawlConfig:
-    """Configuration for the web crawl behaviour."""
+    """Configuration for the web crawl behaviour.
+
+    Pagination fields
+    -----------------
+    These four fields control how index pages are expanded before their links
+    are extracted. They are active only in ``blog`` and ``documentation`` modes
+    (where index pages must be traversed to reach article URLs). They have no
+    effect on leaf-page fetches or in ``direct`` mode.
+
+    ``pagination``
+        Strategy to use when fetching index pages. One of:
+
+        - ``"none"`` (default) — fetch the page once and move on.
+        - ``"scroll"`` — repeatedly scroll to the bottom of the page to trigger
+          lazy-loaded content. Useful for infinite-scroll listing pages.
+        - ``"click"`` — repeatedly click a CSS-selected element (e.g. a "Load
+          more" button) to expand the page. Requires ``pagination_selector``.
+
+    ``pagination_selector``
+        A CSS selector string identifying the element to click when
+        ``pagination`` is ``"click"``. Ignored for other strategies.
+        Must be set when ``pagination == "click"``; validated at startup.
+
+    ``pagination_wait``
+        Seconds to wait after each scroll or click iteration before reading
+        the updated DOM. Increase this on slow sites or when content loads
+        asynchronously. Default: ``2.0``.
+
+    ``max_paginations``
+        Maximum number of scroll or click iterations to perform per index page.
+        Prevents unbounded loops on pages that never stop loading. Default: ``10``.
+
+    These fields are wired directly into ``WebCrawler.fetch_page_with_pagination()``
+    via ``CrawlerConfig``. The processor selects the pagination-aware fetch path
+    whenever ``pagination != "none"`` during ``_collect_article_urls()``.
+    """
 
     mode: str
     input_url: str | None
@@ -43,6 +78,10 @@ class CrawlConfig:
     llms_lookback_days: int
     strip_boilerplate: list[str]
     unwrap_tags: list[str]
+    pagination: str
+    pagination_selector: str | None
+    pagination_wait: float
+    max_paginations: int
 
 
 @dataclass
@@ -87,17 +126,37 @@ def get_default_config_path() -> Path:
     return Path.cwd() / _PROJECT_CONFIG_RELATIVE_PATH
 
 
+def _find_project_root(start: Path) -> Path:
+    """Walk up from start until a directory containing pyproject.toml is found.
+
+    Falls back to the top-most parent if pyproject.toml is never found, so
+    the function always returns a valid path rather than raising.
+
+    Args:
+        start: The directory from which to begin the upward search.
+
+    Returns:
+        The first ancestor directory that contains pyproject.toml, or the
+        filesystem root if none is found.
+    """
+    for parent in [start, *start.parents]:
+        if (parent / "pyproject.toml").exists():
+            return parent
+    return start.parents[-1]
+
+
 def get_templates_dir() -> Path:
     """Return the absolute path to the batch config templates directory.
 
-    This resolves via ``_PACKAGE_DIR`` (which follows ``__file__`` back to the
-    deep-thought source) so it always finds the bundled SOURCE templates,
-    regardless of symlinks or the current working directory.
+    Locates the project root by walking up from this file looking for
+    pyproject.toml, then appends the relative templates path. This is robust
+    to directory-depth refactoring.
 
     Returns:
         Absolute path to src/config/web/templates/ relative to the package source.
     """
-    return _PACKAGE_DIR.parent.parent.parent / _TEMPLATES_RELATIVE_PATH
+    project_root = _find_project_root(_PACKAGE_DIR)
+    return project_root / _TEMPLATES_RELATIVE_PATH
 
 
 def get_batch_config_dir() -> Path:
@@ -209,6 +268,14 @@ def _parse_crawl_config(raw: dict[str, Any]) -> CrawlConfig:
     raw_unwrap = raw.get("unwrap_tags")
     unwrap_tags: list[str] = list(raw_unwrap) if isinstance(raw_unwrap, list) else []
 
+    pagination: str = str(raw.get("pagination", "none"))
+
+    raw_pagination_selector = raw.get("pagination_selector")
+    pagination_selector: str | None = str(raw_pagination_selector) if raw_pagination_selector is not None else None
+
+    pagination_wait: float = float(raw.get("pagination_wait", 2.0))
+    max_paginations: int = int(raw.get("max_paginations", 10))
+
     return CrawlConfig(
         mode=mode,
         input_url=input_url,
@@ -233,6 +300,10 @@ def _parse_crawl_config(raw: dict[str, Any]) -> CrawlConfig:
         llms_lookback_days=llms_lookback_days,
         strip_boilerplate=strip_boilerplate,
         unwrap_tags=unwrap_tags,
+        pagination=pagination,
+        pagination_selector=pagination_selector,
+        pagination_wait=pagination_wait,
+        max_paginations=max_paginations,
     )
 
 
@@ -287,6 +358,9 @@ def validate_config(config: WebConfig) -> list[str]:
     """
     issues: list[str] = []
 
+    if not config.crawl.output_dir or not config.crawl.output_dir.strip():
+        issues.append("output_dir must be a non-empty string.")
+
     if config.crawl.mode not in _VALID_MODES:
         issues.append(f"mode '{config.crawl.mode}' is not valid. Must be one of: {sorted(_VALID_MODES)}.")
 
@@ -333,6 +407,32 @@ def validate_config(config: WebConfig) -> list[str]:
             re.compile(pattern_text)
         except re.error as regex_error:
             issues.append(f"strip_boilerplate contains invalid regex '{pattern_text}': {regex_error}")
+
+    for tag_pattern in config.crawl.unwrap_tags:
+        parts = tag_pattern.split(".", 1)
+        tag_name = parts[0]
+        if not tag_name:
+            issues.append(f"unwrap_tags contains pattern with missing tag name: '{tag_pattern}'")
+        elif not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9]*", tag_name):
+            issues.append(f"unwrap_tags contains invalid HTML tag name: '{tag_name}'")
+
+    valid_pagination_strategies = {"none", "scroll", "click"}
+    if config.crawl.pagination not in valid_pagination_strategies:
+        issues.append(
+            f"pagination '{config.crawl.pagination}' is not valid. "
+            f"Must be one of: {sorted(valid_pagination_strategies)}."
+        )
+
+    if config.crawl.pagination == "click" and (
+        not config.crawl.pagination_selector or not config.crawl.pagination_selector.strip()
+    ):
+        issues.append("pagination_selector must be a non-empty CSS selector string when pagination is 'click'.")
+
+    if config.crawl.pagination_wait < 0:
+        issues.append(f"pagination_wait must be >= 0, got: {config.crawl.pagination_wait}.")
+
+    if config.crawl.max_paginations <= 0:
+        issues.append(f"max_paginations must be > 0, got: {config.crawl.max_paginations}.")
 
     return issues
 

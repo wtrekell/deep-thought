@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from deep_thought.audio.models import (
+    ChunkResult,
     ProcessedFileLocal,
+    SpeakerSegment,
     TranscriptionResult,
     TranscriptSegment,
 )
@@ -171,3 +173,74 @@ class TestTranscriptionResult:
         result = TranscriptionResult(segments=[], language="en", duration_seconds=123.456)
         assert isinstance(result.duration_seconds, float)
         assert result.duration_seconds == 123.456
+
+
+# ---------------------------------------------------------------------------
+# SpeakerSegment (T-02)
+# ---------------------------------------------------------------------------
+
+
+class TestSpeakerSegment:
+    def test_construction_with_required_fields(self) -> None:
+        """SpeakerSegment must initialise with speaker_label, start, and end."""
+        segment = SpeakerSegment(speaker_label="SPEAKER_00", start=0.0, end=5.5)
+        assert segment.speaker_label == "SPEAKER_00"
+        assert segment.start == 0.0
+        assert segment.end == 5.5
+
+    def test_speaker_label_stored_as_string(self) -> None:
+        """The speaker_label field must be a plain string."""
+        segment = SpeakerSegment(speaker_label="SPEAKER_01", start=1.0, end=3.0)
+        assert isinstance(segment.speaker_label, str)
+
+    def test_start_and_end_stored_as_floats(self) -> None:
+        """The start and end fields must be plain floats."""
+        segment = SpeakerSegment(speaker_label="SPEAKER_02", start=2.5, end=7.0)
+        assert isinstance(segment.start, float)
+        assert isinstance(segment.end, float)
+
+    def test_segment_with_zero_duration(self) -> None:
+        """A SpeakerSegment with identical start and end values must be constructable."""
+        segment = SpeakerSegment(speaker_label="SPEAKER_00", start=3.0, end=3.0)
+        assert segment.start == segment.end
+
+
+# ---------------------------------------------------------------------------
+# ChunkResult (T-02)
+# ---------------------------------------------------------------------------
+
+
+class TestChunkResult:
+    def test_construction_with_required_fields(self) -> None:
+        """ChunkResult must initialise with chunk_index, segments, and duration."""
+        segments = [TranscriptSegment(start=0.0, end=2.0, text="Hello.")]
+        chunk = ChunkResult(chunk_index=0, segments=segments, duration=5.0)
+        assert chunk.chunk_index == 0
+        assert chunk.segments == segments
+        assert chunk.duration == 5.0
+
+    def test_chunk_index_is_zero_based(self) -> None:
+        """chunk_index must accept 0 as a valid first index."""
+        chunk = ChunkResult(chunk_index=0, segments=[], duration=0.0)
+        assert chunk.chunk_index == 0
+
+    def test_segments_can_be_empty(self) -> None:
+        """ChunkResult must accept an empty segments list."""
+        chunk = ChunkResult(chunk_index=2, segments=[], duration=10.0)
+        assert chunk.segments == []
+
+    def test_chunk_stores_multiple_segments(self) -> None:
+        """ChunkResult must hold all provided transcript segments."""
+        segments = [
+            TranscriptSegment(start=0.0, end=1.5, text="First."),
+            TranscriptSegment(start=2.0, end=4.0, text="Second."),
+        ]
+        chunk = ChunkResult(chunk_index=1, segments=segments, duration=5.0)
+        assert len(chunk.segments) == 2
+        assert chunk.segments[0].text == "First."
+        assert chunk.segments[1].text == "Second."
+
+    def test_duration_stored_as_float(self) -> None:
+        """The duration field must be a float."""
+        chunk = ChunkResult(chunk_index=0, segments=[], duration=300.0)
+        assert isinstance(chunk.duration, float)

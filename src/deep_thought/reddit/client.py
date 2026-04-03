@@ -11,6 +11,7 @@ from typing import Any
 
 import praw  # type: ignore[import-untyped]
 import praw.models  # type: ignore[import-untyped]
+import prawcore.exceptions  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
@@ -97,9 +98,16 @@ class RedditClient:
 
         Returns:
             A list of PRAW Comment objects, ordered depth-first.
+
+        Raises:
+            prawcore.exceptions.TooManyRequests: If the Reddit API returns a 429
+                during comment fetching. Callers are responsible for applying
+                backoff before retrying or continuing to the next post.
         """
         try:
             submission.comments.replace_more(limit=0)
+        except prawcore.exceptions.TooManyRequests:
+            raise  # let orchestration layer handle rate limits
         except Exception as replace_error:
             logger.warning("Could not replace MoreComments for %s: %s", submission.id, replace_error)
 

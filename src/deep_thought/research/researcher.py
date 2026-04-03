@@ -61,7 +61,10 @@ class PerplexityClient:
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
-            timeout=httpx.Timeout(30.0, read=300.0),
+            # 60-second read timeout is sufficient for sync search (typical 2-10s).
+            # The async research command uses its own 10-minute polling loop, so
+            # individual poll requests don't need a long read timeout.
+            timeout=httpx.Timeout(30.0, read=60.0),
         )
 
     # -----------------------------------------------------------------------
@@ -166,9 +169,11 @@ class PerplexityClient:
 
         logger.debug("Submitting deep research job to %s", _ASYNC_SUBMIT_ENDPOINT)
         submit_response = self._execute_with_retry("POST", _ASYNC_SUBMIT_ENDPOINT, json=async_body)
-        if "id" not in submit_response:
-            response_keys = list(submit_response.keys())
-            raise ValueError(f"Async job submission failed: no job ID in API response. Response keys: {response_keys}")
+        if not isinstance(submit_response, dict) or "id" not in submit_response:
+            response_summary = (
+                list(submit_response.keys()) if isinstance(submit_response, dict) else repr(submit_response)
+            )
+            raise ValueError(f"Async job submission failed: no job ID in API response. Response: {response_summary}")
         job_id: str = submit_response["id"]
         logger.debug("Deep research job submitted with ID: %s", job_id)
 
@@ -203,6 +208,19 @@ class PerplexityClient:
     def close(self) -> None:
         """Close the underlying HTTP client and release its resources."""
         self._client.close()
+
+    def __enter__(self) -> PerplexityClient:
+        """Enter the context manager, returning self for use in a ``with`` block."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
+        """Exit the context manager, closing the HTTP client unconditionally."""
+        self.close()
 
     # -----------------------------------------------------------------------
     # Private helpers
@@ -314,6 +332,10 @@ class PerplexityClient:
                     retry_delay = float(self._config.retry_base_delay_seconds * (2**attempt))
 
                     # Honour the Retry-After header for rate-limit responses.
+                    # Note: RFC 7231 also allows an HTTP-date string format for
+                    # this header, but only integer seconds are supported here.
+                    # An HTTP-date value will fail float() conversion and fall
+                    # back silently to exponential backoff.
                     if response.status_code == 429:
                         retry_after_header = response.headers.get("Retry-After")
                         if retry_after_header is not None:
@@ -328,6 +350,13 @@ class PerplexityClient:
                         retry_delay,
                     )
                     time.sleep(retry_delay)
+                else:
+                    logger.warning(
+                        "Perplexity API returned %d (attempt %d/%d), no retries remaining.",
+                        response.status_code,
+                        attempt + 1,
+                        self._config.retry_max_attempts,
+                    )
                 continue
 
             if response.is_client_error:
