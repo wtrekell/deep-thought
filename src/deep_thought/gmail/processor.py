@@ -24,7 +24,8 @@ from deep_thought.gmail.db.queries import (
     upsert_processed_email,
 )
 from deep_thought.gmail.filters import is_already_processed, is_within_max_emails
-from deep_thought.gmail.models import CollectResult, ProcessedEmailLocal, SendResult, _extract_header, _slugify_subject
+from deep_thought.gmail.models import CollectResult, ProcessedEmailLocal, SendResult, _extract_header
+from deep_thought.text_utils import slugify as _shared_slugify
 from deep_thought.gmail.output import (
     append_to_rule_file,
     extract_body_text,
@@ -280,7 +281,7 @@ def _process_single_email(
 
             output_path_str = str(output_path)
         else:
-            output_path_str = f"[dry-run] {output_dir / rule_config.name / _slugify_subject(subject)}.md"
+            output_path_str = f"[dry-run] {output_dir / rule_config.name / _shared_slugify(subject)}.md"
 
         # Apply actions
         actions_applied = _apply_actions(gmail_client, message_id, rule_config.actions, dry_run=dry_run)

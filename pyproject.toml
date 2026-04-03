@@ -99,12 +99,20 @@ check_untyped_defs = true
 strict_equality = true
 
 [[tool.mypy.overrides]]
-module = ["pyannote.*", "pyannote.audio.*"]
+module = ["pyannote.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["mlx_embeddings.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["qdrant_client.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["deep_thought.embeddings"]
+disallow_any_unimported = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

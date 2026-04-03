@@ -13,7 +13,6 @@ operations to summarise what happened.
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -21,28 +20,6 @@ from typing import Any
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
-
-
-def _slugify_summary(summary: str, max_length: int = 80) -> str:
-    """Convert a calendar event summary to a filesystem-safe slug.
-
-    Lowercases, replaces non-alphanumeric characters with hyphens, collapses
-    repeated hyphens, strips leading/trailing hyphens, and truncates.
-
-    Args:
-        summary: The raw event summary string.
-        max_length: Maximum length of the resulting slug.
-
-    Returns:
-        A cleaned slug suitable for use in a filename, or "no-title" if
-        the summary is empty or reduces to only hyphens.
-    """
-    slug = summary.lower()
-    slug = re.sub(r"[^a-z0-9]+", "-", slug)
-    slug = slug.strip("-")
-    if not slug:
-        return "no-title"
-    return slug[:max_length] if len(slug) > max_length else slug
 
 
 def _parse_event_time(time_dict: dict[str, Any]) -> tuple[str, bool]:

@@ -10,7 +10,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from deep_thought.gmail.models import _extract_header, _slugify_subject
+from deep_thought.gmail.models import _extract_header
+from deep_thought.text_utils import slugify as _shared_slugify
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -165,7 +166,7 @@ def write_email_file(
     Returns:
         The Path to the written file.
     """
-    subject_slug = _slugify_subject(subject)
+    subject_slug = _shared_slugify(subject)
     base_stem = f"{date_str}-{subject_slug}" if subject_slug else f"{date_str}-no-subject"
 
     rule_dir = output_dir / rule_name

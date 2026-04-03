@@ -172,6 +172,19 @@ def _process_single_post(
         )
         output_path_str = str(written_path)
 
+        # Download images to an img/ subdirectory and rewrite the markdown
+        # references to local paths when include_images is enabled.
+        if rule_config.include_images:
+            from deep_thought.reddit.image_extractor import download_post_images  # noqa: PLC0415
+
+            updated_markdown = download_post_images(
+                output_path=written_path,
+                markdown_content=markdown_content,
+            )
+            if updated_markdown != markdown_content:
+                written_path.write_text(updated_markdown, encoding="utf-8")
+                markdown_content = updated_markdown
+
         local_post = CollectedPostLocal.from_submission(
             submission=submission,
             rule_name=rule_config.name,

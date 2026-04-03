@@ -7,7 +7,12 @@ import sqlite3  # noqa: TC003 — sqlite3.Connection is used at runtime in run_u
 from pathlib import Path
 from typing import Any
 
-from deep_thought.gcal.create import _is_date_only, _validate_start_before_end, parse_event_frontmatter
+from deep_thought.gcal.create import (
+    _is_date_only,
+    _validate_attendee_emails,
+    _validate_start_before_end,
+    parse_event_frontmatter,
+)
 from deep_thought.gcal.db.queries import clear_sync_token, get_calendar, upsert_event
 from deep_thought.gcal.models import EventLocal, UpdateResult
 from deep_thought.gcal.output import generate_event_markdown, write_event_file
@@ -91,11 +96,17 @@ def _diff_event_fields(
         patch_body["description"] = frontmatter_description if frontmatter_description is not None else ""
         fields_changed.append("description")
 
-    # --- Attendees ---
+    # --- Attendees: validate then convert email strings to API dicts ---
     raw_attendees: list[str] | None = frontmatter.get("attendees")
-    new_attendees: list[dict[str, str]] | None = (
-        [{"email": email_address} for email_address in raw_attendees] if raw_attendees else None
-    )
+    if raw_attendees:
+        validated_attendee_emails = _validate_attendee_emails(raw_attendees)
+        new_attendees: list[dict[str, str]] | None = (
+            [{"email": email_address} for email_address in validated_attendee_emails]
+            if validated_attendee_emails
+            else None
+        )
+    else:
+        new_attendees = None
     existing_attendees: list[dict[str, Any]] | None = existing_event.get("attendees")
     if new_attendees != existing_attendees:
         patch_body["attendees"] = new_attendees if new_attendees is not None else []

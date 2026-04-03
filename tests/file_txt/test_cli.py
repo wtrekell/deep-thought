@@ -136,7 +136,6 @@ class TestBuildConfigWithOverrides:
         assert result_config.output.extract_images is False
 
 
-
 # ---------------------------------------------------------------------------
 # TestResolveOutputRoot
 # ---------------------------------------------------------------------------

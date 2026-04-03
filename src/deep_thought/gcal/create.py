@@ -23,6 +23,30 @@ _DATETIME_COMPARISON_STRIP_TZ_RE = re.compile(r"[+-]\d{2}:\d{2}$|Z$")
 logger = logging.getLogger(__name__)
 
 
+def _validate_attendee_emails(attendees: list[str]) -> list[str]:
+    """Filter attendee entries to those that look like valid email addresses.
+
+    Applies a minimal structural check (contains '@' and '.') to each entry.
+    Entries that fail the check are dropped and a warning is logged for each.
+
+    Args:
+        attendees: A list of candidate email address strings.
+
+    Returns:
+        A new list containing only the entries that pass the email check.
+    """
+    valid_attendees: list[str] = []
+    for candidate_email in attendees:
+        if "@" in candidate_email and "." in candidate_email:
+            valid_attendees.append(candidate_email)
+        else:
+            logger.warning(
+                "Attendee entry %r does not look like a valid email address — skipping.",
+                candidate_email,
+            )
+    return valid_attendees
+
+
 def _validate_start_before_end(start_value: str, end_value: str) -> None:
     """Raise ValueError if start_value is not strictly before end_value.
 
@@ -168,10 +192,12 @@ def _build_api_event_body(frontmatter: dict[str, Any], body_text: str) -> dict[s
     elif body_text:
         event_body["description"] = body_text
 
-    # --- Attendees: convert email strings to API dicts ---
+    # --- Attendees: validate then convert email strings to API dicts ---
     raw_attendees: list[str] | None = frontmatter.get("attendees")
     if raw_attendees:
-        event_body["attendees"] = [{"email": email_address} for email_address in raw_attendees]
+        valid_attendee_emails = _validate_attendee_emails(raw_attendees)
+        if valid_attendee_emails:
+            event_body["attendees"] = [{"email": email_address} for email_address in valid_attendee_emails]
 
     # --- Recurrence: pass RRULE strings through as-is ---
     raw_recurrence: list[str] | None = frontmatter.get("recurrence")

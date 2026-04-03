@@ -202,7 +202,12 @@ class GmailClient:
 
         Returns:
             The API response dict.
+
+        Raises:
+            RuntimeError: If authenticate() has not been called yet.
         """
+        if self._service is None:
+            raise RuntimeError("Must call authenticate() before making API requests.")
         self._rate_limit()
         return _retry_with_backoff(
             request.execute,

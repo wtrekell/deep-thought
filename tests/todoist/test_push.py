@@ -24,6 +24,7 @@ from deep_thought.todoist.config import (
     PushFilters,
     TodoistConfig,
 )
+from deep_thought.todoist.create import _validate_priority
 from deep_thought.todoist.db.schema import initialize_database
 from deep_thought.todoist.models import TaskLocal
 from deep_thought.todoist.push import _build_update_kwargs, _task_dict_to_local_model, push
@@ -99,6 +100,75 @@ def _insert_modified_task(conn: sqlite3.Connection, task_id: str = "task-1", pro
         (task_id, project_id, json.dumps([])),
     )
     conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# _validate_priority (push path)
+# ---------------------------------------------------------------------------
+
+
+class TestValidatePriorityViaPush:
+    """Ensure priority validation is applied during push via _build_update_kwargs."""
+
+    def _make_task(self, priority: int) -> TaskLocal:
+        """Return a minimal TaskLocal with the given priority."""
+        return TaskLocal(
+            id="t1",
+            content="Test task",
+            description="",
+            project_id="p1",
+            section_id=None,
+            parent_id=None,
+            order_index=0,
+            priority=priority,
+            due_date=None,
+            due_string=None,
+            due_is_recurring=None,
+            due_lang=None,
+            due_timezone=None,
+            deadline_date=None,
+            deadline_lang=None,
+            duration_amount=None,
+            duration_unit=None,
+            assignee_id=None,
+            assigner_id=None,
+            creator_id=None,
+            is_completed=False,
+            completed_at=None,
+            labels=[],
+            url="https://todoist.com/t/1",
+            created_at="2026-01-01",
+            updated_at="2026-01-02",
+        )
+
+    def test_validate_priority_clamps_out_of_range_value_to_one(self) -> None:
+        """_validate_priority should return 1 for any value outside 1–4."""
+        assert _validate_priority(99) == 1
+        assert _validate_priority(0) == 1
+        assert _validate_priority(-5) == 1
+
+    def test_valid_priority_passes_through_to_build_update_kwargs(self) -> None:
+        """_build_update_kwargs should forward a valid priority unchanged."""
+        task = self._make_task(priority=3)
+        kwargs = _build_update_kwargs(task)
+        assert kwargs["priority"] == 3
+
+    def test_out_of_range_priority_in_build_update_kwargs_returns_one(self) -> None:
+        """_build_update_kwargs should clamp priority=5 to 1 via _validate_priority."""
+        import logging
+
+        task = self._make_task(priority=5)
+        import io
+
+        log_stream = io.StringIO()
+        handler = logging.StreamHandler(log_stream)
+        logging.getLogger("deep_thought.todoist.create").addHandler(handler)
+        try:
+            kwargs = _build_update_kwargs(task)
+        finally:
+            logging.getLogger("deep_thought.todoist.create").removeHandler(handler)
+
+        assert kwargs["priority"] == 1
 
 
 # ---------------------------------------------------------------------------

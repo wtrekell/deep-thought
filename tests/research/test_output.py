@@ -11,10 +11,10 @@ from deep_thought.research.output import (
     _build_frontmatter,
     _escape_markdown,
     _escape_yaml_value,
-    _slugify,
     generate_research_markdown,
     write_research_file,
 )
+from deep_thought.text_utils import slugify as _slugify
 
 # ---------------------------------------------------------------------------
 # Helper to create a test ResearchResult
@@ -46,7 +46,7 @@ def _make_result(**overrides: object) -> ResearchResult:
 
 
 class TestSlugify:
-    """Tests for _slugify."""
+    """Tests for the shared slugify function as used by the research tool."""
 
     def test_normal_text(self) -> None:
         """Should lowercase and replace spaces with hyphens."""
@@ -56,9 +56,9 @@ class TestSlugify:
         """Should replace non-alphanumeric characters with a single hyphen."""
         assert _slugify("Test! @#$ Event") == "test-event"
 
-    def test_empty_string(self) -> None:
-        """Should return 'no-title' for empty input."""
-        assert _slugify("") == "no-title"
+    def test_empty_string_with_no_title_fallback(self) -> None:
+        """Should return 'no-title' when empty_fallback is provided."""
+        assert _slugify("", empty_fallback="no-title") == "no-title"
 
     def test_truncation(self) -> None:
         """Should truncate the slug to the specified max_length."""
@@ -66,9 +66,9 @@ class TestSlugify:
         result = _slugify(long_text, max_length=80)
         assert len(result) <= 80
 
-    def test_only_special_chars(self) -> None:
+    def test_only_special_chars_with_no_title_fallback(self) -> None:
         """Should return 'no-title' when input contains only special characters."""
-        assert _slugify("!@#$") == "no-title"
+        assert _slugify("!@#$", empty_fallback="no-title") == "no-title"
 
     def test_strips_trailing_hyphen_after_truncation(self) -> None:
         """Should strip a trailing hyphen that appears at the truncation boundary."""

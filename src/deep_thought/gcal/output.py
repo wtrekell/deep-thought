@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -17,33 +16,9 @@ if TYPE_CHECKING:
 
     from deep_thought.gcal.models import EventLocal
 
+from deep_thought.text_utils import slugify as _shared_slugify
+
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Slug helpers
-# ---------------------------------------------------------------------------
-
-_NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
-_MAX_SLUG_LENGTH = 80
-
-
-def _slugify(text: str, max_length: int = _MAX_SLUG_LENGTH) -> str:
-    """Convert text to a filesystem-safe slug.
-
-    Lowercases, replaces non-alphanumeric runs with hyphens,
-    strips leading/trailing hyphens, and truncates.
-
-    Args:
-        text: The text to slugify.
-        max_length: Maximum slug length.
-
-    Returns:
-        A filesystem-safe slug, or "no-title" if the result is empty.
-    """
-    slug = _NON_ALNUM_RE.sub("-", text.lower()).strip("-")
-    slug = slug[:max_length].rstrip("-")
-    return slug if slug else "no-title"
 
 
 # ---------------------------------------------------------------------------
@@ -102,9 +77,16 @@ def _build_event_frontmatter(event: EventLocal) -> str:
             if attendee_list:
                 lines.append("attendees:")
                 for attendee in attendee_list:
-                    email = attendee.get("email", "") if isinstance(attendee, dict) else str(attendee)
+                    if isinstance(attendee, dict):
+                        email = attendee.get("email", "")
+                        display_name: str = attendee.get("displayName") or ""
+                    else:
+                        email = str(attendee)
+                        display_name = ""
                     if email:
-                        lines.append(f'  - "{email}"')
+                        lines.append(f"  - email: {email}")
+                        if display_name:
+                            lines.append(f"    display_name: {display_name}")
         except (json.JSONDecodeError, TypeError) as attendees_error:
             logger.warning(
                 "Event %s: failed to deserialize attendees JSON — field omitted from output. Error: %s",
@@ -175,7 +157,7 @@ def _build_filename(event: EventLocal) -> str:
     # Extract date portion from start_time and convert YYYY-MM-DD to YYMMDD
     raw_date = event.start_time[:10]  # "2026-03-24"
     date_prefix = raw_date[2:4] + raw_date[5:7] + raw_date[8:10]  # "260324"
-    summary_slug = _slugify(event.summary)
+    summary_slug = _shared_slugify(event.summary, empty_fallback="no-title")
     return f"{date_prefix}-{summary_slug}.md"
 
 
@@ -188,7 +170,7 @@ def _get_calendar_dir_name(calendar_summary: str) -> str:
     Returns:
         A filesystem-safe directory name.
     """
-    return _slugify(calendar_summary)
+    return _shared_slugify(calendar_summary, empty_fallback="no-title")
 
 
 # ---------------------------------------------------------------------------

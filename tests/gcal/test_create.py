@@ -10,6 +10,7 @@ import pytest
 
 from deep_thought.gcal.create import (
     _build_api_event_body,
+    _validate_attendee_emails,
     _validate_start_before_end,
     parse_event_frontmatter,
     run_create,
@@ -341,6 +342,68 @@ class TestRunCreate:
         call_args = mock_gcal_client.insert_event.call_args
         used_calendar_id: str = call_args[0][0]
         assert used_calendar_id == "primary"
+
+
+# ---------------------------------------------------------------------------
+# TestValidateAttendeeEmails
+# ---------------------------------------------------------------------------
+
+
+class TestValidateAttendeeEmails:
+    """Tests for _validate_attendee_emails."""
+
+    def test_valid_emails_pass_through(self) -> None:
+        """Should return all entries that look like valid email addresses."""
+        valid_emails = ["alice@example.com", "bob@company.org"]
+        result = _validate_attendee_emails(valid_emails)
+        assert result == valid_emails
+
+    def test_invalid_entry_without_at_sign_is_filtered(self, caplog: Any) -> None:
+        """Should drop and warn about entries with no '@'."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            result = _validate_attendee_emails(["not-an-email"])
+
+        assert result == []
+        assert "not-an-email" in caplog.text
+
+    def test_invalid_entry_without_dot_is_filtered(self, caplog: Any) -> None:
+        """Should drop and warn about entries with '@' but no '.'."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            result = _validate_attendee_emails(["user@nodot"])
+
+        assert result == []
+        assert "user@nodot" in caplog.text
+
+    def test_mixed_valid_and_invalid_returns_only_valid(self, caplog: Any) -> None:
+        """Should keep valid entries and drop invalid ones."""
+        import logging
+
+        with caplog.at_level(logging.WARNING):
+            result = _validate_attendee_emails(["good@example.com", "bad-entry", "also@good.net"])
+
+        assert result == ["good@example.com", "also@good.net"]
+        assert "bad-entry" in caplog.text
+
+    def test_empty_list_returns_empty(self) -> None:
+        """Should return empty list when given an empty input."""
+        assert _validate_attendee_emails([]) == []
+
+    def test_invalid_attendees_excluded_from_api_body(self) -> None:
+        """_build_api_event_body should exclude invalid email entries via validation."""
+        frontmatter: dict[str, Any] = {
+            "summary": "Team Sync",
+            "start": "2026-03-25T10:00:00-05:00",
+            "end": "2026-03-25T11:00:00-05:00",
+            "attendees": ["valid@example.com", "not-an-email"],
+        }
+
+        event_body = _build_api_event_body(frontmatter, "")
+
+        assert event_body["attendees"] == [{"email": "valid@example.com"}]
 
 
 # ---------------------------------------------------------------------------

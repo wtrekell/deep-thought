@@ -14,6 +14,7 @@ from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING, Any
 
 from deep_thought.progress import track_items
+from deep_thought.todoist.create import _validate_priority
 from deep_thought.todoist.db.queries import (
     get_modified_tasks,
     get_project_ids_by_name,
@@ -119,7 +120,7 @@ def _build_update_kwargs(task: TaskLocal) -> dict[str, Any]:
     update_kwargs: dict[str, Any] = {
         "content": task.content,
         "description": task.description,
-        "priority": task.priority,
+        "priority": _validate_priority(task.priority),
         "labels": task.labels,
     }
 

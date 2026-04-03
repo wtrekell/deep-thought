@@ -18,7 +18,42 @@ _VALID_MODES = {"blog", "documentation", "direct"}
 
 @dataclass
 class CrawlConfig:
-    """Configuration for the web crawl behaviour."""
+    """Configuration for the web crawl behaviour.
+
+    Pagination fields
+    -----------------
+    These four fields control how index pages are expanded before their links
+    are extracted. They are active only in ``blog`` and ``documentation`` modes
+    (where index pages must be traversed to reach article URLs). They have no
+    effect on leaf-page fetches or in ``direct`` mode.
+
+    ``pagination``
+        Strategy to use when fetching index pages. One of:
+
+        - ``"none"`` (default) — fetch the page once and move on.
+        - ``"scroll"`` — repeatedly scroll to the bottom of the page to trigger
+          lazy-loaded content. Useful for infinite-scroll listing pages.
+        - ``"click"`` — repeatedly click a CSS-selected element (e.g. a "Load
+          more" button) to expand the page. Requires ``pagination_selector``.
+
+    ``pagination_selector``
+        A CSS selector string identifying the element to click when
+        ``pagination`` is ``"click"``. Ignored for other strategies.
+        Must be set when ``pagination == "click"``; validated at startup.
+
+    ``pagination_wait``
+        Seconds to wait after each scroll or click iteration before reading
+        the updated DOM. Increase this on slow sites or when content loads
+        asynchronously. Default: ``2.0``.
+
+    ``max_paginations``
+        Maximum number of scroll or click iterations to perform per index page.
+        Prevents unbounded loops on pages that never stop loading. Default: ``10``.
+
+    These fields are wired directly into ``WebCrawler.fetch_page_with_pagination()``
+    via ``CrawlerConfig``. The processor selects the pagination-aware fetch path
+    whenever ``pagination != "none"`` during ``_collect_article_urls()``.
+    """
 
     mode: str
     input_url: str | None

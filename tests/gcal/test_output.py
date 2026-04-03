@@ -13,12 +13,12 @@ from deep_thought.gcal.models import EventLocal
 from deep_thought.gcal.output import (
     _build_filename,
     _get_calendar_dir_name,
-    _slugify,
     delete_event_file,
     generate_event_markdown,
     get_event_files_for_calendar,
     write_event_file,
 )
+from deep_thought.text_utils import slugify as _slugify
 
 # ---------------------------------------------------------------------------
 # Helper to create a test EventLocal
@@ -62,7 +62,7 @@ def _make_test_event(
 
 
 class TestSlugify:
-    """Tests for _slugify."""
+    """Tests for the shared slugify function as used by the gcal tool."""
 
     def test_normal_text(self) -> None:
         """Should lowercase and replace spaces with hyphens."""
@@ -72,9 +72,9 @@ class TestSlugify:
         """Should replace non-alphanumeric characters with hyphens."""
         assert _slugify("Meeting: Q1 Review!") == "meeting-q1-review"
 
-    def test_empty_string(self) -> None:
-        """Should return 'no-title' for empty input."""
-        assert _slugify("") == "no-title"
+    def test_empty_string_with_no_title_fallback(self) -> None:
+        """Should return 'no-title' when empty_fallback is provided."""
+        assert _slugify("", empty_fallback="no-title") == "no-title"
 
     def test_truncation(self) -> None:
         """Should truncate to max_length."""
@@ -138,16 +138,34 @@ class TestGenerateEventMarkdown:
         result = generate_event_markdown(event)
         assert '\\"Important\\"' in result
 
-    def test_includes_attendees(self) -> None:
-        """Should include attendees in frontmatter when present."""
+    def test_includes_attendees_as_yaml_list(self) -> None:
+        """Should render attendees as a YAML list with email and optional display_name."""
         import json
 
         event = _make_test_event(
-            attendees=json.dumps([{"email": "colleague@example.com"}, {"email": "boss@example.com"}])
+            attendees=json.dumps(
+                [
+                    {"email": "colleague@example.com", "displayName": "Colleague"},
+                    {"email": "boss@example.com"},
+                ]
+            )
         )
         result = generate_event_markdown(event)
         assert "attendees:" in result
-        assert '"colleague@example.com"' in result
+        assert "  - email: colleague@example.com" in result
+        assert "    display_name: Colleague" in result
+        assert "  - email: boss@example.com" in result
+        # display_name line should not appear for an attendee without one
+        assert result.count("display_name:") == 1
+
+    def test_attendees_omits_display_name_when_absent(self) -> None:
+        """Should omit display_name key when displayName is empty or missing."""
+        import json
+
+        event = _make_test_event(attendees=json.dumps([{"email": "user@example.com"}]))
+        result = generate_event_markdown(event)
+        assert "  - email: user@example.com" in result
+        assert "display_name:" not in result
 
     def test_includes_recurrence(self) -> None:
         """Should include recurrence rules in frontmatter when present."""

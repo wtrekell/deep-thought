@@ -10,6 +10,8 @@ if TYPE_CHECKING:
 
     from deep_thought.research.models import ResearchResult
 
+from deep_thought.text_utils import slugify as _shared_slugify
+
 
 # ---------------------------------------------------------------------------
 # Markdown escaping
@@ -31,32 +33,6 @@ def _escape_markdown(text: str) -> str:
         The escaped string with ``\\`` prepended to each special character.
     """
     return _MARKDOWN_SPECIAL_CHARS_RE.sub(r"\\\1", text)
-
-
-# ---------------------------------------------------------------------------
-# Slug helpers
-# ---------------------------------------------------------------------------
-
-_NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
-_MAX_SLUG_LENGTH = 80
-
-
-def _slugify(text: str, max_length: int = _MAX_SLUG_LENGTH) -> str:
-    """Convert text to a filesystem-safe slug.
-
-    Lowercases, replaces non-alphanumeric runs with hyphens,
-    strips leading/trailing hyphens, and truncates.
-
-    Args:
-        text: The text to slugify.
-        max_length: Maximum slug length.
-
-    Returns:
-        A filesystem-safe slug, or "no-title" if the result is empty.
-    """
-    slug = _NON_ALNUM_RE.sub("-", text.lower()).strip("-")
-    slug = slug[:max_length].rstrip("-")
-    return slug if slug else "no-title"
 
 
 # ---------------------------------------------------------------------------
@@ -187,7 +163,7 @@ def write_research_file(content: str, output_dir: Path, result: ResearchResult) 
     """
     raw_date = result.processed_date[:10]  # "2026-03-24"
     date_prefix = raw_date[2:4] + raw_date[5:7] + raw_date[8:10]  # "260324"
-    query_slug = _slugify(result.query)
+    query_slug = _shared_slugify(result.query, empty_fallback="no-title")
     filename = f"{date_prefix}-{query_slug}.md"
 
     output_dir.mkdir(parents=True, exist_ok=True)

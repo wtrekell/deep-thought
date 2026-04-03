@@ -82,3 +82,10 @@ Outstanding issues from code reviews. Critical and high severity issues were res
 - Only `<img src>` is parsed. Modern pages use responsive image patterns.
 - **Recommendation:** Consider `srcset` extraction as a follow-up enhancement.
 - **Deferred:** This is a feature enhancement, not a bug fix. Implementing `srcset`/`<picture>` support requires parsing attribute syntax and resolving relative URLs, which is a meaningful scope addition. Tracked for a future enhancement cycle.
+
+### I-01: Pagination config fields are active only for index-page traversal (2026-04-02)
+
+- **Files:** `config.py`, `crawler.py`, `processor.py`
+- **Finding:** The four pagination fields (`pagination`, `pagination_selector`, `pagination_wait`, `max_paginations`) defined in `CrawlConfig` ARE wired into the crawl pipeline. They are used in `processor.py`'s `_collect_article_urls()` function, which calls `crawler.fetch_page_with_pagination()` whenever `config.crawl.pagination != "none"`.
+- **Scope limitation:** Pagination applies only to *index pages* during recursive URL collection (blog and documentation modes). Leaf-page fetches and `direct` mode always use the non-paginating `fetch_page()` path.
+- **Resolution:** Added a detailed docstring to `CrawlConfig` documenting what each pagination field does, which modes it applies to, and how the processor selects the pagination-aware code path. No fields were removed.

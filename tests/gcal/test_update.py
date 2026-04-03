@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from deep_thought.gcal.create import _validate_attendee_emails
 from deep_thought.gcal.update import _diff_event_fields, run_update
 
 if TYPE_CHECKING:
@@ -15,6 +16,40 @@ if TYPE_CHECKING:
 
 # Path to test fixture files
 _FIXTURES_DIR = Path(__file__).parent / "fixtures"
+
+
+# ---------------------------------------------------------------------------
+# TestValidateAttendeeEmailsInUpdate
+# ---------------------------------------------------------------------------
+
+
+class TestValidateAttendeeEmailsInUpdate:
+    """Ensure _validate_attendee_emails is exercised through _diff_event_fields."""
+
+    def test_invalid_attendee_emails_excluded_from_patch_body(self) -> None:
+        """_diff_event_fields should only pass valid emails to the patch body."""
+        frontmatter: dict[str, Any] = {
+            "summary": "Review",
+            "start": "2026-03-25T14:00:00-05:00",
+            "end": "2026-03-25T15:00:00-05:00",
+            "attendees": ["valid@example.com", "not-valid"],
+        }
+        existing_event: dict[str, Any] = {
+            "summary": "Review",
+            "start": {"dateTime": "2026-03-25T14:00:00-05:00"},
+            "end": {"dateTime": "2026-03-25T15:00:00-05:00"},
+            "attendees": None,
+        }
+
+        patch_body, fields_changed = _diff_event_fields(frontmatter, existing_event)
+
+        assert "attendees" in fields_changed
+        assert patch_body["attendees"] == [{"email": "valid@example.com"}]
+
+    def test_all_invalid_emails_results_in_none_attendees(self) -> None:
+        """When every entry is invalid, validated list is empty → new_attendees is None."""
+        result = _validate_attendee_emails(["no-at-sign", "also-bad"])
+        assert result == []
 
 
 # ---------------------------------------------------------------------------

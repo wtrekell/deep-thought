@@ -221,11 +221,14 @@ def _render_task_block(
         # Use assignee_id directly — no collaborator name table yet
         lines.append(f"{indent}  - assignee: {assignee_id}")
 
-    # Claude involvement marker
+    # Claude involvement marker — rendered as a YAML-structured block so the
+    # consumer can parse repo and branch without splitting an inline string.
     if config.claude.label and config.claude.label in label_list:
-        claude_repo = config.claude.repo or ""
+        lines.append(f"{indent}  - claude:")
+        if config.claude.repo:
+            lines.append(f"{indent}      repo: {config.claude.repo}")
         claude_branch = config.claude.branch or "main"
-        lines.append(f"{indent}  - claude: repo={claude_repo}, branch={claude_branch}")
+        lines.append(f"{indent}      branch: {claude_branch}")
 
     # Description
     description: str = task.get("description") or ""

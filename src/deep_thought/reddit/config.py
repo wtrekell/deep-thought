@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -89,6 +90,10 @@ def get_default_config_path() -> Path:
 
 _VALID_SORT_VALUES = {"new", "hot", "top", "rising"}
 _VALID_TIME_FILTER_VALUES = {"hour", "day", "week", "month", "year", "all"}
+
+# Rule names are used as subdirectory names within the output directory.
+# Restrict to alphanumerics, hyphens, and underscores to prevent path traversal.
+_SAFE_RULE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 def _parse_rule_config(raw_rule: dict[str, Any]) -> RuleConfig:
@@ -230,6 +235,12 @@ def validate_config(config: RedditConfig) -> list[str]:
         if rule.name in seen_rule_names:
             issues.append(f"Duplicate rule name: '{rule.name}'. Rule names must be unique.")
         seen_rule_names.add(rule.name)
+
+        if not _SAFE_RULE_NAME_PATTERN.match(rule.name):
+            issues.append(
+                f"Rule name '{rule.name}' contains unsafe characters. "
+                "Rule names may only contain alphanumerics, hyphens, and underscores."
+            )
 
         if rule.sort not in _VALID_SORT_VALUES:
             issues.append(

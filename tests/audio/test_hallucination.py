@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from deep_thought.audio.hallucination import (
     HallucinationScore,
+    _check_ngram_repetition_in_word_list,
     _normalize_text,
     apply_hallucination_detection,
     check_blocklist,
@@ -153,6 +154,78 @@ class TestRepetitionDetection:
         target_segment = _make_segment(text="Isolated segment.")
         result = detect_repetition(target_segment, [], threshold=3)
         assert result == 0.0
+
+    def test_detects_cross_segment_bigram_repetition_spanning_boundary(self) -> None:
+        """A bigram that spans the segment boundary (end of N, start of N+1) must flag.
+
+        Simulates "thank you for watching" split so that "thank you" ends one
+        segment and "for watching" starts the next. When the window contains
+        many such repetitions, the cross-segment combined word list must detect
+        them even though no individual segment contains the full repetition.
+        """
+        # Build a window where the bigram "thank you" appears across many
+        # consecutive segment boundaries. Each pair of adjacent segments
+        # contributes "thank you" to the cross-segment word list.
+        window_segments = [
+            _make_segment(text="thank you"),
+            _make_segment(text="thank you"),
+            _make_segment(text="thank you"),
+            _make_segment(text="thank you"),
+            _make_segment(text="thank you"),
+            _make_segment(text="thank you"),
+        ]
+        # Target segment contributes one more "thank you" to the combined list.
+        target_segment = _make_segment(text="thank you")
+        # threshold=3, window size=6, cross_segment_threshold = 3 * max(1, 6//2) = 9
+        # "thank you" appears 7 times total = 14 bigram occurrences? No —
+        # each "thank you" = 1 bigram per segment. 7 segments => 7 occurrences of the bigram.
+        # That meets threshold=3 for cross-segment with small window scaling.
+        # Use a small threshold to ensure the cross-segment path fires.
+        result = detect_repetition(target_segment, window_segments, threshold=2)
+        assert result == 1.0
+
+    def test_within_single_segment_repetition_still_detected(self) -> None:
+        """The existing within-segment bigram check must still fire after the refactor."""
+        # "go go" is a bigram that repeats many times within one segment
+        single_segment_text = "go go go go go go go"
+        target_segment = _make_segment(text=single_segment_text)
+        result = detect_repetition(target_segment, [], threshold=3)
+        assert result == 1.0
+
+
+# ---------------------------------------------------------------------------
+# TestNgramRepetitionHelper
+# ---------------------------------------------------------------------------
+
+
+class TestNgramRepetitionHelper:
+    def test_detects_repeated_bigram(self) -> None:
+        """A word list with a repeated bigram must return True."""
+        words = ["hello", "world", "hello", "world", "hello", "world"]
+        result = _check_ngram_repetition_in_word_list(words, threshold=3)
+        assert result is True
+
+    def test_detects_repeated_trigram(self) -> None:
+        """A word list with a repeated trigram must return True."""
+        words = ["one", "two", "three", "one", "two", "three", "one", "two", "three"]
+        result = _check_ngram_repetition_in_word_list(words, threshold=3)
+        assert result is True
+
+    def test_unique_words_return_false(self) -> None:
+        """A word list with no repeated n-grams must return False."""
+        words = ["alpha", "beta", "gamma", "delta", "epsilon", "zeta"]
+        result = _check_ngram_repetition_in_word_list(words, threshold=3)
+        assert result is False
+
+    def test_empty_word_list_returns_false(self) -> None:
+        """An empty word list must return False without error."""
+        result = _check_ngram_repetition_in_word_list([], threshold=3)
+        assert result is False
+
+    def test_single_word_returns_false(self) -> None:
+        """A single-word list cannot form any bigram or trigram."""
+        result = _check_ngram_repetition_in_word_list(["hello"], threshold=1)
+        assert result is False
 
 
 # ---------------------------------------------------------------------------

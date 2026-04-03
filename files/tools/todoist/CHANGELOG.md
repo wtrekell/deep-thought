@@ -2,6 +2,13 @@
 
 All notable changes to the Todoist Tool will be documented in this file.
 
+## 2026-04-02
+
+### Changed
+
+- Claude involvement block in exported markdown is now a structured YAML-style block (`- claude:` / `      repo: ...` / `      branch: ...`) instead of an inline comma-separated string. This makes repo and branch directly parseable without string splitting.
+- Priority values passed to the Todoist API (both `create` and `push`) are now validated through `_validate_priority`. Values outside 1–4 are clamped to 1 with a warning log rather than sending an invalid value to the API.
+
 ## [Unreleased]
 
 ### Added

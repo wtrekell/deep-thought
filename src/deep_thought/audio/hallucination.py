@@ -101,6 +101,33 @@ def _normalize_text(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _check_ngram_repetition_in_word_list(words: list[str], threshold: int) -> bool:
+    """Return True if any bigram or trigram appears >= threshold times in words.
+
+    Used both for within-segment checks and cross-segment window checks.
+
+    Args:
+        words: Pre-normalised, whitespace-split word list to scan.
+        threshold: Minimum occurrence count to consider repetitive.
+
+    Returns:
+        True if any bigram or trigram meets or exceeds the threshold, False otherwise.
+    """
+    if len(words) >= 2:
+        bigrams = [f"{words[i]} {words[i + 1]}" for i in range(len(words) - 1)]
+        bigram_counts = Counter(bigrams)
+        if any(count >= threshold for count in bigram_counts.values()):
+            return True
+
+    if len(words) >= 3:
+        trigrams = [f"{words[i]} {words[i + 1]} {words[i + 2]}" for i in range(len(words) - 2)]
+        trigram_counts = Counter(trigrams)
+        if any(count >= threshold for count in trigram_counts.values()):
+            return True
+
+    return False
+
+
 def detect_repetition(
     segment: TranscriptSegment,
     window_segments: list[TranscriptSegment],
@@ -108,7 +135,7 @@ def detect_repetition(
 ) -> float:
     """Detect repeated phrases using bigram and trigram matching.
 
-    Two checks are performed:
+    Three checks are performed:
 
     1. **Window repetition** — counts how many times the normalised text of
        ``segment`` appears verbatim among ``window_segments``. If the count
@@ -118,35 +145,53 @@ def detect_repetition(
        and checks whether any single n-gram appears more than ``threshold``
        times within the segment itself.
 
+    3. **Cross-segment n-gram repetition** — concatenates all window segment
+       texts (including the target segment) into a single word list and checks
+       whether any bigram or trigram appears at an elevated rate across the
+       entire window. The cross-segment threshold is scaled by window size so
+       that a phrase appearing once per segment in a large window does not
+       produce false positives: a n-gram must appear more than
+       ``threshold * max(1, len(window_segments) // 2)`` times to be flagged.
+       This catches hallucinations that span segment boundaries, such as
+       "thank you for watching" split across the end of one segment and the
+       start of the next.
+
     Args:
         segment: The segment being evaluated.
         window_segments: Surrounding segments used as the repetition window.
         threshold: Minimum occurrence count to flag as a hallucination.
+            Used directly for checks 1 and 2. For check 3 (cross-segment),
+            the threshold is scaled by half the window size to avoid false
+            positives on naturally varied speech.
 
     Returns:
         1.0 if repetition exceeds the threshold, 0.0 otherwise.
     """
     normalised_target = _normalize_text(segment.text)
 
-    # Check how many window segments share the same normalised text
+    # Check 1: How many window segments share the same normalised text
     window_match_count = sum(
         1 for window_segment in window_segments if _normalize_text(window_segment.text) == normalised_target
     )
     if window_match_count >= threshold:
         return 1.0
 
-    # Check for internal bigram and trigram repetition within the segment itself
-    words = normalised_target.split()
-    if len(words) >= 2:
-        bigrams = [f"{words[i]} {words[i + 1]}" for i in range(len(words) - 1)]
-        bigram_counts = Counter(bigrams)
-        if any(count >= threshold for count in bigram_counts.values()):
-            return 1.0
+    # Check 2: Internal bigram and trigram repetition within this segment alone
+    target_words = normalised_target.split()
+    if _check_ngram_repetition_in_word_list(target_words, threshold):
+        return 1.0
 
-    if len(words) >= 3:
-        trigrams = [f"{words[i]} {words[i + 1]} {words[i + 2]}" for i in range(len(words) - 2)]
-        trigram_counts = Counter(trigrams)
-        if any(count >= threshold for count in trigram_counts.values()):
+    # Check 3: Cross-segment n-gram repetition across the full window.
+    # Concatenate all segment texts (window + target) into one word list and
+    # look for any bigram or trigram that appears at a rate suggesting a
+    # hallucination phrase has been repeated across segment boundaries.
+    if window_segments:
+        all_window_texts = [_normalize_text(ws.text) for ws in window_segments] + [normalised_target]
+        combined_words = [word for text in all_window_texts for word in text.split()]
+        # Scale threshold by half the window size so a phrase must recur more
+        # densely than "once per two segments" before being flagged.
+        cross_segment_threshold = threshold * max(1, len(window_segments) // 2)
+        if _check_ngram_repetition_in_word_list(combined_words, cross_segment_threshold):
             return 1.0
 
     return 0.0

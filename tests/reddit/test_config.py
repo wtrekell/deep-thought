@@ -227,6 +227,31 @@ class TestValidateConfig:
         issues = validate_config(config)
         assert any("limit" in issue for issue in issues)
 
+    def test_rule_name_with_path_traversal_produces_issue(self) -> None:
+        """A rule name containing path separators must produce a validation issue.
+
+        Rule names are used as subdirectory names. A name like '../../evil' or
+        'my/rule' could escape the output directory when joined to a base path.
+        """
+        config = _make_minimal_config()
+        config.rules[0].name = "../../evil"
+        issues = validate_config(config)
+        assert any("unsafe characters" in issue for issue in issues)
+
+    def test_rule_name_with_slash_produces_issue(self) -> None:
+        """A rule name containing a forward slash must produce a validation issue."""
+        config = _make_minimal_config()
+        config.rules[0].name = "my/rule"
+        issues = validate_config(config)
+        assert any("unsafe characters" in issue for issue in issues)
+
+    def test_rule_name_with_alphanumerics_and_hyphens_is_valid(self) -> None:
+        """A rule name using only alphanumerics, hyphens, and underscores must be valid."""
+        config = _make_minimal_config()
+        config.rules[0].name = "valid-rule_name123"
+        issues = validate_config(config)
+        assert not any("unsafe characters" in issue for issue in issues)
+
 
 # ---------------------------------------------------------------------------
 # get_credentials

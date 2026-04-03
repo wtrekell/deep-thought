@@ -11,8 +11,8 @@ from deep_thought.gmail.models import (
     SendResult,
     _extract_header,
     _parse_email_address,
-    _slugify_subject,
 )
+from deep_thought.text_utils import slugify as _slugify_subject
 
 from .conftest import make_mock_message
 

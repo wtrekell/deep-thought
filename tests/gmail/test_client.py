@@ -714,3 +714,34 @@ class TestGmailClientGetRawMessageMissingField:
 
         with pytest.raises(ValueError, match="no 'raw' field"):
             client.get_raw_message("msg_001")
+
+
+# ---------------------------------------------------------------------------
+# Service init guard
+# ---------------------------------------------------------------------------
+
+
+class TestGmailClientServiceInitGuard:
+    """Tests that _execute raises RuntimeError when authenticate() was never called."""
+
+    @pytest.mark.error_handling
+    def test_execute_raises_before_authenticate(self) -> None:
+        """Calling _execute before authenticate() must raise RuntimeError.
+
+        GmailClient stores _service as None until authenticate() is called.
+        Any attempt to make an API call before authentication should fail with
+        a clear error message rather than a cryptic AttributeError.
+        """
+        from deep_thought.gmail.client import GmailClient
+
+        client = GmailClient(
+            credentials_path="/fake/credentials.json",
+            token_path="/fake/token.json",
+            scopes=["https://mail.google.com/"],
+        )
+        # _service is None at construction time — authenticate() was never called.
+        assert client._service is None
+
+        fake_request = MagicMock()
+        with pytest.raises(RuntimeError, match="authenticate\\(\\)"):
+            client._execute(fake_request)

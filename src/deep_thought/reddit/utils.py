@@ -6,15 +6,16 @@ processor.py, and llms.py. Centralised here to avoid duplication.
 
 from __future__ import annotations
 
-import re
 from typing import Any
+
+from deep_thought.text_utils import slugify as _shared_slugify
 
 
 def slugify_title(title: str, max_length: int = 80) -> str:
     """Convert a post title to a filesystem-safe slug.
 
-    Lowercases, replaces non-alphanumeric characters with hyphens, collapses
-    repeated hyphens, and strips leading/trailing hyphens.
+    Delegates to ``deep_thought.text_utils.slugify`` with ``max_length=80``.
+    Kept here for backward compatibility with callers that import from this module.
 
     Args:
         title: The raw post title string.
@@ -23,10 +24,7 @@ def slugify_title(title: str, max_length: int = 80) -> str:
     Returns:
         A cleaned slug suitable for use in a filename or link.
     """
-    slug = title.lower()
-    slug = re.sub(r"[^a-z0-9]+", "-", slug)
-    slug = slug.strip("-")
-    return slug[:max_length] if len(slug) > max_length else slug
+    return _shared_slugify(title, max_length=max_length)
 
 
 def get_author_name(author_object: Any) -> str:
