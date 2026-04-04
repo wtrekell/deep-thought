@@ -14,26 +14,26 @@ import uuid
 from typing import Any
 
 COLLECTION_NAME: str = "deep_thought_documents"
-EMBEDDING_MODEL_ID: str = "mlx-community/bge-small-en-v1.5-mlx"
+EMBEDDING_MODEL_ID: str = "mlx-community/bge-small-en-v1.5-bf16"
 VECTOR_DIMENSIONS: int = 384
 
 
 def create_embedding_model() -> Any:
     """Load the MLX embedding model used for all document vectorization.
 
-    Returns the model object that should be passed to :func:`embed_text`
-    and :func:`write_embedding` for generating vectors.
+    Returns a ``(model, tokenizer)`` tuple that should be passed to
+    :func:`embed_text` and :func:`write_embedding` for generating vectors.
 
     Returns:
-        The loaded MLX embedding model instance.
+        A tuple of ``(model, tokenizer)`` for the configured embedding model.
 
     Raises:
         ImportError: If the ``mlx-embeddings`` package is not installed.
     """
     import mlx_embeddings
 
-    embedding_model: Any = mlx_embeddings.load(EMBEDDING_MODEL_ID)
-    return embedding_model
+    embedding_model_and_tokenizer: Any = mlx_embeddings.load(EMBEDDING_MODEL_ID)
+    return embedding_model_and_tokenizer
 
 
 def create_qdrant_client(host: str = "localhost", port: int = 6333) -> Any:
@@ -57,16 +57,21 @@ def embed_text(text: str, model: Any) -> list[float]:
 
     Args:
         text: The text content to embed.
-        model: The MLX embedding model returned by :func:`create_embedding_model`.
+        model: The ``(model, tokenizer)`` tuple returned by
+            :func:`create_embedding_model`.
 
     Returns:
         A list of floats representing the embedding vector with
         :data:`VECTOR_DIMENSIONS` elements.
     """
-    import mlx_embeddings
+    import mlx.core as mx
+    from mlx_embeddings.utils import prepare_inputs
 
-    embeddings: Any = mlx_embeddings.embed(model, [text])
-    embedding_vector: list[float] = embeddings[0].tolist()
+    mlx_model, tokenizer = model
+    inputs: Any = prepare_inputs(tokenizer, None, [text], 512, True, True)
+    output: Any = mlx_model(**inputs)
+    last_hidden_state: Any = output.last_hidden_state[0]
+    embedding_vector: list[float] = mx.mean(last_hidden_state, axis=0).tolist()
     return embedding_vector
 
 
