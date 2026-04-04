@@ -11,7 +11,7 @@ be imported without requiring mlx-embeddings or qdrant-client to be installed.
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, cast
 
 COLLECTION_NAME: str = "deep_thought_documents"
 EMBEDDING_MODEL_ID: str = "mlx-community/bge-small-en-v1.5-bf16"
@@ -71,7 +71,7 @@ def embed_text(text: str, model: Any) -> list[float]:
     inputs: Any = prepare_inputs(tokenizer, None, [text], 512, True, True)
     output: Any = mlx_model(**inputs)
     last_hidden_state: Any = output.last_hidden_state[0]
-    embedding_vector: list[float] = mx.mean(last_hidden_state, axis=0).tolist()
+    embedding_vector: list[float] = cast(list[float], mx.mean(last_hidden_state, axis=0).tolist())
     return embedding_vector
 
 
