@@ -32,6 +32,19 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
+# Obsidian
+.obsidian/
+
+# Jupyter
+.ipynb_checkpoints
+
+# Binary files
+*.pdf
+*.pxd
+
+# Vale (downloaded packages)
+.vale/styles/
+
 # IDE
 .vscode/
 .idea/

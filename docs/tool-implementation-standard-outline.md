@@ -1,8 +1,103 @@
 # Tool Implementation Standard — Outline
 
-> **Note:** This outline was written from the Todoist perspective and applies a one-size-fits-all approach. It has been superseded by the tool taxonomy in [`05-tools/spec/260402-tooling-evolution.md`](../05-tools/spec/260402-tooling-evolution.md), which defines Collector, Bidirectional Collector, Converter, and Generative tool types — each with different DB, sync, and embedding requirements. Read that document first when building a new tool.
-
 Expanded document to standardize future tool builds in deep-thought.
+
+---
+
+## Tool Taxonomy
+
+All tools in the deep-thought namespace fall into one of four types. Identify the type before writing requirements — it determines which sections of this outline apply.
+
+### Collector
+
+Periodically fetches content from an external source. Tracks what has been seen to avoid reprocessing. No write-back to the source.
+
+Examples: Reddit, Web, Stack Exchange, YouTube, Gmail, GCal (read-only mode), Audio
+
+| Attribute | Value |
+|---|---|
+| State DB | Yes — flat state tracking table, not relational |
+| Sync direction | Read-only |
+| Embeddings | Yes, if the content is knowledge (informs Claude's reasoning). No, if the content is operational or personal (Gmail, GCal). |
+
+### Bidirectional Collector
+
+A collector that can also write back to the source. Requires full relational schema, sync semantics, and conflict detection.
+
+Examples: Todoist, GCal (create/update/delete)
+
+| Attribute | Value |
+|---|---|
+| State DB | Yes — relational, multiple tables, sync state tracking |
+| Sync direction | Read + write |
+| Embeddings | No — operational/personal data, not knowledge content |
+
+### Converter
+
+Processes input you explicitly provide (files, URLs). Does not poll for new content. No state needed — if you give it the same input again, it just converts again.
+
+Examples: File-txt, Audio (one-off conversion mode)
+
+| Attribute | Value |
+|---|---|
+| State DB | No |
+| Sync direction | None — triggered by explicit input |
+| Embeddings | No |
+
+### Generative
+
+Creates output via an external API from a prompt or spec. Tracks what has been generated to support idempotency and avoid re-generating identical output.
+
+Examples: Krea, ElevenLabs, APNG
+
+| Attribute | Value |
+|---|---|
+| State DB | Yes — flat table keyed by a hash of the generation parameters |
+| Sync direction | Write-only (to external API) |
+| Embeddings | No — tracks output, not knowledge content |
+
+### Which Tools Write to the Embedding Store
+
+Only collectors that produce knowledge content write embeddings to Qdrant. The distinction is whether the content is meant to inform Claude's reasoning about a topic versus tracking personal, operational, or generated output.
+
+| Tool | Type | State DB | Embeddings |
+|---|---|---|---|
+| Reddit | Collector | Yes | Yes |
+| Web | Collector | Yes | Yes |
+| Stack Exchange | Collector | Yes | Yes |
+| Research | Collector (stateless) | No | Yes |
+| Gmail | Collector | Yes | No |
+| GCal | Bidirectional | Yes | No |
+| Todoist | Bidirectional | Yes | No |
+| YouTube | Collector | Yes | TBD |
+| Audio | Converter / Collector | Conditional | No |
+| File-txt | Converter | No | No |
+| Krea | Generative | Yes | No |
+| ElevenLabs | Generative | Yes | No |
+
+---
+
+## Section Applicability by Tool Type
+
+Not every section below applies to every tool type. Use this matrix to determine which sections are relevant.
+
+| Section | Collector | Bidirectional | Converter | Generative |
+|---|---|---|---|---|
+| 1. Planning | ✓ | ✓ | ✓ | ✓ |
+| 2. Project Structure | ✓ | ✓ | ✓ | ✓ |
+| 3. Configuration | ✓ | ✓ | ✓ | ✓ |
+| 4. Data Models | ✓ | ✓ | ✓ | ✓ |
+| 5. Database Layer | Flat only | Relational | — | Flat only |
+| 6. API Client | ✓ | ✓ | If needed | ✓ |
+| 7. Sync Operations | — | ✓ | — | — |
+| 8. Filtering | ✓ | ✓ | — | — |
+| 9. Export | ✓ | ✓ | ✓ | — |
+| 10. CLI | ✓ | ✓ | ✓ | ✓ |
+| 11. Error Handling | ✓ | ✓ | ✓ | ✓ |
+| 12. Type Safety | ✓ | ✓ | ✓ | ✓ |
+| 13. Testing | ✓ | ✓ | ✓ | ✓ |
+| 14. Embeddings | Knowledge collectors only | — | — | — |
+| 15. Documentation | ✓ | ✓ | ✓ | ✓ |
 
 ---
 
@@ -66,13 +161,19 @@ Expanded document to standardize future tool builds in deep-thought.
 
 ## 5. Database Layer
 
+> **Collector / Generative:** Use a flat single-table schema — one row per tracked item, keyed by a stable ID (Collectors) or a hash of generation parameters (Generative). No foreign keys, no cascading deletes, no relational complexity.
+>
+> **Bidirectional Collector:** Use a full relational schema with multiple entity tables, foreign keys, and sync state tracking as described below.
+>
+> **Converter:** No database layer.
+
 - Use SQLite with WAL mode and foreign keys
 - Store all IDs as TEXT (API string IDs)
-- Include `created_at` and `updated_at` on all tables; add `synced_at` only for API sync tools
+- Include `created_at` and `updated_at` on all tables; add `synced_at` only for bidirectional sync tools
 - Use `INSERT OR REPLACE` for upsert operations
 - Set `synced_at` locally on API sync; preserve API timestamps
-- Add indexes on all foreign key columns
-- Use cascading deletes for referential integrity
+- Add indexes on all foreign key columns (relational schemas only)
+- Use cascading deletes for referential integrity (relational schemas only)
 - Track schema version in a key-value table
 - Apply migrations sequentially by numeric prefix
 - Locate database at `data/<tool>/<tool>.db` (underscored path, consistent with `DEEP_THOUGHT_DATA_DIR` override)
@@ -86,6 +187,8 @@ Expanded document to standardize future tool builds in deep-thought.
 - Store SDK instance as private attribute
 
 ## 7. Sync Operations
+
+> **Bidirectional Collector only.** Collectors use a simpler fetch-and-store loop; Converters and Generative tools have no sync concept.
 
 - Pull: API to local models to DB
 - Push: modified DB rows to API
@@ -156,7 +259,19 @@ Expanded document to standardize future tool builds in deep-thought.
 - Include `conftest.py` for shared fixtures in each test directory
 - Store test data files in `tests/<tool>/fixtures/`
 
-## 14. Documentation
+## 14. Embeddings
+
+> **Knowledge collectors only** (Reddit, Web, Stack Exchange, Research). All other tool types skip this section.
+
+- Add a `embeddings.py` module to the tool's package (`src/deep_thought/<tool>/embeddings.py`)
+- Call `write_embedding()` from `src/deep_thought/embeddings.py` (shared infrastructure) after each successful markdown write
+- Embedding failures are isolated: log as a warning and continue — documents exist on disk regardless of embedding outcome
+- The shared infrastructure handles model init, Qdrant client init, and `strip_frontmatter()` — the per-tool module only needs to call `write_embedding()` with the right payload fields
+- Collection: `deep_thought_documents` (384-dim COSINE, 6 indexed payload fields — see `files/tools/embeddings/260402-qdrant-schema.md`)
+- Embedding model: `mlx-community/bge-small-en-v1.5-mlx` via `mlx-embeddings` (`[embeddings]` optional extra)
+- Install with `uv sync --extra embeddings`; Qdrant runs as a persistent local binary service
+
+## 15. Documentation
 
 - Write requirements doc before implementation
 - Document API model reference for SDK entities; link to official SDK documentation in requirements
