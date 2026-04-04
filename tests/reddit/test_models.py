@@ -30,6 +30,7 @@ def _make_self_post() -> MagicMock:
         num_comments=15,
         url="https://www.reddit.com/r/python/comments/abc123/",
         is_self=True,
+        upvote_ratio=0.95,
     )
 
 
@@ -132,6 +133,7 @@ class TestCollectedPostLocalFromSubmission:
         assert post.title == "How to use asyncio"
         assert post.author == "dev_user"
         assert post.score == 200
+        assert post.upvote_ratio == 0.95
         assert post.comment_count == 15
         assert post.url == "https://www.reddit.com/r/python/comments/abc123/"
         assert post.is_video == 0
@@ -244,6 +246,7 @@ class TestCollectedPostLocalToDict:
             "title",
             "author",
             "score",
+            "upvote_ratio",
             "comment_count",
             "url",
             "is_video",

@@ -205,7 +205,6 @@ def cmd_config(args: argparse.Namespace) -> None:
     print(f"  user_agent_env:      {config.user_agent_env}")
     print(f"  max_posts_per_run:   {config.max_posts_per_run}")
     print(f"  output_dir:          {config.output_dir}")
-    print(f"  generate_llms_files: {config.generate_llms_files}")
     print()
     print(f"  rules ({len(config.rules)} configured):")
     for rule in config.rules:

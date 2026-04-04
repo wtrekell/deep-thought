@@ -92,11 +92,17 @@ def _build_frontmatter(
     lines.append(f'title: "{escaped_title}"')
     lines.append(f"author: u/{author_name}")
     lines.append(f"score: {submission.score}")
+    lines.append(f"upvote_ratio: {float(getattr(submission, 'upvote_ratio', 0.0)):.3f}")
     lines.append(f"num_comments: {submission.num_comments}")
     escaped_url = (
         str(submission.url).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
     )
     lines.append(f'url: "{escaped_url}"')
+    permalink_url = f"https://reddit.com{submission.permalink}"
+    escaped_permalink = (
+        str(permalink_url).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r")
+    )
+    lines.append(f'permalink: "{escaped_permalink}"')
     lines.append(f"is_video: {str(is_video).lower()}")
     if flair_text is not None:
         escaped_flair = (

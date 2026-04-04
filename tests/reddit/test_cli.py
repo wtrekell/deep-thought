@@ -38,7 +38,6 @@ def minimal_config() -> RedditConfig:
         user_agent_env="REDDIT_USER_AGENT",
         max_posts_per_run=100,
         output_dir="data/reddit/export/",
-        generate_llms_files=False,
         rules=[
             RuleConfig(
                 name="test_rule",
@@ -57,6 +56,9 @@ def minimal_config() -> RedditConfig:
                 max_comment_depth=3,
                 max_comments=200,
                 include_images=False,
+                exclude_stickied=False,
+                exclude_locked=False,
+                replace_more_limit=32,
             )
         ],
     )

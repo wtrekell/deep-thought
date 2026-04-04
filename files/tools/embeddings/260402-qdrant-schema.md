@@ -6,6 +6,73 @@
 
 ---
 
+## 0. Collection Setup
+
+### Server prerequisites
+
+The Qdrant server (v1.17.1) runs as a macOS LaunchAgent and starts automatically at login. Binary is at `~/bin/qdrant`, storage at `~/qdrant_storage`, logs at `~/qdrant_storage/qdrant.log`.
+
+To manage the service manually:
+
+```bash
+launchctl start com.williamtrekell.qdrant   # start
+launchctl stop com.williamtrekell.qdrant    # stop
+launchctl list | grep qdrant                # check status
+```
+
+The LaunchAgent plist is at `~/Library/LaunchAgents/com.williamtrekell.qdrant.plist`. The `qdrant-client` Python package (v1.17.1) must match the server's minor version — install via `uv sync --extra embeddings`.
+
+### Collection initialization
+
+The `deep_thought_documents` collection must be created before any tool can write embeddings. There is no auto-creation — `write_embedding()` calls `upsert()` directly and will fail if the collection does not exist.
+
+Run this once on a fresh Qdrant instance:
+
+```bash
+uv run python - <<'EOF'
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, VectorParams, PayloadSchemaType
+
+client = QdrantClient(host="localhost", port=6333)
+
+client.create_collection(
+    collection_name="deep_thought_documents",
+    vectors_config=VectorParams(size=384, distance=Distance.COSINE),
+)
+
+indexed_fields = {
+    "output_path":    PayloadSchemaType.KEYWORD,
+    "source_tool":    PayloadSchemaType.KEYWORD,
+    "source_type":    PayloadSchemaType.KEYWORD,
+    "rule_name":      PayloadSchemaType.KEYWORD,
+    "collected_date": PayloadSchemaType.DATETIME,
+    "title":          PayloadSchemaType.KEYWORD,
+    "mode":           PayloadSchemaType.KEYWORD,
+}
+
+for field, schema in indexed_fields.items():
+    client.create_payload_index(
+        collection_name="deep_thought_documents",
+        field_name=field,
+        field_schema=schema,
+    )
+
+print("Collection and payload indexes created.")
+EOF
+```
+
+This is a one-time operation. Running it again on an existing collection will raise `UnexpectedResponse` — that is safe to ignore if you know the collection already exists. To check:
+
+```bash
+uv run python -c "
+from qdrant_client import QdrantClient
+c = QdrantClient(host='localhost', port=6333)
+print(c.get_collection('deep_thought_documents'))
+"
+```
+
+---
+
 ## 1. Collection Overview
 
 | Property | Value |
@@ -17,6 +84,8 @@
 | Embedding model | `mlx-community/bge-small-en-v1.5-mlx` |
 | Qdrant host | `localhost` |
 | Qdrant port | `6333` |
+| Qdrant server version | `1.17.1` |
+| qdrant-client version | `1.17.1` |
 
 The collection is shared across all tools. There is one collection, not one per tool. Tool identity is carried in the `source_tool` payload field and filtered at query time.
 
@@ -38,6 +107,7 @@ Every point stored in `deep_thought_documents` carries a payload. The fields bel
 | `post_id` | keyword | no | reddit | `1abcdef` |
 | `author` | keyword | no | reddit | `ferris_the_crab` |
 | `score` | integer | no | reddit | `842` |
+| `upvote_ratio` | float | no | reddit | `0.97` |
 | `comment_count` | integer | no | reddit | `134` |
 | `flair` | keyword | no | reddit | `Discussion` |
 | `url` | keyword | no | web, reddit | `https://www.reddit.com/r/rust/comments/1abcdef/` |
@@ -97,6 +167,7 @@ reddit_payload: dict[str, Any] = {
     "post_id": collected_post.post_id,
     "author": collected_post.author,
     "score": collected_post.score,
+    "upvote_ratio": collected_post.upvote_ratio,
     "comment_count": collected_post.comment_count,
     "url": collected_post.url,
     "word_count": collected_post.word_count,

@@ -36,6 +36,9 @@ class RuleConfig:
     max_comment_depth: int
     max_comments: int
     include_images: bool
+    exclude_stickied: bool
+    exclude_locked: bool
+    replace_more_limit: int | None  # None = expand all; 0 = skip all (old behavior)
 
 
 @dataclass
@@ -47,7 +50,6 @@ class RedditConfig:
     user_agent_env: str
     max_posts_per_run: int
     output_dir: str
-    generate_llms_files: bool
     rules: list[RuleConfig]
 
 
@@ -128,6 +130,9 @@ def _parse_rule_config(raw_rule: dict[str, Any]) -> RuleConfig:
     raw_exclude_flair = raw_rule.get("exclude_flair")
     exclude_flair: list[str] = list(raw_exclude_flair) if isinstance(raw_exclude_flair, list) else []
 
+    raw_replace_more = raw_rule.get("replace_more_limit", 32)
+    replace_more_limit: int | None = None if raw_replace_more is None else int(raw_replace_more)
+
     return RuleConfig(
         name=str(rule_name),
         subreddit=str(subreddit),
@@ -145,6 +150,9 @@ def _parse_rule_config(raw_rule: dict[str, Any]) -> RuleConfig:
         max_comment_depth=int(raw_rule.get("max_comment_depth", 3)),
         max_comments=int(raw_rule.get("max_comments", 200)),
         include_images=bool(raw_rule.get("include_images", False)),
+        exclude_stickied=bool(raw_rule.get("exclude_stickied", False)),
+        exclude_locked=bool(raw_rule.get("exclude_locked", False)),
+        replace_more_limit=replace_more_limit,
     )
 
 
@@ -197,7 +205,6 @@ def load_config(config_path: Path | None = None) -> RedditConfig:
         user_agent_env=str(raw_dict.get("user_agent_env", "REDDIT_USER_AGENT")),
         max_posts_per_run=int(raw_dict.get("max_posts_per_run", 500)),
         output_dir=str(raw_dict.get("output_dir", "data/reddit/export/")),
-        generate_llms_files=bool(raw_dict.get("generate_llms_files", False)),
         rules=rules,
     )
 
@@ -264,6 +271,11 @@ def validate_config(config: RedditConfig) -> list[str]:
 
         if rule.max_comments <= 0:
             issues.append(f"Rule '{rule.name}': max_comments must be > 0, got: {rule.max_comments}.")
+
+        if rule.replace_more_limit is not None and rule.replace_more_limit < 0:
+            issues.append(
+                f"Rule '{rule.name}': replace_more_limit must be >= 0 or null, got: {rule.replace_more_limit}."
+            )
 
     return issues
 

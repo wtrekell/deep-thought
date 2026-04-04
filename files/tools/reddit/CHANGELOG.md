@@ -4,6 +4,20 @@ All notable changes to the Reddit Tool will be documented in this file.
 
 ---
 
+## [0.1.4] — 2026-04-03
+
+### Added
+
+- `permalink` field to YAML frontmatter: full Reddit thread URL (`https://reddit.com{submission.permalink}`). Previously the `url` field held only the external link target (e.g., a YouTube video URL), making it impossible to navigate back to the original thread without manually constructing the URL.
+- `upvote_ratio` field to YAML frontmatter and SQLite `collected_posts` table: PRAW `float` representing the fraction of votes that are upvotes (e.g., `0.970`). DB migration `002_add_upvote_ratio.sql` adds the column (`REAL NOT NULL DEFAULT 0.0`) to existing databases. Also included in the Qdrant embedding payload.
+- `exclude_stickied` rule filter (default `false`): when `true`, skips mod-pinned posts. Implemented in `filters.py` as `passes_stickied_filter()`.
+- `exclude_locked` rule filter (default `false`): when `true`, skips locked posts. Locked posts cannot receive new comments, so the incremental update logic is wasted on them. Implemented in `filters.py` as `passes_locked_filter()`.
+- `replace_more_limit` rule config (default `32`): controls how many `MoreComments` placeholder nodes PRAW expands per post. `0` restores the previous skip-all behaviour; `null` expands every node (unlimited API calls). Previously hardcoded to `0`, which silently dropped a large share of comments on high-activity posts. Threaded through `client.get_comments()` and both call sites in `processor.py`.
+
+### Removed
+
+- `generate_llms_files` config option and `llms.py` module. The option existed in config but was never wired into the processor — setting it to `true` silently had no effect. Removed to eliminate dead configuration surface. `llms.py` and `tests/reddit/test_llms.py` deleted.
+
 ## [0.1.3] — 2026-04-01
 
 ### Added

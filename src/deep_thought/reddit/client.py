@@ -85,6 +85,7 @@ class RedditClient:
         submission: Any,
         max_depth: int,
         max_comments: int,
+        replace_more_limit: int | None = 32,
     ) -> list[Any]:
         """Fetch and flatten the comment tree for a submission.
 
@@ -95,6 +96,9 @@ class RedditClient:
             submission: A PRAW Submission object whose comments to fetch.
             max_depth: Maximum comment nesting depth to traverse.
             max_comments: Maximum number of total comments to return.
+            replace_more_limit: Maximum number of MoreComments nodes to expand.
+                None expands all nodes; 0 skips expansion entirely; any
+                positive integer limits expansion to that many nodes.
 
         Returns:
             A list of PRAW Comment objects, ordered depth-first.
@@ -105,7 +109,7 @@ class RedditClient:
                 backoff before retrying or continuing to the next post.
         """
         try:
-            submission.comments.replace_more(limit=0)
+            submission.comments.replace_more(limit=replace_more_limit)
         except prawcore.exceptions.TooManyRequests:
             raise  # let orchestration layer handle rate limits
         except Exception as replace_error:

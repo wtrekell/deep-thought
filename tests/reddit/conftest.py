@@ -66,6 +66,9 @@ def sample_rule_config() -> RuleConfig:
         max_comment_depth=2,
         max_comments=50,
         include_images=False,
+        exclude_stickied=False,
+        exclude_locked=False,
+        replace_more_limit=32,
     )
 
 
@@ -78,7 +81,6 @@ def sample_reddit_config(sample_rule_config: RuleConfig) -> RedditConfig:
         user_agent_env="REDDIT_USER_AGENT",
         max_posts_per_run=100,
         output_dir="data/reddit/export/",
-        generate_llms_files=False,
         rules=[sample_rule_config],
     )
 
@@ -115,6 +117,10 @@ def make_mock_submission(
     flair_text: str | None = None,
     created_utc: float | None = None,
     is_self: bool = True,
+    permalink: str | None = None,
+    upvote_ratio: float = 0.95,
+    stickied: bool = False,
+    locked: bool = False,
 ) -> MagicMock:
     """Return a mock PRAW Submission object with configurable attributes.
 
@@ -131,6 +137,11 @@ def make_mock_submission(
         flair_text: Link flair text, or None.
         created_utc: Unix timestamp of post creation. Defaults to one day ago.
         is_self: Whether this is a selfpost (text post).
+        permalink: Relative Reddit permalink (e.g. /r/python/comments/abc123/title/).
+                   Defaults to a synthetic permalink based on post_id.
+        upvote_ratio: Ratio of upvotes to total votes (0.0–1.0). Defaults to 0.95.
+        stickied: Whether the post is pinned/stickied by a mod.
+        locked: Whether the post has been locked and can no longer receive comments.
 
     Returns:
         A configured MagicMock representing a PRAW Submission.
@@ -146,6 +157,10 @@ def make_mock_submission(
     submission.link_flair_text = flair_text
     submission.is_self = is_self
     submission.name = f"t3_{post_id}"
+    submission.upvote_ratio = upvote_ratio
+    submission.stickied = stickied
+    submission.locked = locked
+    submission.permalink = permalink if permalink is not None else f"/r/{subreddit_name}/comments/{post_id}/test_title/"
 
     # created_utc defaults to roughly 24 hours ago
     submission.created_utc = created_utc if created_utc is not None else time.time() - 86400

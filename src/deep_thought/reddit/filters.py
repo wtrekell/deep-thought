@@ -164,6 +164,39 @@ def passes_flair_filter(
     return True
 
 
+def passes_stickied_filter(submission: Any, exclude_stickied: bool) -> bool:
+    """Check whether a submission passes the stickied exclusion filter.
+
+    Stickied posts are typically mod announcements pinned to the top of a
+    subreddit. When exclude_stickied is True, any stickied post is rejected.
+
+    Args:
+        submission: A PRAW Submission object with a stickied attribute.
+        exclude_stickied: If True, stickied posts do not pass.
+
+    Returns:
+        True if the submission passes the filter, False otherwise.
+    """
+    return not (exclude_stickied and bool(getattr(submission, "stickied", False)))
+
+
+def passes_locked_filter(submission: Any, exclude_locked: bool) -> bool:
+    """Check whether a submission passes the locked exclusion filter.
+
+    Locked posts cannot receive new comments, so the incremental update
+    logic (which re-fetches posts with rising comment counts) is wasted
+    on them. When exclude_locked is True, any locked post is rejected.
+
+    Args:
+        submission: A PRAW Submission object with a locked attribute.
+        exclude_locked: If True, locked posts do not pass.
+
+    Returns:
+        True if the submission passes the filter, False otherwise.
+    """
+    return not (exclude_locked and bool(getattr(submission, "locked", False)))
+
+
 # ---------------------------------------------------------------------------
 # Combined filter application
 # ---------------------------------------------------------------------------
@@ -204,6 +237,14 @@ def apply_rule_filters(
             submission.num_comments,
             rule_config.min_comments,
         )
+        return False
+
+    if not passes_stickied_filter(submission, rule_config.exclude_stickied):
+        logger.debug("Post %s failed stickied filter (stickied=True).", submission.id)
+        return False
+
+    if not passes_locked_filter(submission, rule_config.exclude_locked):
+        logger.debug("Post %s failed locked filter (locked=True).", submission.id)
         return False
 
     if not passes_age_filter(submission, rule_config.max_age_days):
