@@ -16,6 +16,7 @@
 
 ### Fixed
 
+- Added `_check_playwright_driver()` pre-flight check to `cmd_crawl()` — detects when `env.js` is missing from the Playwright bundled driver (a known `uv sync` install issue) and exits immediately with a clear error and the fix command (`uv pip install --reinstall playwright`) instead of the cryptic `Cannot find module './env'` Node.js error.
 - BFS graph broken on incremental re-crawls: when a cached page was skipped, its child links were never discovered, silently truncating the crawl tree at that node. Fixed by storing extracted child links as JSON in a new `child_links` column (migration `002_add_child_links.sql`) and implementing `_enqueue_children_from_db()` to re-enqueue them on cache hits without re-fetching the page. Pre-migration rows (`child_links` is `NULL`) are silently skipped at DEBUG level.
 
 ### Changed

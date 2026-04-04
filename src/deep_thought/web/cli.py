@@ -184,6 +184,30 @@ def _build_config_with_overrides(args: argparse.Namespace, config: WebConfig) ->
 # ---------------------------------------------------------------------------
 
 
+def _check_playwright_driver() -> None:
+    """Verify the Playwright driver is complete before attempting a crawl.
+
+    After ``uv sync``, the Playwright wheel occasionally leaves ``env.js``
+    missing from the bundled Node.js driver, causing every crawl to fail with
+    a cryptic ``Cannot find module './env'`` Node.js error rather than a clear
+    Python exception. This check surfaces the problem early with an actionable
+    message.
+
+    Raises:
+        SystemExit: If the driver file is missing.
+    """
+    import playwright
+
+    driver_env = Path(playwright.__file__).parent / "driver" / "package" / "lib" / "server" / "utils" / "env.js"
+    if not driver_env.exists():
+        print(
+            "ERROR: Playwright driver is incomplete (env.js missing).\n"
+            "Run: uv pip install --reinstall playwright",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
 def cmd_crawl(args: argparse.Namespace) -> None:
     """Crawl web pages and convert them to markdown.
 
@@ -194,6 +218,8 @@ def cmd_crawl(args: argparse.Namespace) -> None:
     Args:
         args: Parsed argparse namespace containing all crawl flags.
     """
+    _check_playwright_driver()
+
     save_config_path_str: str | None = getattr(args, "save_config", None)
     if save_config_path_str is not None:
         save_default_config(Path(save_config_path_str))
