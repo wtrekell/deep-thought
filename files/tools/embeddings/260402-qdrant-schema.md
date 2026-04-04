@@ -81,7 +81,7 @@ print(c.get_collection('deep_thought_documents'))
 | Vector dimensions | `384` |
 | Distance metric | `Cosine` |
 | Storage type | Dense |
-| Embedding model | `mlx-community/bge-small-en-v1.5-mlx` |
+| Embedding model | `mlx-community/bge-small-en-v1.5-bf16` |
 | Qdrant host | `localhost` |
 | Qdrant port | `6333` |
 | Qdrant server version | `1.17.1` |

@@ -237,7 +237,7 @@ Used by the **reddit**, **web**, and **research** tools to write document embedd
 
 ### mlx-embeddings
 
-Used by the **reddit**, **web**, and **research** tools to generate document embeddings on Apple Silicon. Loads `mlx-community/bge-small-en-v1.5-mlx` from HuggingFace. Optional — only required when running with embedding support enabled.
+Used by the **reddit**, **web**, and **research** tools to generate document embeddings on Apple Silicon. Loads `mlx-community/bge-small-en-v1.5-bf16` from HuggingFace. Optional — only required when running with embedding support enabled.
 
 - [GitHub](https://github.com/Blaizzy/mlx-embeddings)
 - Package: `mlx-embeddings>=0.1.0` (optional extra: `uv sync --extra embeddings`)

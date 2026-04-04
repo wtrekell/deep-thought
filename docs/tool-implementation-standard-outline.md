@@ -268,7 +268,7 @@ Not every section below applies to every tool type. Use this matrix to determine
 - Embedding failures are isolated: log as a warning and continue — documents exist on disk regardless of embedding outcome
 - The shared infrastructure handles model init, Qdrant client init, and `strip_frontmatter()` — the per-tool module only needs to call `write_embedding()` with the right payload fields
 - Collection: `deep_thought_documents` (384-dim COSINE, 6 indexed payload fields — see `files/tools/embeddings/260402-qdrant-schema.md`)
-- Embedding model: `mlx-community/bge-small-en-v1.5-mlx` via `mlx-embeddings` (`[embeddings]` optional extra)
+- Embedding model: `mlx-community/bge-small-en-v1.5-bf16` via `mlx-embeddings` (`[embeddings]` optional extra)
 - Install with `uv sync --extra embeddings`; Qdrant v1.17.1 runs as a persistent local binary service managed by a macOS LaunchAgent (`com.williamtrekell.qdrant`) — starts automatically at login, no manual startup required. Logs at `~/qdrant_storage/qdrant.log`.
 
 ## 15. Documentation
