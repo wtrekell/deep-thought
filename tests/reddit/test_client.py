@@ -277,7 +277,7 @@ class TestGetComments:
         submission.comments.replace_more.side_effect = _make_rate_limit_error(retry_after="5")
 
         with pytest.raises(prawcore.exceptions.TooManyRequests):
-            client.get_comments(submission, max_depth=2, max_comments=50)
+            client.get_comments(submission, max_depth=2, max_comments=50, replace_more_limit=0)
 
     @pytest.mark.error_handling
     def test_non_rate_limit_error_from_replace_more_logs_warning_and_returns_empty(
@@ -293,7 +293,29 @@ class TestGetComments:
         submission.comments.__iter__ = MagicMock(return_value=iter([]))
 
         with caplog.at_level(logging.WARNING, logger="deep_thought.reddit.client"):
-            result = client.get_comments(submission, max_depth=2, max_comments=50)
+            result = client.get_comments(submission, max_depth=2, max_comments=50, replace_more_limit=0)
 
         assert result == []
         assert any("abc123" in record.message for record in caplog.records)
+
+    def test_replace_more_called_with_provided_limit(self) -> None:
+        """replace_more() must be called with the replace_more_limit value provided to get_comments."""
+        client = self._make_client()
+        submission = MagicMock()
+        submission.id = "abc123"
+        submission.comments.__iter__ = MagicMock(return_value=iter([]))
+
+        client.get_comments(submission, max_depth=2, max_comments=50, replace_more_limit=10)
+
+        submission.comments.replace_more.assert_called_once_with(limit=10)
+
+    def test_replace_more_called_with_none_when_limit_is_none(self) -> None:
+        """replace_more() must be called with limit=None when replace_more_limit=None."""
+        client = self._make_client()
+        submission = MagicMock()
+        submission.id = "abc123"
+        submission.comments.__iter__ = MagicMock(return_value=iter([]))
+
+        client.get_comments(submission, max_depth=2, max_comments=50, replace_more_limit=None)
+
+        submission.comments.replace_more.assert_called_once_with(limit=None)

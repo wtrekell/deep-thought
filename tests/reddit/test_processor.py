@@ -52,6 +52,9 @@ def _make_rule_config(
         max_comment_depth=2,
         max_comments=50,
         include_images=False,
+        exclude_stickied=False,
+        exclude_locked=False,
+        replace_more_limit=0,
     )
 
 
@@ -63,7 +66,6 @@ def _make_reddit_config(rules: list[RuleConfig] | None = None) -> RedditConfig:
         user_agent_env="REDDIT_USER_AGENT",
         max_posts_per_run=100,
         output_dir="data/reddit/export/",
-        generate_llms_files=False,
         rules=rules or [_make_rule_config()],
     )
 

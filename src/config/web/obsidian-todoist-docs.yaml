@@ -1,0 +1,43 @@
+mode: "documentation"
+input_url: "https://jamiebrynes7.github.io/obsidian-todoist-plugin/docs/overview/"
+index_depth: 1
+min_article_words: 50
+max_depth: 4
+max_pages: 100
+js_wait: 1.0
+browser_channel: null
+headless: true
+stealth: false
+include_patterns:
+  # Only collect pages under /docs/ — excludes site root and other top-level paths
+  - 'https://jamiebrynes7\.github\.io/obsidian-todoist-plugin/docs/.*'
+exclude_patterns:
+  - '.*\.pdf$'
+  - '.*#.*'
+  - '.*\?.*'
+  - '.*login.*'
+  # Exclude pre-release and old versioned docs — only collect current docs
+  - '.*/docs/next/.*'
+  - '.*/docs/2\.\d+\.\d+/.*'
+unwrap_tags: []
+strip_boilerplate:
+  # Strip the entire pre-heading block: version selector, sidebar nav, GitHub link,
+  # breadcrumb, "Version: X.X.X", and "On this page" — everything before the first # heading
+  - '^.*?(?=\n# )'
+  # Strip the footer block: "Edit this page" link + Previous/Next nav + anchor TOC list
+  - '\n\[Edit this page\].*'
+  # Strip standalone Previous/Next nav on pages without an "Edit this page" link
+  - '\n(?:\[(?:Previous|Next)[^\]]*\]\(https://jamiebrynes7\.github\.io/obsidian-todoist-plugin/[^\)]*\))+'
+retry_attempts: 2
+retry_delay: 5.0
+changelog_url: null
+strip_path_prefix: "/obsidian-todoist-plugin/docs"
+strip_domain: true
+output_dir: "00-private/obsidian/todoist/"
+extract_images: false
+generate_llms_files: true
+llms_lookback_days: 30
+pagination: "none"
+pagination_selector: null
+pagination_wait: 2.0
+max_paginations: 10

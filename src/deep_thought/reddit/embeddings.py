@@ -56,6 +56,7 @@ def write_embedding(
         "post_id": post.post_id,
         "author": post.author,
         "score": post.score,
+        "upvote_ratio": post.upvote_ratio,
         "comment_count": post.comment_count,
         "url": post.url,
         "word_count": post.word_count,

@@ -39,6 +39,9 @@ def _make_rule_config(name: str = "test_rule", subreddit: str = "python") -> Rul
         max_comment_depth=2,
         max_comments=50,
         include_images=False,
+        exclude_stickied=False,
+        exclude_locked=False,
+        replace_more_limit=0,
     )
 
 

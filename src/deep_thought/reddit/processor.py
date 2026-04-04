@@ -153,6 +153,7 @@ def _process_single_post(
             submission,
             max_depth=rule_config.max_comment_depth,
             max_comments=rule_config.max_comments,
+            replace_more_limit=rule_config.replace_more_limit,
         )
     )
 
@@ -336,6 +337,7 @@ def process_rule(
                     submission,
                     max_depth=rule_config.max_comment_depth,
                     max_comments=rule_config.max_comments,
+                    replace_more_limit=rule_config.replace_more_limit,
                 )
 
             if not apply_rule_filters(submission, rule_config, pre_fetch_comments):

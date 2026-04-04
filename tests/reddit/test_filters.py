@@ -16,7 +16,9 @@ from deep_thought.reddit.filters import (
     passes_comment_filter,
     passes_flair_filter,
     passes_keyword_filter,
+    passes_locked_filter,
     passes_score_filter,
+    passes_stickied_filter,
 )
 from tests.reddit.conftest import make_mock_comment, make_mock_submission
 
@@ -34,6 +36,8 @@ def _make_rule_config(
     include_flair: list[str] | None = None,
     exclude_flair: list[str] | None = None,
     search_comments: bool = False,
+    exclude_stickied: bool = False,
+    exclude_locked: bool = False,
 ) -> RuleConfig:
     """Build a RuleConfig with sensible defaults for filter testing."""
     return RuleConfig(
@@ -53,6 +57,9 @@ def _make_rule_config(
         max_comment_depth=3,
         max_comments=50,
         include_images=False,
+        exclude_stickied=exclude_stickied,
+        exclude_locked=exclude_locked,
+        replace_more_limit=0,
     )
 
 
@@ -245,6 +252,64 @@ class TestPassesFlairFilter:
 
 
 # ---------------------------------------------------------------------------
+# passes_stickied_filter
+# ---------------------------------------------------------------------------
+
+
+class TestPassesStickiedFilter:
+    def test_stickied_post_fails_when_exclude_stickied_is_true(self) -> None:
+        """A stickied post must fail when exclude_stickied=True."""
+        submission = make_mock_submission(stickied=True)
+        assert passes_stickied_filter(submission, exclude_stickied=True) is False
+
+    def test_stickied_post_passes_when_exclude_stickied_is_false(self) -> None:
+        """A stickied post must pass when exclude_stickied=False (no exclusion applied)."""
+        submission = make_mock_submission(stickied=True)
+        assert passes_stickied_filter(submission, exclude_stickied=False) is True
+
+    def test_non_stickied_post_always_passes(self) -> None:
+        """A non-stickied post must pass regardless of the exclude_stickied setting."""
+        submission = make_mock_submission(stickied=False)
+        assert passes_stickied_filter(submission, exclude_stickied=True) is True
+
+    def test_missing_stickied_attribute_treated_as_not_stickied(self) -> None:
+        """If the submission has no stickied attribute, it should pass even when exclude_stickied=True."""
+        from unittest.mock import MagicMock
+
+        submission = MagicMock(spec=[])  # no attributes
+        assert passes_stickied_filter(submission, exclude_stickied=True) is True
+
+
+# ---------------------------------------------------------------------------
+# passes_locked_filter
+# ---------------------------------------------------------------------------
+
+
+class TestPassesLockedFilter:
+    def test_locked_post_fails_when_exclude_locked_is_true(self) -> None:
+        """A locked post must fail when exclude_locked=True."""
+        submission = make_mock_submission(locked=True)
+        assert passes_locked_filter(submission, exclude_locked=True) is False
+
+    def test_locked_post_passes_when_exclude_locked_is_false(self) -> None:
+        """A locked post must pass when exclude_locked=False (no exclusion applied)."""
+        submission = make_mock_submission(locked=True)
+        assert passes_locked_filter(submission, exclude_locked=False) is True
+
+    def test_non_locked_post_always_passes(self) -> None:
+        """A non-locked post must pass regardless of the exclude_locked setting."""
+        submission = make_mock_submission(locked=False)
+        assert passes_locked_filter(submission, exclude_locked=True) is True
+
+    def test_missing_locked_attribute_treated_as_not_locked(self) -> None:
+        """If the submission has no locked attribute, it should pass even when exclude_locked=True."""
+        from unittest.mock import MagicMock
+
+        submission = MagicMock(spec=[])  # no attributes
+        assert passes_locked_filter(submission, exclude_locked=True) is True
+
+
+# ---------------------------------------------------------------------------
 # apply_rule_filters (combined)
 # ---------------------------------------------------------------------------
 
@@ -285,6 +350,18 @@ class TestApplyRuleFilters:
         """A post without any included keyword should fail the combined filter."""
         submission = make_mock_submission(title="Unrelated post about cats", score=100, num_comments=10)
         rule_config = _make_rule_config(include_keywords=["asyncio"])
+        assert apply_rule_filters(submission, rule_config) is False
+
+    def test_fails_stickied_filter(self) -> None:
+        """A stickied post should fail the combined filter when exclude_stickied=True."""
+        submission = make_mock_submission(score=100, num_comments=10, stickied=True)
+        rule_config = _make_rule_config(exclude_stickied=True)
+        assert apply_rule_filters(submission, rule_config) is False
+
+    def test_fails_locked_filter(self) -> None:
+        """A locked post should fail the combined filter when exclude_locked=True."""
+        submission = make_mock_submission(score=100, num_comments=10, locked=True)
+        rule_config = _make_rule_config(exclude_locked=True)
         assert apply_rule_filters(submission, rule_config) is False
 
     @pytest.mark.error_handling

@@ -1,0 +1,38 @@
+mode: "documentation"
+input_url: "https://publish.obsidian.md/git-doc/Start+here"
+index_depth: 1
+min_article_words: 100
+max_depth: 4
+max_pages: 100
+js_wait: 1.0
+browser_channel: null
+headless: true
+stealth: false
+
+# Only collect pages under the /git-doc/ path — blocks Obsidian marketing site from leaking in
+include_patterns:
+  - 'https://publish\.obsidian\.md/git-doc/.*'
+
+exclude_patterns:
+  - '.*\.pdf$'
+  - '.*#.*'
+  - '.*\?.*'
+  - '.*login.*'
+
+strip_boilerplate:
+  # Sidebar nav rendered twice at the top of every page (Obsidian Publish artifact)
+  - '(?:(?:\*{1,2}[^\n]+\*{0,2}|[^\n]+)\n){1,50}(?=# )'
+  # Raw YAML aliases block rendered into page bodies
+  - '---\naliases:.*?---\n'
+  # Footer block: "Links to this page / Interactive graph / On this page"
+  - '\nLinks to this page.*'
+
+retry_attempts: 2
+retry_delay: 5.0
+changelog_url: null
+strip_path_prefix: "/git-doc"
+strip_domain: true
+output_dir: "00-private/obsidian/git/"
+extract_images: false
+generate_llms_files: true
+llms_lookback_days: 30

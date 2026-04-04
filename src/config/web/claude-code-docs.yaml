@@ -1,0 +1,38 @@
+mode: "documentation"
+input_url: "https://code.claude.com/docs/en/overview"
+index_depth: 1
+min_article_words: 100
+max_depth: 4
+max_pages: 100
+js_wait: 1.0
+browser_channel: null
+headless: true
+stealth: false
+
+include_patterns:
+  - '.*/docs/en/.*'
+
+exclude_patterns:
+  - '.*\.pdf$'
+  - '.*#.*'
+  - '.*\?.*'
+  - '.*login.*'
+
+strip_boilerplate:
+  # Mintlify header: "Skip to main content" through the full sidebar nav and "On this page" TOC,
+  # ending at the blank line just before the page section label (e.g. "Getting started\n\n# Title")
+  - 'Skip to main content.*?(?=\n[A-Z][^\n]*\n\n# )'
+  # "Copy page" button artifact -- appears twice per page immediately after the heading
+  - '\nCopy page\n'
+  # Mintlify footer: "Was this page helpful?" through the end of the document
+  - '\nWas this page helpful\?.*'
+
+retry_attempts: 2
+retry_delay: 5.0
+changelog_url: null
+strip_path_prefix: "/docs/en"
+strip_domain: true
+output_dir: "00-private/claude-code/"
+extract_images: false
+generate_llms_files: true
+llms_lookback_days: 30

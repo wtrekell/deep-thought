@@ -1,0 +1,34 @@
+mode: "documentation"
+input_url: "https://github.com/jsonMartin/readwise-mirror/wiki"
+index_depth: 1
+min_article_words: 50
+max_depth: 2
+max_pages: 50
+js_wait: 1.0
+browser_channel: null
+headless: true
+stealth: false
+include_patterns:
+  # Only collect pages within the readwise-mirror wiki — prevents GitHub site-wide crawl
+  - 'https://github\.com/jsonMartin/readwise-mirror/wiki.*'
+
+exclude_patterns:
+  - '.*\.pdf$'
+  - '.*#.*'
+  - '.*\?.*'
+  - '.*login.*'
+  # GitHub wiki action links — edit, history, new page, compare revisions
+  - '.*/wiki/.*/_edit$'
+  - '.*/wiki/.*/_history$'
+  - '.*/wiki/.*/_new$'
+  - '.*/wiki/.*/_compare.*'
+  - '.*/wiki/.*/_delete$'
+retry_attempts: 2
+retry_delay: 5.0
+changelog_url: null
+strip_path_prefix: "/jsonMartin/readwise-mirror/wiki"
+strip_domain: true
+output_dir: "00-private/obsidian/readwise-mirror/"
+extract_images: false
+generate_llms_files: true
+llms_lookback_days: 30

@@ -1,0 +1,47 @@
+mode: "documentation"
+input_url: "https://silentvoid13.github.io/Templater/"
+index_depth: 1
+min_article_words: 50
+max_depth: 4
+max_pages: 100
+js_wait: 1.0
+browser_channel: null
+headless: true
+stealth: false
+include_patterns:
+  # Only crawl URLs under /Templater/ to avoid root-path alias URLs that serve 404 pages
+  - 'https://silentvoid13\.github\.io/Templater/.*'
+exclude_patterns:
+  - '.*\.pdf$'
+  - '.*#.*'
+  - '.*\?.*'
+  - '.*login.*'
+  # Print version concatenates the entire book into one page
+  - 'https://silentvoid13\.github\.io/Templater/print\.html$'
+  # Known 404 stale URL schemes
+  - 'https://silentvoid13\.github\.io/Templater/internal-modules/.*'
+  - 'https://silentvoid13\.github\.io/Templater/internal-variables-functions/.*'
+  - 'https://silentvoid13\.github\.io/Templater/contribute\.html$'
+  - 'https://silentvoid13\.github\.io/Templater/dynamic-command\.html$'
+  - 'https://silentvoid13\.github\.io/Templater/execution-command\.html$'
+  - 'https://silentvoid13\.github\.io/Templater/script-user-functions\.html$'
+  - 'https://silentvoid13\.github\.io/Templater/system-user-functions\.html$'
+  - 'https://silentvoid13\.github\.io/Templater/whitespace-control\.html$'
+strip_boilerplate:
+  # Full sidebar nav that repeats at the top of every page (mdBook artifact)
+  - '1\. \[\*\*1\.\*\*.*?(?=\n# Templater)'
+  # Theme switcher block and print link that follow the nav
+  - '# Templater\n\n\[ __\]\(https://silentvoid13\.github\.io/Templater/print\.html[^\n]*\)\n'
+  # Duplicate prev/next navigation line at bottom (same line appears twice, separated by a blank line)
+  - '\n\n(\[ __\]\([^\n]+\))\n\n\1$'
+  # mdBook copy-button artifact rendered as indented __ before each code sample
+  - '\n    __\n'
+retry_attempts: 2
+retry_delay: 5.0
+changelog_url: null
+strip_path_prefix: "/Templater"
+strip_domain: true
+output_dir: "00-private/obsidian/templater/"
+extract_images: false
+generate_llms_files: true
+llms_lookback_days: 30

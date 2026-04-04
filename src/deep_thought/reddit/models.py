@@ -33,6 +33,7 @@ class CollectedPostLocal:
     title: str
     author: str
     score: int
+    upvote_ratio: float
     comment_count: int
     url: str
     is_video: int
@@ -84,6 +85,7 @@ class CollectedPostLocal:
             title=str(submission.title),
             author=author_name,
             score=int(submission.score),
+            upvote_ratio=float(getattr(submission, "upvote_ratio", 0.0)),
             comment_count=int(submission.num_comments),
             url=str(submission.url),
             is_video=is_video_flag,

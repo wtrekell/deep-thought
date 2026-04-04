@@ -36,7 +36,6 @@ def _make_minimal_config() -> RedditConfig:
         user_agent_env="REDDIT_USER_AGENT",
         max_posts_per_run=100,
         output_dir="data/reddit/export/",
-        generate_llms_files=False,
         rules=[
             RuleConfig(
                 name="test_rule",
@@ -55,6 +54,9 @@ def _make_minimal_config() -> RedditConfig:
                 max_comment_depth=3,
                 max_comments=200,
                 include_images=False,
+                exclude_stickied=False,
+                exclude_locked=False,
+                replace_more_limit=32,
             )
         ],
     )
@@ -138,7 +140,6 @@ class TestLoadConfig:
             "user_agent_env: REDDIT_USER_AGENT\n"
             "max_posts_per_run: 10\n"
             "output_dir: data/\n"
-            "generate_llms_files: false\n"
             "rules: []\n",
             encoding="utf-8",
         )
@@ -208,6 +209,9 @@ class TestValidateConfig:
             max_comment_depth=3,
             max_comments=50,
             include_images=False,
+            exclude_stickied=False,
+            exclude_locked=False,
+            replace_more_limit=32,
         )
         config.rules.append(second_rule)
         issues = validate_config(config)

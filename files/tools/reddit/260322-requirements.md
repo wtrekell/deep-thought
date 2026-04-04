@@ -23,7 +23,7 @@
 
 Located at `data/reddit/reddit.db` by default; respects the `DEEP_THOUGHT_DATA_DIR` env var to redirect the data root at runtime.
 
-- Table: `collected_posts` — columns: `state_key TEXT PRIMARY KEY`, `post_id TEXT`, `subreddit TEXT`, `rule_name TEXT`, `title TEXT`, `author TEXT`, `score INT`, `comment_count INT`, `url TEXT`, `is_video INT`, `flair TEXT`, `word_count INT`, `output_path TEXT`, `status TEXT`, `created_at TEXT`, `updated_at TEXT`, `synced_at TEXT`
+- Table: `collected_posts` — columns: `state_key TEXT PRIMARY KEY`, `post_id TEXT`, `subreddit TEXT`, `rule_name TEXT`, `title TEXT`, `author TEXT`, `score INT`, `upvote_ratio REAL`, `comment_count INT`, `url TEXT`, `is_video INT`, `flair TEXT`, `word_count INT`, `output_path TEXT`, `status TEXT`, `created_at TEXT`, `updated_at TEXT`, `synced_at TEXT`
 - **Composite state key:** `{post_id}:{subreddit}:{rule_name}` — allows the same post to be collected by multiple rules independently
 - On incremental update, stored `comment_count` is compared to live count to detect new activity
 - Schema version tracked in a `key_value` table
@@ -33,27 +33,28 @@ Located at `data/reddit/reddit.db` by default; respects the `DEEP_THOUGHT_DATA_D
 
 ### CollectedPostLocal
 
-| Field           | Type          | Description                                                |
-| --------------- | ------------- | ---------------------------------------------------------- |
-| `state_key`     | `str`         | Composite primary key: `{post_id}:{subreddit}:{rule_name}` |
-| `post_id`       | `str`         | Reddit post ID                                             |
-| `subreddit`     | `str`         | Subreddit name                                             |
-| `rule_name`     | `str`         | Name of the rule that collected this post                  |
-| `title`         | `str`         | Post title                                                 |
-| `author`        | `str`         | Reddit username of the post author                         |
-| `score`         | `int`         | Post upvote score at time of collection                    |
-| `comment_count` | `int`         | Number of comments at time of collection                   |
-| `url`           | `str`         | Full Reddit URL to the post                                |
-| `is_video`      | `int`         | 1 if the post is a video, 0 otherwise                      |
-| `flair`         | `str \| None` | Post flair text                                            |
-| `word_count`    | `int`         | Word count of generated markdown (post body + comments)    |
-| `output_path`   | `str`         | Path to the generated markdown file                        |
-| `status`        | `str`         | Processing status (e.g., `ok`, `error`)                    |
-| `created_at`    | `str`         | ISO 8601 timestamp of first collection                     |
-| `updated_at`    | `str`         | ISO 8601 timestamp of last update                          |
-| `synced_at`     | `str`         | ISO 8601 timestamp of last API sync                        |
+| Field           | Type          | Description                                                    |
+| --------------- | ------------- | -------------------------------------------------------------- |
+| `state_key`     | `str`         | Composite primary key: `{post_id}:{subreddit}:{rule_name}`     |
+| `post_id`       | `str`         | Reddit post ID                                                 |
+| `subreddit`     | `str`         | Subreddit name                                                 |
+| `rule_name`     | `str`         | Name of the rule that collected this post                      |
+| `title`         | `str`         | Post title                                                     |
+| `author`        | `str`         | Reddit username of the post author                             |
+| `score`         | `int`         | Post upvote score at time of collection                        |
+| `upvote_ratio`  | `float`       | Fraction of votes that are upvotes (e.g., `0.97`)              |
+| `comment_count` | `int`         | Number of comments at time of collection                       |
+| `url`           | `str`         | URL the post links to (external link or permalink if selfpost) |
+| `is_video`      | `int`         | 1 if the post is a video, 0 otherwise                          |
+| `flair`         | `str \| None` | Post flair text                                                |
+| `word_count`    | `int`         | Word count of generated markdown (post body + comments)        |
+| `output_path`   | `str`         | Path to the generated markdown file                            |
+| `status`        | `str`         | Processing status (e.g., `ok`, `error`)                        |
+| `created_at`    | `str`         | ISO 8601 timestamp of first collection                         |
+| `updated_at`    | `str`         | ISO 8601 timestamp of last update                              |
+| `synced_at`     | `str`         | ISO 8601 timestamp of last API sync                            |
 
-Methods: `from_sdk()` for API object conversion, `to_dict()` for database insertion.
+Methods: `from_submission()` for API object conversion, `to_dict()` for database insertion.
 
 ## Command List
 
@@ -94,12 +95,12 @@ src/deep_thought/reddit/
 │   ├── schema.py                # Table creation and migration runner
 │   ├── queries.py               # All SQL operations (composite key aware)
 │   └── migrations/
-│       └── 001_init_schema.sql
-├── filters.py                   # Score, age, keyword, flair filtering
+│       ├── 001_init_schema.sql
+│       └── 002_add_upvote_ratio.sql
+├── filters.py                   # Score, age, keyword, flair, stickied, locked filtering
 ├── output.py                    # Markdown + YAML frontmatter generation
 ├── image_extractor.py           # Image download: extracts URLs from markdown, saves to img/
 ├── embeddings.py                # Qdrant write: embeds collected posts (optional)
-├── llms.py                      # .llms.txt / .llms-full.txt generation
 ├── utils.py                     # Shared helpers: slugify_title (delegates to text_utils), get_author_name
 └── client.py                    # PRAW API client wrapper
 
@@ -130,7 +131,6 @@ max_posts_per_run: 500 # Global cap across all rules per invocation
 
 # Output
 output_dir: "data/reddit/export/"
-generate_llms_files: false # Set true to generate .llms.txt / .llms-full.txt per rule
 
 rules:
   - name: "python_top_week"
@@ -153,25 +153,31 @@ rules:
     max_comment_depth: 3
     max_comments: 200 # Max comments to collect per post (default: 200)
     include_images: true # Include image URLs in output; download linked images to img/
+    exclude_stickied: false # Skip mod-pinned posts
+    exclude_locked: false # Skip posts that can no longer receive comments
+    replace_more_limit: 32 # MoreComments nodes to expand (0=none, null=all)
 ```
 
 ### Filter Reference
 
-| Filter              | Description                                                    |
-| ------------------- | -------------------------------------------------------------- |
-| `sort`              | `new`, `hot`, `top`, `rising`                                  |
-| `time_filter`       | For `top` sort: `hour`, `day`, `week`, `month`, `year`, `all`  |
-| `min_score`         | Minimum post upvote score                                      |
-| `min_comments`      | Minimum comment count                                          |
-| `max_age_days`      | Maximum post age in days                                       |
-| `include_keywords`  | Post must match at least one keyword (glob `*` supported)      |
-| `exclude_keywords`  | Post must not match any of these                               |
-| `include_flair`     | Only collect posts with these flair values (empty = all)       |
-| `exclude_flair`     | Skip posts with these flair values                             |
-| `search_comments`   | Extend keyword matching to comment bodies                      |
-| `max_comment_depth` | Recursion depth for comment trees (default: 3)                 |
-| `max_comments`      | Max comments to collect per post (default: 200)                |
-| `include_images`    | Download direct image links (jpg/png/gif/webp) to `img/` subdirectory and rewrite markdown references to local paths. Failures log a warning and leave the original URL. |
+| Filter               | Description                                                                                                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `sort`               | `new`, `hot`, `top`, `rising`                                                                                                                                            |
+| `time_filter`        | For `top` sort: `hour`, `day`, `week`, `month`, `year`, `all`                                                                                                            |
+| `min_score`          | Minimum post upvote score                                                                                                                                                |
+| `min_comments`       | Minimum comment count                                                                                                                                                    |
+| `max_age_days`       | Maximum post age in days                                                                                                                                                 |
+| `include_keywords`   | Post must match at least one keyword (glob `*` supported)                                                                                                                |
+| `exclude_keywords`   | Post must not match any of these                                                                                                                                         |
+| `include_flair`      | Only collect posts with these flair values (empty = all)                                                                                                                 |
+| `exclude_flair`      | Skip posts with these flair values                                                                                                                                       |
+| `search_comments`    | Extend keyword matching to comment bodies                                                                                                                                |
+| `max_comment_depth`  | Recursion depth for comment trees (default: 3)                                                                                                                           |
+| `max_comments`       | Max comments to collect per post (default: 200)                                                                                                                          |
+| `include_images`     | Download direct image links (jpg/png/gif/webp) to `img/` subdirectory and rewrite markdown references to local paths. Failures log a warning and leave the original URL. |
+| `exclude_stickied`   | Skip mod-pinned posts (default: `false`)                                                                                                                                 |
+| `exclude_locked`     | Skip locked posts that can no longer receive comments (default: `false`). The incremental update logic is wasted on locked posts since their comment count cannot grow.  |
+| `replace_more_limit` | Number of `MoreComments` placeholder nodes to expand per post (default: `32`). `0` skips all expansions; `null` expands every node (unlimited API calls).                |
 
 ## Data Format
 
@@ -179,10 +185,7 @@ rules:
 
 ```
 data/reddit/export/{rule_name}/
-├── {YYMMDD}-{post_id}_{title_slug}.md
-└── llm/
-    ├── {YYMMDD}-{post_id}_{title_slug}.llms.txt
-    └── {YYMMDD}-{post_id}_{title_slug}.llms-full.txt
+└── {YYMMDD}-{post_id}_{title_slug}.md
 ```
 
 ### Frontmatter Schema
@@ -197,14 +200,18 @@ rule: python_top_week
 title: "Python 3.13 performance improvements"
 author: u/username
 score: 1842
+upvote_ratio: 0.970
 num_comments: 234
-url: https://www.reddit.com/r/python/comments/abc123/
+url: "https://python.org/downloads/3.13/"
+permalink: "https://reddit.com/r/python/comments/abc123/python_313_performance_improvements/"
 is_video: false
 flair: "Discussion"
 word_count: 3842
 processed_date: 2026-03-18T10:00:00Z
 ---
 ```
+
+`url` is the external link the post points to (or the Reddit permalink for selfposts). `permalink` is always the Reddit thread URL.
 
 ### Content Structure
 
@@ -226,43 +233,6 @@ Top-level comment text here.
 > **u/nested_reply (↑ 32)**
 >
 > Reply text here.
-```
-
-### llms-full.txt (generate_llms_files only)
-
-One file per rule in the export root. Each post is separated by a delimiter block:
-
-```
-# {Post Title}
-
-post_id: abc123
-subreddit: python
-rule: python_top_week
-score: 1842
-comments: 234
-collected: 2026-03-18T10:00:00Z
-
-{full markdown content, frontmatter stripped}
-
----
-
-# {Next Post}
-...
-```
-
-### llms.txt (generate_llms_files only)
-
-Index file per rule in the export root, following the llmstxt.org convention:
-
-```
-# Post Index — python_top_week
-
-> Collected by reddit on 2026-03-18. {N} posts.
-
-## Posts
-
-- [{title_slug}.md]({rule_name}/{YYMMDD}-{post_id}_{title_slug}.md): r/{subreddit}, score {score}, {word_count} words
-- [{title_slug}.md]({rule_name}/{YYMMDD}-{post_id}_{title_slug}.md): r/{subreddit}, score {score}, {word_count} words
 ```
 
 ## Error Handling

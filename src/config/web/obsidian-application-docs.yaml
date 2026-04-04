@@ -1,0 +1,32 @@
+mode: "documentation"
+input_url: "https://docs.obsidian.md/Home"
+index_depth: 1
+min_article_words: 100
+max_depth: 4
+max_pages: 100
+js_wait: 1.0
+browser_channel: null
+headless: true
+stealth: false
+include_patterns: []
+exclude_patterns:
+  - '.*\.pdf$'
+  - '.*#.*'
+  - '.*\?.*'
+  - '.*login.*'
+retry_attempts: 2
+retry_delay: 5.0
+changelog_url: null
+strip_path_prefix: null
+strip_domain: true
+output_dir: "00-private/obsidian/"
+extract_images: false
+generate_llms_files: true
+llms_lookback_days: 30
+strip_boilerplate:
+  # Obsidian Publish top nav: logo link + sidebar links + repeated logo, ending just before the page heading
+  - '\[\]\(https://docs\.obsidian\.md/Home\).*?\[\]\(https://docs\.obsidian\.md/Home\)\[Developer Documentation\]\(https://docs\.obsidian\.md/Home\)\n\n'
+  # Pages WITH a "Links to this page" section: strip from that point to EOF
+  - '\nLinks to this page.*'
+  # Pages WITHOUT "Links to this page": strip title echo line + Not found ghost block + Interactive graph + On this page TOC + footer
+  - '\n\n[^\n]+\n\nNot found\n\nThis page does not exist.*'

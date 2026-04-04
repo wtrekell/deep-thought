@@ -49,6 +49,9 @@ def _make_rule_config(
         max_comment_depth=3,
         max_comments=50,
         include_images=include_images,
+        exclude_stickied=False,
+        exclude_locked=False,
+        replace_more_limit=32,
     )
 
 
@@ -127,7 +130,12 @@ class TestExtractImageUrl:
 class TestBuildFrontmatter:
     def test_frontmatter_contains_required_fields(self) -> None:
         """All required frontmatter fields must be present in the output."""
-        submission = make_mock_submission(post_id="abc123", flair_text="Discussion")
+        submission = make_mock_submission(
+            post_id="abc123",
+            flair_text="Discussion",
+            permalink="/r/python/comments/abc123/test_title/",
+            upvote_ratio=0.95,
+        )
         rule_config = _make_rule_config()
         result = _build_frontmatter(submission, rule_config, word_count=42, processed_date="2026-03-22T10:00:00Z")
 
@@ -141,6 +149,10 @@ class TestBuildFrontmatter:
         assert "word_count: 42" in result
         assert "processed_date: 2026-03-22T10:00:00Z" in result
         assert "flair: " in result
+        assert "permalink:" in result
+        assert "https://reddit.com" in result
+        assert "upvote_ratio:" in result
+        assert "upvote_ratio: 0.950" in result
 
     def test_frontmatter_starts_and_ends_with_dashes(self) -> None:
         """The frontmatter must be delimited by --- on both ends."""
@@ -207,6 +219,24 @@ class TestGenerateMarkdown:
         rule_config = _make_rule_config()
         result = generate_markdown(submission, [], rule_config)
         assert result.startswith("---\n")
+
+    def test_output_contains_permalink(self) -> None:
+        """The generated markdown frontmatter must include a permalink field."""
+        submission = make_mock_submission(
+            permalink="/r/python/comments/abc123/test_title/",
+        )
+        rule_config = _make_rule_config()
+        result = generate_markdown(submission, [], rule_config)
+        assert "permalink:" in result
+        assert "https://reddit.com" in result
+
+    def test_output_contains_upvote_ratio(self) -> None:
+        """The generated markdown frontmatter must include an upvote_ratio field."""
+        submission = make_mock_submission(upvote_ratio=0.87)
+        rule_config = _make_rule_config()
+        result = generate_markdown(submission, [], rule_config)
+        assert "upvote_ratio:" in result
+        assert "0.870" in result
 
     def test_output_contains_post_title_as_heading(self) -> None:
         """The post title should appear as a level-1 heading in the body."""

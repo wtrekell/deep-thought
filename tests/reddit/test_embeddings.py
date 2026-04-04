@@ -28,6 +28,7 @@ def _make_collected_post(flair: str | None = "Discussion") -> CollectedPostLocal
         title="A Great Python Post",
         author="test_user",
         score=500,
+        upvote_ratio=0.95,
         comment_count=42,
         url="https://www.reddit.com/r/python/comments/abc123/",
         is_video=0,

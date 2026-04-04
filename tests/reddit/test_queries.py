@@ -37,6 +37,7 @@ def _make_post_dict(
     title: str = "Test Post",
     author: str = "test_user",
     score: int = 100,
+    upvote_ratio: float = 0.95,
     comment_count: int = 20,
     url: str = "https://reddit.com/r/python/comments/abc123/",
     is_video: int = 0,
@@ -57,6 +58,7 @@ def _make_post_dict(
         "title": title,
         "author": author,
         "score": score,
+        "upvote_ratio": upvote_ratio,
         "comment_count": comment_count,
         "url": url,
         "is_video": is_video,
@@ -135,6 +137,30 @@ class TestUpsertCollectedPost:
         result = get_collected_post(in_memory_db, "abc123:python:rule1")
         assert result is not None
         assert result["flair"] == "Discussion"
+
+    def test_stores_upvote_ratio(self, in_memory_db: sqlite3.Connection) -> None:
+        """The upvote_ratio field should be persisted and retrievable as a float."""
+        post_data = _make_post_dict(upvote_ratio=0.87)
+        upsert_collected_post(in_memory_db, post_data)
+        in_memory_db.commit()
+
+        result = get_collected_post(in_memory_db, "abc123:python:rule1")
+        assert result is not None
+        assert abs(result["upvote_ratio"] - 0.87) < 1e-9
+
+    def test_updates_upvote_ratio_on_re_upsert(self, in_memory_db: sqlite3.Connection) -> None:
+        """Re-upserting with a new upvote_ratio should overwrite the stored value."""
+        original_post = _make_post_dict(upvote_ratio=0.60)
+        upsert_collected_post(in_memory_db, original_post)
+        in_memory_db.commit()
+
+        updated_post = _make_post_dict(upvote_ratio=0.99)
+        upsert_collected_post(in_memory_db, updated_post)
+        in_memory_db.commit()
+
+        result = get_collected_post(in_memory_db, "abc123:python:rule1")
+        assert result is not None
+        assert abs(result["upvote_ratio"] - 0.99) < 1e-9
 
 
 # ---------------------------------------------------------------------------

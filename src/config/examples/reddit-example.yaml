@@ -25,10 +25,6 @@ max_posts_per_run: 500      # Global cap on total posts collected across all rul
 # ---------------------------------------------------------------------------
 output_dir: "data/reddit/export/"  # Directory where collected posts are written
 
-generate_llms_files: false  # Options: true, false
-                            #   true  — Generate .llms.txt and .llms-full.txt per rule
-                            #   false — Only generate individual post files
-
 # ---------------------------------------------------------------------------
 # Rules
 # Each rule targets one subreddit with its own filters and limits.
@@ -79,3 +75,16 @@ rules:
     include_images: true              # Options: true, false
                                       #   true  — Include image URLs in output
                                       #   false — Skip image references
+
+    exclude_stickied: false           # Options: true, false
+                                      #   true  — Skip mod-pinned posts
+                                      #   false — Include stickied posts
+
+    exclude_locked: false             # Options: true, false
+                                      #   true  — Skip posts that can no longer receive comments
+                                      #   false — Include locked posts
+
+    replace_more_limit: 32            # MoreComments nodes to expand per post
+                                      # 0     — Skip all MoreComments (old behavior)
+                                      # null  — Expand all MoreComments nodes
+                                      # N > 0 — Expand up to N nodes (default: 32)
