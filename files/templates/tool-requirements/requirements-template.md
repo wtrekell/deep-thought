@@ -4,9 +4,25 @@
 
 **{Tool Name}** — {one-sentence description of what the tool does}.
 
+## Tool Type
+
+<!-- Select one. This determines which sections below apply. -->
+
+**Type:** {Collector | Bidirectional Collector | Converter | Generative}
+
+| Type | State DB | Sync | Embeddings |
+|---|---|---|---|
+| Collector | Flat | Read-only | Yes, if knowledge content |
+| Bidirectional Collector | Relational | Read + write | No |
+| Converter | None | None (explicit input) | No |
+| Generative | Flat (param hash) | Write-only | No |
+
+**Writes to embedding store:** {Yes / No}
+<!-- Yes only for Collectors producing knowledge content (Reddit, Web, Stack Exchange, Research). -->
+
 ## Sync Modes
 
-<!-- List all sync directions the tool supports. Remove rows that don't apply. -->
+<!-- Bidirectional Collectors only. Remove this section for all other tool types. -->
 
 1. **CLI Command** — `{tool}` (entry point with subcommands)
 2. **Pull** — {Describe what pull does and where data comes from}. (`{tool} pull`)
@@ -17,14 +33,30 @@
 
 1. Python 3.12 using `uv` as the package manager.
 2. {External SDK or API dependency, with link to docs}.
-3. Use SQLite for local **data storage**.
+3. {Collectors and Generative only} Use SQLite for local **state tracking**.
 4. {Filtering or rule system, if applicable — describe what drives include/exclude logic and where rules are stored}.
 5. All secrets are stored in `.env` file in the root directory or GitHub Secrets.
-6. A changelog is maintained in `docs/tools/{tool}/CHANGELOG.md`.
+6. A changelog is maintained in `files/tools/{tool}/CHANGELOG.md`.
 
 ## Data Storage
 
+<!-- Converters: remove this entire section. -->
+
 ### Database Requirements
+
+<!-- Collector / Generative: flat schema. Bidirectional Collector: relational schema. -->
+
+**Collector / Generative — flat schema:**
+
+1. Single table with a stable primary key:
+   - Collectors: use the source-issued string ID as primary key (`id TEXT NOT NULL PRIMARY KEY`).
+   - Generative: use a hash of the generation parameters as primary key.
+   - Include `created_at` and `fetched_at` (Collectors) or `generated_at` (Generative) timestamps.
+   - Keep a `sync_state` key-value table that stores schema version for forward-only migration tracking.
+
+---
+
+**Bidirectional Collector — relational schema:**
 
 1. Design tables around **{source} entities**:
    - {List entity tables, e.g. `projects`, `tasks`, `items`}.
@@ -41,18 +73,25 @@
 
 All operations use subcommands (not flags). Running `{tool}` with no subcommand shows help.
 
-| Subcommand         | Description                                              |
-| ------------------ | -------------------------------------------------------- |
-| `{tool} pull`      | Pull data from {source}, apply filter rules              |
-| `{tool} push`      | Push local changes back to {source}                      |
-| `{tool} sync`      | Run pull then push sequentially                          |
-| `{tool} status`    | Show sync state: last sync time, pending local changes   |
-| `{tool} diff`      | Show differences between local DB and last pull          |
-| `{tool} export`    | Export current DB state to markdown files                |
-| `{tool} config`    | Validate and display current YAML configuration          |
-| `{tool} init`      | Create DB, config file, and directory structure          |
+<!-- Start from the common commands below and add/remove based on tool type. -->
+<!-- Bidirectional Collectors: include pull, push, sync, status, diff. -->
+<!-- Collectors: include fetch (or pull), export. Remove push, sync, status, diff. -->
+<!-- Converters: replace fetch/pull with convert. Remove push, sync, status, diff, export. -->
+<!-- Generative: replace fetch/pull with generate. Remove push, sync, status, diff. -->
 
-<!-- Add or remove subcommands as needed. -->
+| Subcommand         | Description                                              | Types                    |
+| ------------------ | -------------------------------------------------------- | ------------------------ |
+| `{tool} fetch`     | Fetch new content from {source}, apply filter rules      | Collector                |
+| `{tool} pull`      | Pull data from {source}, apply filter rules              | Bidirectional Collector  |
+| `{tool} push`      | Push local changes back to {source}                      | Bidirectional Collector  |
+| `{tool} sync`      | Run pull then push sequentially                          | Bidirectional Collector  |
+| `{tool} status`    | Show sync state: last sync time, pending local changes   | Bidirectional Collector  |
+| `{tool} diff`      | Show differences between local DB and last pull          | Bidirectional Collector  |
+| `{tool} convert`   | Convert provided input to markdown                       | Converter                |
+| `{tool} generate`  | Generate output from a prompt or spec via external API   | Generative               |
+| `{tool} export`    | Export current DB state to markdown files                | Collector, Bidirectional |
+| `{tool} config`    | Validate and display current YAML configuration          | All                      |
+| `{tool} init`      | Create DB, config file, and directory structure          | All                      |
 
 | Global Flag        | Description                                             |
 | ------------------ | ------------------------------------------------------- |
@@ -65,25 +104,26 @@ All operations use subcommands (not flags). Running `{tool}` with no subcommand 
 ## File & Output Map
 
 ```
-docs/tools/{tool}/
+files/tools/{tool}/
 ├── {YYMMDD}-requirements.md          # This document
-├── api-model.md                      # SDK/API model reference
+├── api-model.md                      # SDK/API model reference (omit for Converters)
 ├── CHANGELOG.md                      # Release history
-└── configuration/
-    └── {tool}_configuration.yaml     # Filter rules and sync settings
+└── ISSUES.md                         # Known issues
 
 src/deep_thought/{tool}/
 ├── __init__.py
 ├── cli.py                            # CLI entry point and argument parsing
-├── client.py                         # {Source} SDK/API wrapper
+├── client.py                         # {Source} SDK/API wrapper (omit for Converters)
 ├── config.py                         # YAML config loader and validation
 ├── models.py                         # Local dataclasses mirroring SDK models
-├── pull.py                           # Pull logic: API → DB → markdown
-├── push.py                           # Push logic: DB diff → API
-├── sync.py                           # Orchestrates pull + push
-├── export.py                         # DB → markdown file generation
-├── filters.py                        # Filter rule engine
-└── db/
+├── processor.py                      # Core logic: fetch/convert/generate → DB → markdown
+├── pull.py                           # Pull logic: API → DB → markdown (Bidirectional only)
+├── push.py                           # Push logic: DB diff → API (Bidirectional only)
+├── sync.py                           # Orchestrates pull + push (Bidirectional only)
+├── export.py                         # DB → markdown file generation (Collector, Bidirectional)
+├── embeddings.py                     # Qdrant embedding write (knowledge Collectors only)
+├── filters.py                        # Filter rule engine (Collector, Bidirectional)
+└── db/                               # Omit entirely for Converters
     ├── __init__.py
     ├── schema.py                     # Schema definitions and table creation
     ├── queries.py                    # Query functions consumed by app code
@@ -91,15 +131,15 @@ src/deep_thought/{tool}/
         └── 001_init_schema.sql
 
 data/{tool}/
-├── {tool}.db                         # SQLite database
-├── snapshots/                        # Raw JSON blobs per sync
+├── {tool}.db                         # SQLite database (omit for Converters)
+├── snapshots/                        # Raw JSON blobs per sync (Bidirectional only)
 │   └── YYYY-MM-DDTHHMMSS.json
 └── export/                           # Generated markdown files
     └── {grouping}/                   # Organized by logical grouping
         └── {subgrouping}.md
 ```
 
-<!-- Adjust the file tree to match the tool's actual structure. Remove modules that don't apply (e.g. push.py if write-only). -->
+<!-- Adjust the file tree to match the tool's actual structure. Remove modules that don't apply. -->
 
 ## Configuration
 
@@ -163,13 +203,19 @@ All exported data is consumed exclusively by Claude via CLI. Formats are optimiz
 
 ### JSON Snapshot
 
+<!-- Bidirectional Collectors only. Remove for all other types. -->
+
 Full API response stored as-is per sync, named by ISO timestamp.
 
 ### SQLite Schema
 
-<!-- Summarize the schema: list tables, primary key convention, timestamp columns, and any field-flattening or renaming decisions. -->
+<!-- Converters: remove this section entirely. -->
+<!-- Collectors / Generative: describe the flat single-table schema. -->
+<!-- Bidirectional Collectors: describe all entity tables. -->
 
-Tables mirror the {source} entities listed in the requirements: {list tables}. Each entity table uses `id` (the {source}-issued string ID) as the primary key. Entity tables include `synced_at` for tracking when the local database last received each record.
+**Collector / Generative:** Single table with a stable primary key (`id` for source-issued IDs; parameter hash for Generative tools). Include `created_at` and `fetched_at` / `generated_at` timestamps.
+
+**Bidirectional Collector:** Tables mirror the {source} entities listed in the requirements: {list tables}. Each entity table uses `id` (the {source}-issued string ID) as the primary key. Entity tables include `synced_at` for tracking when the local database last received each record.
 
 ## User Questions
 
