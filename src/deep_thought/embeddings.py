@@ -71,7 +71,7 @@ def embed_text(text: str, model: Any) -> list[float]:
     inputs: Any = prepare_inputs(tokenizer, None, [text], 512, True, True)
     output: Any = mlx_model(**inputs)
     last_hidden_state: Any = output.last_hidden_state[0]
-    embedding_vector: list[float] = cast(list[float], mx.mean(last_hidden_state, axis=0).tolist())
+    embedding_vector: list[float] = cast("list[float]", mx.mean(last_hidden_state, axis=0).tolist())
     return embedding_vector
 
 

@@ -36,3 +36,8 @@ output_dir: "00-private/claude-code/"
 extract_images: false
 generate_llms_files: true
 llms_lookback_days: 30
+unwrap_tags: []
+pagination: "none"
+pagination_selector: null
+pagination_wait: 2.0
+max_paginations: 10

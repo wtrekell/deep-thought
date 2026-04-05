@@ -1,0 +1,267 @@
+"""Backup orchestration for the GDrive Tool.
+
+Coordinates the full backup run: walk the source tree, compare against the
+database, upload new files, update changed files, skip unchanged files, and
+record results. Returns a BackupResult summary.
+"""
+
+from __future__ import annotations
+
+import logging
+import mimetypes
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from deep_thought.gdrive.db.queries import (
+    clear_backed_up_files,
+    clear_drive_folders,
+    get_backed_up_file,
+    get_drive_folder,
+    mark_file_status,
+    upsert_backed_up_file,
+    upsert_drive_folder,
+)
+from deep_thought.gdrive.models import BackedUpFile, BackupResult
+from deep_thought.gdrive.walker import walk_tree
+
+if TYPE_CHECKING:
+    import sqlite3
+
+    from deep_thought.gdrive.client import DriveClient
+    from deep_thought.gdrive.config import GDriveConfig
+
+logger = logging.getLogger(__name__)
+
+_DEFAULT_MIME_TYPE = "application/octet-stream"
+
+
+def _get_mime_type(file_path: str) -> str:
+    """Guess the MIME type of a file from its extension.
+
+    Falls back to application/octet-stream when the type cannot be determined.
+
+    Args:
+        file_path: The file path (extension is used for guessing).
+
+    Returns:
+        A MIME type string.
+    """
+    guessed_type, _ = mimetypes.guess_type(file_path)
+    return guessed_type if guessed_type else _DEFAULT_MIME_TYPE
+
+
+def _ensure_parent_folder_hierarchy(
+    relative_file_path: str,
+    source_dir: str,
+    root_drive_folder_id: str,
+    client: DriveClient,
+    conn: sqlite3.Connection,
+    dry_run: bool,
+) -> str:
+    """Ensure the full folder hierarchy on Drive exists for a given file path.
+
+    Creates each directory segment on Drive (if not already cached) and
+    caches the folder IDs in the drive_folders table.
+
+    Args:
+        relative_file_path: The relative path of the file (from parent of source_dir).
+        source_dir: The configured source directory path.
+        root_drive_folder_id: The top-level Drive folder ID from config.
+        client: Authenticated DriveClient.
+        conn: Open SQLite connection.
+        dry_run: If True, skip API calls and return a placeholder folder ID.
+
+    Returns:
+        The Drive folder ID of the immediate parent folder for the file.
+    """
+    # Get the directory part of the relative path (e.g. "project/notes" for "project/notes/todo.md")
+    relative_path_object = Path(relative_file_path)
+    parent_path_parts = relative_path_object.parts[:-1]  # exclude the file name
+
+    if not parent_path_parts:
+        # File is at the root of the source directory — parent is the root Drive folder
+        return root_drive_folder_id
+
+    if dry_run:
+        return "[dry-run-folder-id]"
+
+    # Walk down the path segments, ensuring each folder exists
+    current_drive_folder_id = root_drive_folder_id
+    accumulated_path = ""
+
+    for path_segment in parent_path_parts:
+        accumulated_path = f"{accumulated_path}/{path_segment}" if accumulated_path else path_segment
+
+        # Check the cache first
+        cached_folder_id = get_drive_folder(conn, accumulated_path)
+        if cached_folder_id is not None:
+            current_drive_folder_id = cached_folder_id
+            continue
+
+        # Not cached — call Drive API and cache the result
+        segment_drive_folder_id = client.ensure_folder(
+            folder_name=path_segment,
+            parent_folder_id=current_drive_folder_id,
+        )
+        upsert_drive_folder(conn, accumulated_path, segment_drive_folder_id)
+        current_drive_folder_id = segment_drive_folder_id
+
+    return current_drive_folder_id
+
+
+def run_backup(
+    config: GDriveConfig,
+    client: DriveClient,
+    db_conn: sqlite3.Connection,
+    dry_run: bool = False,
+    force: bool = False,
+    verbose: bool = False,
+) -> BackupResult:
+    """Execute an incremental backup of source_dir to Google Drive.
+
+    Steps:
+    1. If force is True, clear backed_up_files and drive_folders tables.
+    2. Walk the source tree via walk_tree().
+    3. For each file:
+       a. Look up the existing DB record.
+       b. If the record exists and mtime is unchanged, skip it.
+       c. If no record exists, upload as a new file.
+       d. If record exists but mtime has changed, update the file in-place.
+    4. Errors per file are caught, logged, and recorded without halting the run.
+    5. Return a BackupResult with counts of uploaded, updated, skipped, errors.
+
+    Args:
+        config: Loaded GDriveConfig with source and destination settings.
+        client: Authenticated DriveClient.
+        db_conn: Open SQLite connection to the gdrive database.
+        dry_run: If True, walk the tree and log what would happen but skip
+                 all Drive API calls and DB writes.
+        force: If True, clear all cached state and re-upload everything.
+        verbose: If True, log each file's disposition at DEBUG level.
+
+    Returns:
+        A BackupResult summarising the run.
+    """
+    backup_result = BackupResult()
+
+    if force and not dry_run:
+        logger.info("--force: clearing backed_up_files and drive_folders tables.")
+        clear_backed_up_files(db_conn)
+        clear_drive_folders(db_conn)
+        db_conn.commit()
+
+    logger.info("Walking source directory: %s", config.source_dir)
+    walked_files = walk_tree(config.source_dir)
+    logger.info("Found %d file(s) to consider.", len(walked_files))
+
+    now_iso = datetime.now(UTC).isoformat()
+
+    for relative_file_path, file_mtime, file_size_bytes in walked_files:
+        absolute_file_path = str(Path(config.source_dir).parent / relative_file_path)
+
+        existing_record: BackedUpFile | None = None
+        try:
+            existing_record = get_backed_up_file(db_conn, relative_file_path)
+
+            # Skip if mtime is unchanged
+            if existing_record is not None and existing_record.mtime == file_mtime:
+                backup_result.skipped += 1
+                if verbose:
+                    logger.debug("SKIP  %s (mtime unchanged)", relative_file_path)
+                continue
+
+            file_mime_type = _get_mime_type(absolute_file_path)
+            parent_drive_folder_id = _ensure_parent_folder_hierarchy(
+                relative_file_path=relative_file_path,
+                source_dir=config.source_dir,
+                root_drive_folder_id=config.drive_folder_id,
+                client=client,
+                conn=db_conn,
+                dry_run=dry_run,
+            )
+
+            if existing_record is None:
+                # New file — upload
+                if dry_run:
+                    logger.info("[dry-run] UPLOAD %s", relative_file_path)
+                    backup_result.uploaded += 1
+                    continue
+
+                new_drive_file_id = client.upload_file(
+                    local_path=absolute_file_path,
+                    drive_folder_id=parent_drive_folder_id,
+                    mime_type=file_mime_type,
+                )
+                backed_up_file = BackedUpFile(
+                    local_path=relative_file_path,
+                    drive_file_id=new_drive_file_id,
+                    drive_folder_id=parent_drive_folder_id,
+                    mtime=file_mtime,
+                    size_bytes=file_size_bytes,
+                    status="uploaded",
+                    uploaded_at=now_iso,
+                    updated_at=now_iso,
+                )
+                upsert_backed_up_file(db_conn, backed_up_file)
+                db_conn.commit()
+                backup_result.uploaded += 1
+                if verbose:
+                    logger.debug("UPLOAD %s → %s", relative_file_path, new_drive_file_id)
+
+            else:
+                # Existing file with changed mtime — update in-place
+                if dry_run:
+                    logger.info("[dry-run] UPDATE %s", relative_file_path)
+                    backup_result.updated += 1
+                    continue
+
+                client.update_file(
+                    drive_file_id=existing_record.drive_file_id,
+                    local_path=absolute_file_path,
+                    mime_type=file_mime_type,
+                )
+                updated_record = BackedUpFile(
+                    local_path=relative_file_path,
+                    drive_file_id=existing_record.drive_file_id,
+                    drive_folder_id=parent_drive_folder_id,
+                    mtime=file_mtime,
+                    size_bytes=file_size_bytes,
+                    status="updated",
+                    uploaded_at=existing_record.uploaded_at,
+                    updated_at=now_iso,
+                )
+                upsert_backed_up_file(db_conn, updated_record)
+                db_conn.commit()
+                backup_result.updated += 1
+                if verbose:
+                    logger.debug("UPDATE %s", relative_file_path)
+
+        except Exception as file_error:
+            logger.error("Error processing %s: %s", relative_file_path, file_error)
+            backup_result.errors += 1
+            backup_result.error_paths.append(relative_file_path)
+
+            # Record the error in the DB so gdrive status reflects it after the session ends
+            try:
+                if not dry_run:
+                    if existing_record is None:
+                        # No row exists yet — insert a placeholder so the error is visible
+                        error_record = BackedUpFile(
+                            local_path=relative_file_path,
+                            drive_file_id="",
+                            drive_folder_id="",
+                            mtime=file_mtime,
+                            size_bytes=file_size_bytes,
+                            status="error",
+                            uploaded_at=now_iso,
+                            updated_at=now_iso,
+                        )
+                        upsert_backed_up_file(db_conn, error_record)
+                    else:
+                        mark_file_status(db_conn, relative_file_path, "error")
+                    db_conn.commit()
+            except Exception as mark_error:
+                logger.debug("Could not mark error status for %s: %s", relative_file_path, mark_error)
+
+    return backup_result

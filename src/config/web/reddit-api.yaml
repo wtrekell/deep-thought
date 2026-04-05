@@ -1,0 +1,50 @@
+mode: "documentation"
+input_url: "https://github.com/reddit-archive/reddit/wiki"
+index_depth: 1
+min_article_words: 50
+max_depth: 2
+max_pages: 100
+js_wait: 1.0
+browser_channel: null
+headless: true
+stealth: false
+
+include_patterns:
+  # Only collect pages within the reddit-archive wiki — prevents GitHub site-wide crawl
+  - 'https://github\.com/reddit-archive/reddit/wiki.*'
+
+exclude_patterns:
+  - '.*\.pdf$'
+  - '.*#.*'
+  - '.*\?.*'
+  - '.*login.*'
+  # GitHub wiki action links — edit, history, new page, compare revisions
+  - '.*/wiki/.*/_edit$'
+  - '.*/wiki/.*/_history$'
+  - '.*/wiki/.*/_new$'
+  - '.*/wiki/.*/_compare.*'
+  - '.*/wiki/.*/_delete$'
+
+strip_boilerplate:
+  # GitHub site-wide nav + repo header: start of document through "Additional navigation options"
+  # and the duplicated repo tab list, ending just before the wiki page heading
+  - '^.*?Additional navigation options.*?(?=\n# )'
+  # "Jump to bottom" cosmetic link + editor attribution line that follow the page heading
+  - '\nJump to bottom\n\n[^\n]+ edited this page [^\n]+\n'
+  # Sidebar table of contents + clone link + GitHub footer — everything after page content ends
+  - '\n##  Toggle table of contents.*'
+
+retry_attempts: 2
+retry_delay: 5.0
+changelog_url: null
+strip_path_prefix: "/reddit-archive/reddit/wiki"
+strip_domain: true
+output_dir: "00-private/reddit/api/"
+extract_images: false
+generate_llms_files: true
+llms_lookback_days: 30
+unwrap_tags: []
+pagination: "none"
+pagination_selector: null
+pagination_wait: 2.0
+max_paginations: 10

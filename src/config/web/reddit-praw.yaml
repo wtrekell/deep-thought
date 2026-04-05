@@ -1,0 +1,48 @@
+mode: "documentation"
+input_url: "https://praw.readthedocs.io/en/stable/"
+index_depth: 1
+min_article_words: 100
+max_depth: 4
+max_pages: 100
+js_wait: 1.0
+browser_channel: null
+headless: true
+stealth: false
+
+include_patterns:
+  # Only collect pages under /en/stable/ — prevents cross-version and marketing page crawl
+  - 'https://praw\.readthedocs\.io/en/stable/.*'
+
+exclude_patterns:
+  - '.*\.pdf$'
+  - '.*#.*'
+  - '.*\?.*'
+  - '.*login.*'
+  # ReadTheDocs search and genindex pages — not content
+  - '.*/search\.html.*'
+  - '.*/genindex\.html$'
+
+strip_boilerplate:
+  # Furo/ReadTheDocs header: theme controls, hidden sidebar labels, and full sidebar nav
+  # rendered at the top of every page — strip everything before the first # heading
+  - '^.*?(?=\n# )'
+  # Prev/Next page navigation line at the bottom of content pages
+  - '\n\[[ \t]*(?:Next|Previous)[^\n]*'
+  # Copyright line and everything below it: Sphinx credit, RTD badge links, "On this page" TOC
+  - '\nCopyright ©.*'
+
+unwrap_tags: []
+
+retry_attempts: 2
+retry_delay: 5.0
+changelog_url: null
+strip_path_prefix: "/en/stable"
+strip_domain: true
+output_dir: "00-private/reddit/praw/"
+extract_images: false
+generate_llms_files: true
+llms_lookback_days: 30
+pagination: "none"
+pagination_selector: null
+pagination_wait: 2.0
+max_paginations: 10

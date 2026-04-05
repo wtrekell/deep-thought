@@ -1,0 +1,128 @@
+"""Tests for deep_thought.gdrive.walker."""
+
+from __future__ import annotations
+
+import time
+from typing import TYPE_CHECKING
+
+import pytest
+
+from deep_thought.gdrive.walker import walk_tree
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+def test_walk_tree_finds_all_files_in_nested_dirs(temp_source_dir: Path) -> None:
+    """walk_tree returns an entry for every file in the fixture tree."""
+    results = walk_tree(str(temp_source_dir))
+    relative_paths = {entry[0] for entry in results}
+
+    assert "source/top_level.txt" in relative_paths
+    assert "source/notes/meeting.md" in relative_paths
+    assert "source/notes/todo.md" in relative_paths
+    assert "source/data/report.csv" in relative_paths
+    assert len(results) == 4
+
+
+def test_walk_tree_returns_correct_relative_paths(temp_source_dir: Path) -> None:
+    """Relative paths start with the source directory name, not its parent."""
+    results = walk_tree(str(temp_source_dir))
+
+    for relative_path, _mtime, _size in results:
+        # All paths should start with "source/" (the directory name)
+        assert relative_path.startswith("source/"), f"Path {relative_path!r} does not start with 'source/'"
+        # No path should be absolute
+        assert not relative_path.startswith("/"), f"Path {relative_path!r} is absolute"
+
+
+def test_walk_tree_skips_hidden_files(tmp_path: Path) -> None:
+    """walk_tree skips files whose names start with '.'."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "visible.txt").write_text("visible")
+    (source_dir / ".hidden").write_text("hidden")
+    (source_dir / ".DS_Store").write_text("macos junk")
+
+    results = walk_tree(str(source_dir))
+    relative_paths = {entry[0] for entry in results}
+
+    assert "source/visible.txt" in relative_paths
+    assert "source/.hidden" not in relative_paths
+    assert "source/.DS_Store" not in relative_paths
+
+
+def test_walk_tree_skips_hidden_directories(tmp_path: Path) -> None:
+    """walk_tree does not descend into directories starting with '.'."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    hidden_dir = source_dir / ".git"
+    hidden_dir.mkdir()
+    (hidden_dir / "config").write_text("git config")
+    (source_dir / "visible.txt").write_text("visible")
+
+    results = walk_tree(str(source_dir))
+    relative_paths = {entry[0] for entry in results}
+
+    assert "source/visible.txt" in relative_paths
+    assert not any(".git" in path for path in relative_paths)
+
+
+@pytest.mark.parametrize(
+    "excluded_dir_name",
+    ["__pycache__", ".git", ".venv", "node_modules", ".mypy_cache"],
+)
+def test_walk_tree_skips_excluded_directories(tmp_path: Path, excluded_dir_name: str) -> None:
+    """walk_tree does not descend into known excluded directories."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    excluded_dir = source_dir / excluded_dir_name
+    excluded_dir.mkdir()
+    (excluded_dir / "some_file.py").write_text("content")
+    (source_dir / "real_file.txt").write_text("real content")
+
+    results = walk_tree(str(source_dir))
+    relative_paths = {entry[0] for entry in results}
+
+    assert "source/real_file.txt" in relative_paths
+    assert not any(excluded_dir_name in path for path in relative_paths)
+
+
+def test_walk_tree_returns_mtime_and_size(temp_source_dir: Path) -> None:
+    """walk_tree entries include mtime (float) and size_bytes (int)."""
+    results = walk_tree(str(temp_source_dir))
+
+    for relative_path, mtime, size_bytes in results:
+        assert isinstance(mtime, float), f"mtime for {relative_path} is not float"
+        assert isinstance(size_bytes, int), f"size_bytes for {relative_path} is not int"
+        assert mtime > 0
+        assert size_bytes >= 0
+
+
+def test_walk_tree_detects_mtime_change(tmp_path: Path) -> None:
+    """Modifying a file causes walk_tree to return a different mtime for it."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    test_file = source_dir / "changeable.txt"
+    test_file.write_text("original content")
+
+    first_results = {entry[0]: entry[1] for entry in walk_tree(str(source_dir))}
+    original_mtime = first_results["source/changeable.txt"]
+
+    # Ensure filesystem mtime advances by at least 0.01 seconds
+    time.sleep(0.05)
+    test_file.write_text("modified content")
+
+    second_results = {entry[0]: entry[1] for entry in walk_tree(str(source_dir))}
+    new_mtime = second_results["source/changeable.txt"]
+
+    assert new_mtime > original_mtime
+
+
+def test_walk_tree_returns_empty_list_for_empty_directory(tmp_path: Path) -> None:
+    """walk_tree returns an empty list when the source directory has no files."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+
+    results = walk_tree(str(source_dir))
+    assert results == []

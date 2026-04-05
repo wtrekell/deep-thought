@@ -1,0 +1,19 @@
+# OAuth credentials
+auth:
+  credentials_file: "src/config/gdrive/credentials.json"
+  token_file: "src/config/gdrive/token.json"
+  scopes:
+    - "https://www.googleapis.com/auth/drive.file"
+
+# Backup source and destination
+backup:
+  source_dir: "/Users/williamtrekell/Documents/dont-panic"
+  drive_folder_id: "" # Required: ID of the root backup folder on Drive
+
+# API
+api_rate_limit_rpm: 100 # Drive API calls per minute
+
+# Retry behavior
+retry:
+  max_attempts: 3
+  base_delay_seconds: 2.0

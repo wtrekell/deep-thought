@@ -1,0 +1,40 @@
+mode: "documentation"
+input_url: "https://developer.todoist.com/api/v1/"
+index_depth: 1
+min_article_words: 100
+max_depth: 1
+max_pages: 100
+js_wait: 2.0
+browser_channel: null
+headless: true
+stealth: false
+
+# The Todoist REST API reference is a Redoc single-page application. Every section
+# is a #hash anchor on a single URL — there are no separate pages to crawl.
+# /rest/v2/ redirects here; using the canonical URL avoids duplicate output files.
+# max_depth: 1 and a tight include_pattern ensure exactly one page is collected.
+include_patterns:
+  - 'https://developer\.todoist\.com/api/v1/?$'
+
+exclude_patterns:
+  - '.*\.pdf$'
+  - '.*#.*'
+  - '.*\?.*'
+  - '.*login.*'
+
+strip_boilerplate: []
+
+retry_attempts: 2
+retry_delay: 5.0
+changelog_url: null
+strip_path_prefix: "/api/v1"
+strip_domain: true
+output_dir: "00-private/todoist/rest-api/"
+extract_images: false
+generate_llms_files: true
+llms_lookback_days: 30
+unwrap_tags: []
+pagination: "none"
+pagination_selector: null
+pagination_wait: 2.0
+max_paginations: 10
