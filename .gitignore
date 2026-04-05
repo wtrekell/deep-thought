@@ -43,7 +43,7 @@ Thumbs.db
 *.pxd
 
 # Vale (downloaded packages)
-.vale/styles/
+.vale/
 
 # IDE
 .vscode/

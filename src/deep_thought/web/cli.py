@@ -201,8 +201,7 @@ def _check_playwright_driver() -> None:
     driver_env = Path(playwright.__file__).parent / "driver" / "package" / "lib" / "server" / "utils" / "env.js"
     if not driver_env.exists():
         print(
-            "ERROR: Playwright driver is incomplete (env.js missing).\n"
-            "Run: uv pip install --reinstall playwright",
+            "ERROR: Playwright driver is incomplete (env.js missing).\nRun: uv pip install --reinstall playwright",
             file=sys.stderr,
         )
         sys.exit(1)

@@ -10,6 +10,7 @@
     - [Reddit API](#reddit-api)
     - [Gmail API](#gmail-api)
     - [Google Calendar API](#google-calendar-api)
+    - [Google Drive API](#google-drive-api)
     - [Gemini API](#gemini-api)
   - [MCP](#mcp)
     - [Official MCP Servers](#official-mcp-servers)
@@ -83,6 +84,14 @@ Used by the **gcal** tool to list and fetch calendar events.
 - [Documentation](https://developers.google.com/calendar/api)
 - Auth: OAuth 2.0 via `credentials.json` and `token.json` (stored in config directory)
 - Scopes: read-only Calendar access
+
+### Google Drive API
+
+Used by the **gdrive** tool to upload and manage files in Google Drive for offsite backup.
+
+- [Documentation](https://developers.google.com/workspace/drive/api/reference/rest/v3)
+- Auth: OAuth 2.0 via `credentials.json` and `token.json` (stored in config directory)
+- Scopes: `drive.file` (read/write access limited to files created by the app)
 
 ### Gemini API
 
@@ -185,7 +194,7 @@ Used by the **reddit** tool. Handles authentication, rate limiting, and the comm
 
 ### Google API Python Client
 
-Used by the **gmail** and **gcal** tools. The standard Python client for all Google REST APIs.
+Used by the **gmail**, **gcal**, and **gdrive** tools. The standard Python client for all Google REST APIs.
 
 - [Documentation](https://googleapis.github.io/google-api-python-client/)
 - [GitHub](https://github.com/googleapis/google-api-python-client)
