@@ -23,7 +23,7 @@ def _make_db() -> sqlite3.Connection:
     return conn
 
 
-def _make_config(source_dir: str) -> GDriveConfig:
+def _make_config(source_dir: str, exclude_patterns: list[str] | None = None) -> GDriveConfig:
     """Return a GDriveConfig pointing at source_dir with a non-empty folder ID."""
     return GDriveConfig(
         credentials_file="/fake/credentials.json",
@@ -31,6 +31,7 @@ def _make_config(source_dir: str) -> GDriveConfig:
         scopes=["https://www.googleapis.com/auth/drive.file"],
         source_dir=source_dir,
         drive_folder_id="root-folder-id",
+        exclude_patterns=exclude_patterns if exclude_patterns is not None else [],
         api_rate_limit_rpm=0,
         retry_max_attempts=1,
         retry_base_delay_seconds=0.0,
@@ -104,6 +105,10 @@ def test_unchanged_mtime_is_skipped(tmp_path: Path) -> None:
     mock_client.upload_file.assert_not_called()
     mock_client.update_file.assert_not_called()
 
+    record = get_backed_up_file(db, "source/notes.md")
+    assert record is not None
+    assert record.status == "skipped"
+
 
 # ---------------------------------------------------------------------------
 # Changed mtime — update path
@@ -170,6 +175,31 @@ def test_force_flag_clears_existing_state_and_re_uploads(tmp_path: Path) -> None
     assert result.uploaded == 1
     assert result.skipped == 0
     mock_client.upload_file.assert_called_once()
+
+
+def test_force_and_dry_run_together_does_not_clear_db(tmp_path: Path) -> None:
+    """--force --dry-run does not clear the database (dry-run takes precedence)."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "doc.txt").write_text("content")
+
+    db = _make_db()
+    config = _make_config(str(source_dir))
+    mock_client = _make_mock_client()
+
+    # First run to populate the DB
+    run_backup(config, mock_client, db)
+    mock_client.reset_mock()
+
+    # Force + dry-run: DB is not cleared, so mtime still matches → file is skipped.
+    result = run_backup(config, mock_client, db, force=True, dry_run=True)
+
+    # DB was preserved (not cleared), mtime unchanged → counted as skipped, not uploaded.
+    assert result.skipped == 1
+    assert result.uploaded == 0
+    mock_client.upload_file.assert_not_called()
+    record = get_backed_up_file(db, "source/doc.txt")
+    assert record is not None, "DB record should be preserved — force must not clear in dry-run mode."
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +281,27 @@ def test_backup_result_counts_are_correct_for_mixed_run(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Dry-run mode
 # ---------------------------------------------------------------------------
+
+
+def test_excluded_file_is_not_uploaded(tmp_path: Path) -> None:
+    """A file matching an exclude_pattern is not uploaded and not recorded in the DB."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "keep.md").write_text("keep this")
+    (source_dir / "ignore.db").write_text("skip this")
+
+    db = _make_db()
+    config = _make_config(str(source_dir), exclude_patterns=["*.db"])
+    mock_client = _make_mock_client()
+
+    result = run_backup(config, mock_client, db)
+
+    assert result.uploaded == 1
+    assert result.errors == 0
+    mock_client.upload_file.assert_called_once()
+    call_args = mock_client.upload_file.call_args
+    assert "keep.md" in call_args.kwargs.get("local_path", "")
+    assert get_backed_up_file(db, "source/ignore.db") is None
 
 
 def test_dry_run_does_not_call_api_or_write_db(tmp_path: Path) -> None:

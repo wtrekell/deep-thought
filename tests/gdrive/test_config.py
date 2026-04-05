@@ -54,6 +54,7 @@ def test_load_config_valid_returns_gdrive_config(tmp_path: Path) -> None:
     assert config.api_rate_limit_rpm == 100
     assert config.retry_max_attempts == 3
     assert config.retry_base_delay_seconds == 2.0
+    assert config.exclude_patterns == []
 
 
 def test_load_config_allows_empty_drive_folder_id(tmp_path: Path) -> None:
@@ -84,14 +85,15 @@ def test_load_config_raises_value_error_for_missing_credentials_file(tmp_path: P
         load_config(config_path)
 
 
-def test_load_config_raises_value_error_for_missing_token_file(tmp_path: Path) -> None:
-    """ValueError is raised when auth.token_file is missing."""
+def test_load_config_allows_missing_token_file(tmp_path: Path) -> None:
+    """auth.token_file is optional — omitting it defaults to an empty string."""
     config_data = _valid_config_dict()
     del config_data["auth"]["token_file"]  # type: ignore[index]
     config_path = _write_config(tmp_path, config_data)
 
-    with pytest.raises(ValueError, match="auth.token_file"):
-        load_config(config_path)
+    config = load_config(config_path)
+
+    assert config.token_file == ""
 
 
 def test_load_config_raises_value_error_for_missing_scopes(tmp_path: Path) -> None:
@@ -140,4 +142,33 @@ def test_load_config_raises_value_error_for_non_mapping_yaml(tmp_path: Path) -> 
     config_path.write_text("- this\n- is\n- a\n- list\n")
 
     with pytest.raises(ValueError, match="YAML mapping"):
+        load_config(config_path)
+
+
+def test_load_config_exclude_patterns_defaults_to_empty_list(tmp_path: Path) -> None:
+    """exclude_patterns defaults to [] when the key is absent from the config."""
+    config_path = _write_config(tmp_path, _valid_config_dict())
+    config = load_config(config_path)
+
+    assert config.exclude_patterns == []
+
+
+def test_load_config_exclude_patterns_parsed_correctly(tmp_path: Path) -> None:
+    """exclude_patterns values are loaded as a list of strings."""
+    config_data = _valid_config_dict()
+    config_data["backup"]["exclude_patterns"] = ["output", "*.db", "deep-thought/output"]  # type: ignore[index]
+    config_path = _write_config(tmp_path, config_data)
+
+    config = load_config(config_path)
+
+    assert config.exclude_patterns == ["output", "*.db", "deep-thought/output"]
+
+
+def test_load_config_raises_value_error_for_non_list_exclude_patterns(tmp_path: Path) -> None:
+    """ValueError is raised when backup.exclude_patterns is not a list."""
+    config_data = _valid_config_dict()
+    config_data["backup"]["exclude_patterns"] = "output"  # type: ignore[index]
+    config_path = _write_config(tmp_path, config_data)
+
+    with pytest.raises(ValueError, match="backup.exclude_patterns"):
         load_config(config_path)
