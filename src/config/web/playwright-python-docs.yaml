@@ -1,0 +1,48 @@
+mode: "documentation"
+input_url: "https://playwright.dev/python/"
+index_depth: 1
+min_article_words: 50
+max_depth: 4
+max_pages: 100
+js_wait: 1.0
+browser_channel: null
+headless: true
+stealth: false
+
+include_patterns:
+  - '.*/python/docs/.*'
+
+exclude_patterns:
+  - '.*\.pdf$'
+  - '.*#.*'
+  - '.*\?.*'
+  - '.*login.*'
+
+strip_boilerplate:
+  # Docusaurus pre-heading chrome: nav, breadcrumb, sidebar, "On this page" TOC
+  # Strip everything before the first # heading
+  - '^.*?(?=\n# )'
+  # Playwright footer: "Learn" section through end of file (Learn / Community / More / Copyright)
+  - '\nLearn\n.*'
+  # Previous/Next navigation link that marks end of article content.
+  # "[Previous..." or "[Next..." (no space between bracket and label text).
+  - '\n\[(?:Previous|Next)[A-Z][^\n]*'
+  # Inline TOC — runs of bullet items that contain only plain heading text (no markdown links).
+  # Real content bullets contain "[text](url)" links; TOC items do not.
+  # Matches one or more lines of "  * plain text" or "    * plain text" with no "](" in them.
+  - '(?:\n[ ]{2,6}\* (?![^\n]*\]\()[^\n]+)+'
+
+retry_attempts: 2
+retry_delay: 5.0
+changelog_url: null
+strip_path_prefix: "/python/docs"
+strip_domain: true
+output_dir: "00-local/playwright-python/"
+extract_images: false
+generate_llms_files: true
+llms_lookback_days: 30
+unwrap_tags: []
+pagination: "none"
+pagination_selector: null
+pagination_wait: 2.0
+max_paginations: 10

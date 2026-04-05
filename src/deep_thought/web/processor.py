@@ -226,7 +226,7 @@ def _process_page(
         synced_at=now_iso,
     )
 
-    if embedding_model is not None and embedding_qdrant_client is not None:
+    if embedding_model is not None and embedding_qdrant_client is not None and qdrant_collection is not None:
         try:
             from deep_thought.embeddings import strip_frontmatter as _strip_frontmatter  # noqa: PLC0415
             from deep_thought.web.embeddings import write_embedding as _write_web_embedding  # noqa: PLC0415

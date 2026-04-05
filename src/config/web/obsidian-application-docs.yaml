@@ -19,7 +19,7 @@ retry_delay: 5.0
 changelog_url: null
 strip_path_prefix: null
 strip_domain: true
-output_dir: "00-private/obsidian/"
+output_dir: "00-local/obsidian/"
 extract_images: false
 generate_llms_files: true
 llms_lookback_days: 30

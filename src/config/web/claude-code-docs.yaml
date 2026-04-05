@@ -32,7 +32,7 @@ retry_delay: 5.0
 changelog_url: null
 strip_path_prefix: "/docs/en"
 strip_domain: true
-output_dir: "00-private/claude-code/"
+output_dir: "00-local/claude-code/"
 extract_images: false
 generate_llms_files: true
 llms_lookback_days: 30

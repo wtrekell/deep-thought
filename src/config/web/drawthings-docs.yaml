@@ -1,0 +1,47 @@
+mode: "documentation"
+input_url: "https://docs.drawthings.ai/"
+index_depth: 2
+min_article_words: 100
+max_depth: 6
+max_pages: 500
+js_wait: 1.0
+browser_channel: null
+headless: true
+stealth: false
+
+include_patterns:
+  - '.*/documentation/.*'
+  - 'https://docs\.drawthings\.ai/.*'
+
+exclude_patterns:
+  - '.*\.pdf$'
+  - '.*#.*'
+  - '.*\?.*'
+  - '.*login.*'
+
+strip_boilerplate:
+  # DocC header: "[object Module]" through the full sidebar tree and breadcrumb nav,
+  # ending just before the "Article" section marker that precedes every page's # heading
+  - '\[object Module\].*?(?=\n\nArticle\n\n)'
+  # DocC "Article" section marker that appears on its own line before every # heading
+  - '\nArticle\n\n'
+  # DocC in-page TOC: anchor link list that appears before the footer on longer pages
+  - '\n  \* \[.*?(?=\nCurrent page is |\Z)'
+  # DocC footer: "Current page is..." through end of document (color scheme selector)
+  - '\nCurrent page is .*'
+
+unwrap_tags: []
+
+retry_attempts: 2
+retry_delay: 5.0
+changelog_url: null
+strip_path_prefix: "/documentation"
+strip_domain: true
+output_dir: "00-local/drawthings/"
+extract_images: false
+generate_llms_files: true
+llms_lookback_days: 30
+pagination: "none"
+pagination_selector: null
+pagination_wait: 2.0
+max_paginations: 10

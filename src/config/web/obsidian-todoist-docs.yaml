@@ -33,7 +33,8 @@ retry_delay: 5.0
 changelog_url: null
 strip_path_prefix: "/obsidian-todoist-plugin/docs"
 strip_domain: true
-output_dir: "00-private/obsidian/todoist/"
+output_dir: "00-local/obsidian/todoist/"
+qdrant_collection: null
 extract_images: false
 generate_llms_files: true
 llms_lookback_days: 30

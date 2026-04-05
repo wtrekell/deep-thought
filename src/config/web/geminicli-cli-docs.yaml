@@ -1,0 +1,48 @@
+mode: "documentation"
+input_url: "https://geminicli.com/docs/"
+index_depth: 1
+min_article_words: 100
+max_depth: 4
+max_pages: 100
+js_wait: 1.0
+browser_channel: null
+headless: true
+stealth: false
+
+include_patterns:
+  - '.*/docs/.*'
+
+exclude_patterns:
+  - '.*\.pdf$'
+  - '.*#.*'
+  - '.*\?.*'
+  - '.*login.*'
+
+strip_boilerplate:
+  # Full Starlight header: top nav + repeated sidebars + "On this page" TOC
+  # Strip everything before the first # heading.
+  - '^.*?(?=\n# )'
+  # "Copy as Markdown Copied!" button artifact after the page title
+  - '\nCopy as Markdown Copied!\n'
+  # "Section titled" label rendered after every heading.
+  # CRITICAL: Starlight uses curly/smart quotes (U+201C / U+201D), not ASCII quotes.
+  - "Section titled \u201c[^\u201d]*\u201d\n"
+  # "Terminal window" label rendered above every code block
+  - '\nTerminal window\n'
+  # Cookie notice and footer from "This website uses cookies" through end of document
+  - '\nThis website uses \[cookies\].*'
+
+retry_attempts: 2
+retry_delay: 5.0
+changelog_url: null
+strip_path_prefix: "/docs"
+strip_domain: true
+output_dir: "00-local/geminicli-cli/"
+extract_images: false
+generate_llms_files: true
+llms_lookback_days: 30
+unwrap_tags: []
+pagination: "none"
+pagination_selector: null
+pagination_wait: 2.0
+max_paginations: 10

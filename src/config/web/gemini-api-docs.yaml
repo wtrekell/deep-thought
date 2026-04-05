@@ -1,0 +1,44 @@
+mode: "documentation"
+input_url: "https://ai.google.dev/gemini-api/docs"
+index_depth: 1
+min_article_words: 100
+max_depth: 4
+max_pages: 200
+js_wait: 1.0
+browser_channel: null
+headless: true
+stealth: false
+
+include_patterns:
+  - '.*/gemini-api/docs.*'
+
+exclude_patterns:
+  - '.*\.pdf$'
+  - '.*#.*'
+  - '.*\?.*'
+  - '.*login.*'
+
+strip_boilerplate:
+  # Google developer portal header: language picker + top nav + full sidebar + "On this page" TOC,
+  # all rendered before the actual page heading. Strip everything up to (but not including) the first # heading.
+  - '^.*?(?=\n# )'
+  # "Was this helpful? / Send feedback" prompt that appears both before and after the page content
+  - 'Was this helpful\?\n\nSend feedback\s*\n'
+  # "Need to tell us more?" + feedback rating widget JSON through the end of the document
+  - 'Need to tell us more\?.*'
+
+qdrant_collection: deep_thought_documents
+retry_attempts: 2
+retry_delay: 5.0
+changelog_url: null
+strip_path_prefix: "/gemini-api/docs"
+strip_domain: true
+output_dir: "00-local/gemini-api/"
+extract_images: false
+generate_llms_files: true
+llms_lookback_days: 30
+unwrap_tags: []
+pagination: "none"
+pagination_selector: null
+pagination_wait: 2.0
+max_paginations: 10

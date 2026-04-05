@@ -1,17 +1,17 @@
 mode: "documentation"
-input_url: "https://praw.readthedocs.io/en/stable/"
+input_url: "https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/api.html"
 index_depth: 1
 min_article_words: 100
 max_depth: 4
-max_pages: 100
+max_pages: 600
 js_wait: 1.0
 browser_channel: null
 headless: true
 stealth: false
 
 include_patterns:
-  # Only collect pages under /en/stable/ — prevents cross-version and marketing page crawl
-  - 'https://praw\.readthedocs\.io/en/stable/.*'
+  # All pages under /en/latest/ — full PyMuPDF documentation
+  - 'https://pymupdf\.readthedocs\.io/en/latest/.*'
 
 exclude_patterns:
   - '.*\.pdf$'
@@ -30,15 +30,22 @@ strip_boilerplate:
   - '\n\[[ \t]*(?:Next|Previous)[^\n]*'
   # Copyright line and everything below it: Sphinx credit, RTD badge links, "On this page" TOC
   - '\nCopyright ©.*'
+  # PyMuPDF AS-IS license footer and everything below it (different footer pattern from standard RTD)
+  - '\nThis software is provided AS-IS.*'
+  # "Copy to clipboard" labels that Sphinx inserts after every code block
+  - '\nCopy to clipboard'
+  # Pilcrow signs (¶) appended to every heading and method signature
+  - '¶'
 
 unwrap_tags: []
 
 retry_attempts: 2
 retry_delay: 5.0
 changelog_url: null
-strip_path_prefix: "/en/stable"
+strip_path_prefix: "/en/latest"
 strip_domain: true
-output_dir: "00-local/reddit/praw/"
+output_dir: "00-local/pymupdf/"
+qdrant_collection: null
 extract_images: false
 generate_llms_files: true
 llms_lookback_days: 30

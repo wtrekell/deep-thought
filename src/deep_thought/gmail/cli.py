@@ -486,7 +486,7 @@ def _handle_save_config(destination_path_str: str) -> None:
         sys.exit(1)
 
     if destination_path.exists():
-        print(f"ERROR: File already exists at {destination_path}. Use --force to overwrite.", file=sys.stderr)
+        print(f"ERROR: File already exists at {destination_path}. Remove it manually to overwrite.", file=sys.stderr)
         sys.exit(1)
 
     destination_path.parent.mkdir(parents=True, exist_ok=True)

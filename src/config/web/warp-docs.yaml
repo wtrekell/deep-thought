@@ -1,0 +1,55 @@
+mode: "documentation"
+input_url: "https://docs.warp.dev/"
+index_depth: 1
+min_article_words: 100
+max_depth: 4
+max_pages: 500
+js_wait: 1.5
+browser_channel: null
+headless: true
+stealth: false
+
+# Warp docs are hosted on GitBook at docs.warp.dev.
+# Content sections: getting-started, terminal, agent-platform, code,
+# knowledge-and-collaboration, reference, university.
+# Excluded: changelog, support-and-community, enterprise (not doc content),
+# and ~gitbook/* (GitBook internal asset URLs).
+include_patterns:
+  - 'https://docs\.warp\.dev/(getting-started|terminal|agent-platform|code|knowledge-and-collaboration|reference|university).*'
+
+exclude_patterns:
+  - '.*\.pdf$'
+  - '.*#.*'
+  - '.*\?.*'
+  - '.*login.*'
+  - '.*/~gitbook/.*'
+
+strip_boilerplate:
+  # GitBook full header block: announcement banner (if present) + top nav bar + full sidebar nav
+  # + "On this page" TOC + "Was this helpful?" + theme toggle.
+  # The entire block reliably ends with "sun-brightdesktopmoon\n\ncopyCopychevron-down" and is
+  # followed by the numbered breadcrumb then the # heading.
+  # Using a broad match from the start of the content (frontmatter ends, then this block begins).
+  - '^(?:\[circle-infoIntroducing Oz.*?close\n\n)?(?:bars)?\[Warp\]\(https://docs\.warp\.dev/\).*?sun-brightdesktopmoon\n\ncopyCopychevron-down\n'
+  # Footer: "Last updated N ago" through end of document
+  - '\nLast updated \d+ (?:day|week|month|hour)s? ago.*'
+  # Prev/Next navigation line at bottom (may have only Previous, only Next, or both)
+  - '\n\[(?:Previous|Next)[^\n]*(?:\[(?:Previous|Next)[^\n]*)?$'
+  # GitBook section anchor icon: "hashtag" line that appears between a ## heading and its text
+  - '\n\nhashtag\n\n'
+
+retry_attempts: 2
+retry_delay: 5.0
+changelog_url: null
+strip_path_prefix: null
+strip_domain: true
+output_dir: "00-local/warp/"
+qdrant_collection: null
+extract_images: false
+generate_llms_files: true
+llms_lookback_days: 30
+unwrap_tags: []
+pagination: "none"
+pagination_selector: null
+pagination_wait: 2.0
+max_paginations: 10

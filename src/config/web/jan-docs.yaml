@@ -1,0 +1,41 @@
+mode: "documentation"
+input_url: "https://www.jan.ai/docs"
+index_depth: 1
+min_article_words: 100
+max_depth: 6
+max_pages: 500
+js_wait: 1.0
+browser_channel: null
+headless: true
+stealth: false
+
+include_patterns:
+  - '.*/docs/.*'
+
+exclude_patterns:
+  - '.*\.pdf$'
+  - '.*#.*'
+  - '.*\?.*'
+  - '.*login.*'
+
+strip_boilerplate:
+  # Jan.ai header: top nav + full sidebar nav + "On This Page" TOC + feedback/edit links + breadcrumb,
+  # ending just before the first # heading. The breadcrumb always ends with "# Heading".
+  - '^\[Jan\].*?(?=\n# )'
+  # Jan.ai footer: horizontal rule + "## Jan" newsletter block through end of document
+  - '\n\* \* \*\n\n## Jan\n.*'
+
+retry_attempts: 2
+retry_delay: 5.0
+changelog_url: null
+strip_path_prefix: "/docs"
+strip_domain: true
+output_dir: "00-local/jan-docs/"
+extract_images: false
+generate_llms_files: true
+llms_lookback_days: 30
+unwrap_tags: []
+pagination: "none"
+pagination_selector: null
+pagination_wait: 2.0
+max_paginations: 10
