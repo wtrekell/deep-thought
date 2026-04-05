@@ -261,7 +261,8 @@ def cmd_crawl(args: argparse.Namespace) -> None:
 
             embedding_model = create_embedding_model()
             embedding_qdrant_client = create_qdrant_client()
-            ensure_collection(embedding_qdrant_client, config.crawl.qdrant_collection)
+            if config.crawl.qdrant_collection is not None:
+                ensure_collection(embedding_qdrant_client, config.crawl.qdrant_collection)
         except Exception as init_err:
             logger.error("Embedding infrastructure unavailable, continuing without embeddings: %s", init_err)
 

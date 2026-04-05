@@ -1,1 +1,2 @@
 *.md filter=frontmatter
+tests/**/*.md !filter

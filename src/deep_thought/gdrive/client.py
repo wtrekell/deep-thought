@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import logging
 import time
+from pathlib import Path
 from typing import Any
 
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
@@ -189,7 +190,7 @@ class DriveClient:
             RuntimeError: If authenticate() has not been called.
             HttpError: If the API call fails after all retries.
         """
-        file_name = local_path.split("/")[-1]
+        file_name = Path(local_path).name
         file_metadata: dict[str, Any] = {
             "name": file_name,
             "parents": [drive_folder_id],
