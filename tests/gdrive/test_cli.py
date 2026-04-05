@@ -110,6 +110,7 @@ def _patch_backup_for_cli(
         scopes=["https://www.googleapis.com/auth/drive.file"],
         source_dir=str(tmp_path / "source"),
         drive_folder_id=drive_folder_id,
+        exclude_patterns=[],
         api_rate_limit_rpm=0,
         retry_max_attempts=1,
         retry_base_delay_seconds=0.0,

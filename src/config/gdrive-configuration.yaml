@@ -1,6 +1,6 @@
 # OAuth credentials
 auth:
-  credentials_file: "src/config/gdrive/credentials.json"
+  credentials_file: "files/tools/google/client_secret_2_770894559256-m7f602spn8c8upeh7tdvodhtotlc1jqa.apps.googleusercontent.com.json"
   token_file: "src/config/gdrive/token.json"
   scopes:
     - "https://www.googleapis.com/auth/drive.file"
@@ -8,7 +8,15 @@ auth:
 # Backup source and destination
 backup:
   source_dir: "/Users/williamtrekell/Documents/dont-panic"
-  drive_folder_id: "" # Required: ID of the root backup folder on Drive
+  drive_folder_id: "1WFmz-3yq6WaNP8Tnus0yH5gmiTlFLWFE"
+  # Paths to skip during backup. Patterns match against the directory or file
+  # name alone, or against the path relative to source_dir. Uses fnmatch glob
+  # syntax (* matches anything within a single path segment).
+  # Examples: "output", "*.db", "deep-thought/output"
+  exclude_patterns:
+    - "output"
+    - "*.db"
+    - "*.log"
 
 # API
 api_rate_limit_rpm: 100 # Drive API calls per minute

@@ -137,7 +137,8 @@ def run_backup(
         db_conn: Open SQLite connection to the gdrive database.
         dry_run: If True, walk the tree and log what would happen but skip
                  all Drive API calls and DB writes.
-        force: If True, clear all cached state and re-upload everything.
+        force: If True, clear all cached state and re-upload everything. Has no
+               effect when combined with ``dry_run``.
         verbose: If True, log each file's disposition at DEBUG level.
 
     Returns:
@@ -145,14 +146,16 @@ def run_backup(
     """
     backup_result = BackupResult()
 
-    if force and not dry_run:
+    if force and dry_run:
+        logger.info("--force has no effect in --dry-run mode: cached state will not be cleared.")
+    elif force:
         logger.info("--force: clearing backed_up_files and drive_folders tables.")
         clear_backed_up_files(db_conn)
         clear_drive_folders(db_conn)
         db_conn.commit()
 
     logger.info("Walking source directory: %s", config.source_dir)
-    walked_files = walk_tree(config.source_dir)
+    walked_files = walk_tree(config.source_dir, config.exclude_patterns)
     logger.info("Found %d file(s) to consider.", len(walked_files))
 
     now_iso = datetime.now(UTC).isoformat()
@@ -167,6 +170,8 @@ def run_backup(
             # Skip if mtime is unchanged
             if existing_record is not None and existing_record.mtime == file_mtime:
                 backup_result.skipped += 1
+                mark_file_status(db_conn, relative_file_path, "skipped")
+                db_conn.commit()
                 if verbose:
                     logger.debug("SKIP  %s (mtime unchanged)", relative_file_path)
                 continue

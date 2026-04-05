@@ -19,21 +19,23 @@ class GDriveConfig:
     """Top-level configuration for the GDrive backup tool.
 
     Fields map to the nested YAML structure:
-        auth.credentials_file     → credentials_file
-        auth.token_file           → token_file
-        auth.scopes               → scopes
-        backup.source_dir         → source_dir
-        backup.drive_folder_id    → drive_folder_id
-        api_rate_limit_rpm        → api_rate_limit_rpm
-        retry.max_attempts        → retry_max_attempts
-        retry.base_delay_seconds  → retry_base_delay_seconds
+        auth.credentials_file          → credentials_file
+        auth.token_file                → token_file
+        auth.scopes                    → scopes
+        backup.source_dir              → source_dir
+        backup.drive_folder_id         → drive_folder_id
+        backup.exclude_patterns        → exclude_patterns
+        api_rate_limit_rpm             → api_rate_limit_rpm
+        retry.max_attempts             → retry_max_attempts
+        retry.base_delay_seconds       → retry_base_delay_seconds
     """
 
     credentials_file: str
-    token_file: str
+    token_file: str  # optional — empty string when keychain is the storage backend
     scopes: list[str]
     source_dir: str
     drive_folder_id: str
+    exclude_patterns: list[str]  # fnmatch patterns for files/dirs to skip during backup
     api_rate_limit_rpm: int
     retry_max_attempts: int
     retry_base_delay_seconds: float
@@ -103,10 +105,8 @@ def load_config(config_path: Path | None = None) -> GDriveConfig:
     if not isinstance(raw_credentials_file, str):
         raise ValueError(f"auth.credentials_file must be a string, got: {type(raw_credentials_file).__name__}")
 
-    # token_file is required
-    raw_token_file = auth_section.get("token_file")
-    if raw_token_file is None:
-        raise ValueError("Missing required config field: auth.token_file")
+    # token_file is optional — defaults to "" when keychain is the storage backend
+    raw_token_file = auth_section.get("token_file", "")
     if not isinstance(raw_token_file, str):
         raise ValueError(f"auth.token_file must be a string, got: {type(raw_token_file).__name__}")
 
@@ -130,6 +130,12 @@ def load_config(config_path: Path | None = None) -> GDriveConfig:
     if not isinstance(raw_drive_folder_id, str):
         raise ValueError(f"backup.drive_folder_id must be a string, got: {type(raw_drive_folder_id).__name__}")
 
+    # exclude_patterns — optional list of fnmatch patterns, defaults to []
+    raw_exclude_patterns = backup_section.get("exclude_patterns", [])
+    if not isinstance(raw_exclude_patterns, list):
+        raise ValueError(f"backup.exclude_patterns must be a list, got: {type(raw_exclude_patterns).__name__}")
+    exclude_patterns: list[str] = [str(pattern) for pattern in raw_exclude_patterns]
+
     # api_rate_limit_rpm — top-level key
     raw_rate_limit = raw_dict.get("api_rate_limit_rpm", 100)
     if not isinstance(raw_rate_limit, int):
@@ -150,6 +156,7 @@ def load_config(config_path: Path | None = None) -> GDriveConfig:
         scopes=scopes,
         source_dir=raw_source_dir,
         drive_folder_id=raw_drive_folder_id,
+        exclude_patterns=exclude_patterns,
         api_rate_limit_rpm=raw_rate_limit,
         retry_max_attempts=raw_max_attempts,
         retry_base_delay_seconds=float(raw_base_delay),
