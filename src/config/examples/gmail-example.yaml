@@ -26,9 +26,11 @@ scopes:                              # Google OAuth scopes to request
 # ---------------------------------------------------------------------------
 gemini_api_key_env: "GEMINI_API_KEY"  # Name of the env var holding your Gemini API key
 
-gemini_model: "gemini-2.5-flash"     # Gemini model to use for AI extraction
+gemini_model: "gemini-2.5-flash"     # Gemini model to use for AI extraction and newsletter cleaning
+                                     # Examples: "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"
 
 gemini_rate_limit_rpm: 15            # Maximum Gemini API requests per minute
+                                     # Free tier limit is 15 rpm; paid tier is higher — increase accordingly
 
 # ---------------------------------------------------------------------------
 # Gmail API behaviour
@@ -47,12 +49,13 @@ retry_base_delay_seconds: 1 # Initial delay in seconds before the first retry
 max_emails_per_run: 100     # Maximum emails to process per invocation; must be > 0
 
 clean_newsletters: true     # Options: true, false
-                            #   true  — Strip tracking pixels, social buttons, etc.
-                            #           (typically 50-70% size reduction)
-                            #   false — Keep email HTML/text as-is
+                            #   true  — Use Gemini to strip tracking pixels, social buttons, footer noise, etc.
+                            #           before writing to markdown (typically 50-70% size reduction)
+                            #   false — Keep email HTML/text as-is without AI cleaning
 
-decision_cache_ttl: 3600    # Seconds to cache AI extraction decisions; must be >= 0
-                            # Set to 0 to disable caching
+decision_cache_ttl: 3600    # Seconds to cache Gemini AI extraction decisions per email; must be >= 0
+                            # Prevents re-processing the same message on repeated runs within the TTL window
+                            # Set to 0 to disable caching (every run reprocesses all matched emails)
 
 # ---------------------------------------------------------------------------
 # Output

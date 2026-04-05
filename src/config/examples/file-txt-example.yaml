@@ -5,27 +5,23 @@
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# Marker (PDF conversion engine)
+# PDF conversion
 # ---------------------------------------------------------------------------
-force_ocr: false            # Options: true, false
-                            #   true  — Force OCR even when text is extractable from the PDF
-                            #   false — Use embedded text when available, OCR only as fallback
-
-torch_device: "mps"        # Options: "mps", "cuda", "cpu"
-                            #   mps  — Apple Silicon GPU (Metal Performance Shaders)
-                            #   cuda — NVIDIA GPU
-                            #   cpu  — CPU only (slowest, most compatible)
+# PyMuPDF (pymupdf4llm) is the PDF engine. It extracts embedded text directly
+# from the PDF — no OCR, no GPU required. There are no engine-specific knobs
+# to set here. Output and filter options below control what gets written.
 
 # ---------------------------------------------------------------------------
 # Email (.eml / .msg files)
 # ---------------------------------------------------------------------------
 prefer_html: false          # Options: true, false
                             #   true  — Use the HTML body of the email for conversion
-                            #   false — Use the plain text body when available
+                            #   false — Use the plain text body when available (recommended
+                            #           for cleaner LLM input)
 
 full_headers: false         # Options: true, false
                             #   true  — Include all email headers (CC, BCC, Reply-To, etc.)
-                            #   false — Include only From, To, and Date headers
+                            #   false — Include only From, To, Subject, and Date headers
 
 include_attachments: true   # Options: true, false
                             #   true  — Include attachment metadata in the markdown output
@@ -34,34 +30,39 @@ include_attachments: true   # Options: true, false
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
-output_dir: "output/"       # Directory where converted markdown files are written
+output_dir: "output/"       # Directory where converted markdown files are written.
+                            # Relative paths are resolved from the current working directory.
 
 include_page_numbers: false # Options: true, false
                             #   true  — Retain page number markers in PDF output
-                            #   false — Strip page number markers for cleaner output
+                            #   false — Strip page number markers for cleaner LLM input
 
 extract_images: true        # Options: true, false
                             #   true  — Extract embedded images to img/ subdirectories
+                            #           alongside each output markdown file
                             #   false — Skip image extraction
 
 # ---------------------------------------------------------------------------
 # Limits
 # ---------------------------------------------------------------------------
-max_file_size_mb: 200       # Maximum file size in megabytes; must be a positive integer
+max_file_size_mb: 200       # Maximum input file size in megabytes. Files larger than this
+                            # value are skipped with a warning. Must be a positive integer.
 
 # ---------------------------------------------------------------------------
 # File filter
 # ---------------------------------------------------------------------------
-allowed_extensions:         # List of file extensions to process (empty list = nothing processed)
-  - ".pdf"                  # PDF documents
-  - ".docx"                 # Microsoft Word
-  - ".pptx"                 # Microsoft PowerPoint
-  - ".xlsx"                 # Microsoft Excel
-  - ".html"                 # HTML files
+allowed_extensions:         # List of file extensions to process. An empty list means no
+                            # files will be processed — at least one extension is required.
+  - ".pdf"                  # PDF documents (via PyMuPDF — native text extraction)
+  - ".docx"                 # Microsoft Word (via markitdown)
+  - ".pptx"                 # Microsoft PowerPoint (via markitdown)
+  - ".xlsx"                 # Microsoft Excel (via markitdown)
+  - ".html"                 # HTML files (via markitdown)
   - ".htm"                  # HTML files (alternate extension)
   - ".eml"                  # Email message files
   - ".msg"                  # Outlook message files
 
-exclude_patterns:           # Glob patterns for files to skip
-  - "~$*"                   # Microsoft Office temporary files
+exclude_patterns:           # Glob patterns for file names to skip, matched against the
+                            # file name only (not the full path). Supports * and ? wildcards.
+  - "~$*"                   # Microsoft Office lock/temporary files
   - ".*"                    # Hidden files (dotfiles)

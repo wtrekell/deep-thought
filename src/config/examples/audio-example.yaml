@@ -93,9 +93,8 @@ hallucination_detection:
   duration_chars_per_sec_min: 2   # Flag segments with text density below this
                                   # (for segments longer than 0.5 seconds)
 
-  use_vad: true                   # Options: true, false
-                                  #   true  — Use Voice Activity Detector for silence detection
-                                  #   false — Skip VAD-based detection
+  # use_vad: DEPRECATED — this field is no longer supported and has no effect.
+  # Remove it from any existing configuration files.
 
   blocklist_enabled: true         # Options: true, false
                                   #   true  — Check against known hallucination phrases

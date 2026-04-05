@@ -118,6 +118,19 @@ strip_boilerplate: [] # Regex patterns to remove from converted markdown before 
   # Tip: use [^\n]* instead of .* to match within a single line only.
 
 # ---------------------------------------------------------------------------
+# HTML tag unwrapping
+# ---------------------------------------------------------------------------
+unwrap_tags:
+  [] # HTML tags to unwrap (remove the tag but keep its inner content)
+  # Runs before HTML-to-markdown conversion. Useful for stripping wrapper
+  # elements that produce noise in the markdown output.
+  # Format: "tagname" or "tagname.classname" to target a specific class.
+  # Examples:
+  #   - "div"         — Unwrap all <div> elements
+  #   - "div.sidebar" — Unwrap only <div class="sidebar"> elements
+  #   - "aside"       — Unwrap all <aside> elements
+
+# ---------------------------------------------------------------------------
 # Content quality
 # ---------------------------------------------------------------------------
 index_depth:
@@ -133,3 +146,47 @@ changelog_url:
   #   null           — No incremental re-crawl support
   #   "https://..."  — Documentation mode only: URL of a changelog page
   #                    used to detect which pages need re-crawling
+
+# ---------------------------------------------------------------------------
+# Pagination (index page expansion)
+# ---------------------------------------------------------------------------
+# These four fields control how index pages are expanded before their links
+# are extracted. Active only in blog and documentation modes — they have no
+# effect on leaf-page fetches or in direct mode.
+
+pagination:
+  "none" # Strategy for expanding index pages. Options: "none", "scroll", "click"
+  #   none   — Fetch the index page once and move on (default)
+  #   scroll — Repeatedly scroll to the bottom to trigger lazy-loaded content;
+  #            useful for infinite-scroll listing pages
+  #   click  — Repeatedly click a CSS-selected element (e.g. a "Load more"
+  #            button) to expand the page; requires pagination_selector
+
+pagination_selector:
+  null # CSS selector for the element to click when pagination is "click"
+  # Options: null or a CSS selector string
+  #   null               — No element to click; ignored for non-click strategies
+  #   "button.load-more" — Click the Load More button on each iteration
+  #   "a[data-page-next]" — Click a next-page link
+  # Required (non-empty) when pagination is "click"; validated at startup.
+
+pagination_wait:
+  2.0 # Seconds to wait after each scroll or click before reading the updated DOM
+  # Increase on slow sites or when content loads asynchronously; must be >= 0
+
+max_paginations:
+  10 # Maximum scroll or click iterations per index page
+  # Prevents unbounded loops on pages that never stop loading; must be > 0
+
+# ---------------------------------------------------------------------------
+# Vector store
+# ---------------------------------------------------------------------------
+qdrant_collection:
+  "deep_thought_documents" # Qdrant collection name to write embeddings into
+  # Options: null or a collection name string
+  #   null                    — Embeddings are disabled for this crawl
+  #   "deep_thought_documents" — Default shared collection used by all tools
+  #   "my_project_docs"       — A dedicated collection to keep this corpus
+  #                             separate from other tools' embeddings
+  # Each batch config in src/config/web/ can specify a different collection
+  # to isolate corpora for separate semantic search spaces.

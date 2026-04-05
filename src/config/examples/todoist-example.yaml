@@ -8,84 +8,107 @@
 # Todoist API
 # ---------------------------------------------------------------------------
 todoist:
-  api_token_env: "TODOIST_API_TOKEN"  # Name of the env var holding your Todoist API token
+  api_token_env: "TODOIST_API_TOKEN"  # Name of the env var holding your Todoist API token.
+                                      # The value of this env var (not the name) must be set
+                                      # in your .env file or shell before running any command.
 
 # ---------------------------------------------------------------------------
 # Projects to sync (opt-in list)
-# Only projects listed here will be pulled/pushed.
+# Only tasks belonging to a project listed here will be pulled or pushed.
+# The name must match the exact Todoist project name (case-sensitive).
 # ---------------------------------------------------------------------------
 projects:
-  - name: "Inbox"                     # Each entry must have a "name" matching the
-  - name: "Work"                      # exact Todoist project name
+  - name: "Inbox"
+  - name: "Work"
   - name: "Personal"
 
 # ---------------------------------------------------------------------------
 # Filter rules for pull and push operations
 # ---------------------------------------------------------------------------
 filters:
+
+  # -------------------------------------------------------------------------
+  # Pull filters — control which tasks are fetched from Todoist into SQLite
+  # -------------------------------------------------------------------------
   pull:
     labels:
-      include: []                     # Only pull tasks with these labels
-                                      # Empty list = no label filter (all labels pass)
-      exclude: []                     # Skip tasks with any of these labels
+      include: ["urgent", "this-week"]  # Only pull tasks that carry at least one of these labels.
+                                        # Empty list = no label filter; all tasks pass through.
+      exclude: ["someday", "waiting"]   # Skip tasks that carry any of these labels.
+                                        # Empty list = no exclusion by label.
 
     projects:
-      include: []                     # Only pull from these project names
-                                      # Empty list = use the top-level projects list
+      include: ["Work", "Personal"]     # Narrow pulls to these project names, overriding the
+                                        # top-level projects list for pull operations.
+                                        # Empty list = use the top-level projects list instead.
+      # Note: exclude is not supported for pull.projects — the parser ignores it.
+      # To exclude a project, simply omit it from the top-level projects list above.
 
     sections:
-      include: []                     # Only pull tasks in these sections
-                                      # Empty list = all sections
-      exclude: []                     # Skip tasks in these sections
+      include: ["Active", "In Progress"]  # Only pull tasks that live in these sections.
+                                          # Empty list = pull from all sections.
+      exclude: ["Archive", "Done"]        # Skip tasks in these sections.
+                                          # Empty list = no exclusion by section.
 
     assignee:
-      include: []                     # Only pull tasks assigned to these user names/IDs
-                                      # Empty list = all assignees
+      include: ["alice@example.com"]    # Only pull tasks assigned to these user names or email
+                                        # addresses. Empty list = pull tasks for all assignees.
+      # Note: exclude is not supported for pull.assignee — the parser ignores it.
 
     due:
-      has_due_date: null              # Options: null, true, false
-                                      #   null  — Pull all tasks regardless of due date
-                                      #   true  — Only pull tasks that have a due date
-                                      #   false — Only pull tasks without a due date
+      has_due_date: null                # Controls due-date filtering.
+                                        #   null  — Pull all tasks regardless of due date (default)
+                                        #   true  — Only pull tasks that have a due date set
+                                        #   false — Only pull tasks that have no due date
 
+  # -------------------------------------------------------------------------
+  # Push filters — control which locally-modified tasks are written back to Todoist
+  # -------------------------------------------------------------------------
   push:
     labels:
-      include: []                     # Only push tasks with these labels
-      exclude: []                     # Skip tasks with these labels when pushing
+      include: ["urgent", "this-week"]  # Only push tasks that carry at least one of these labels.
+                                        # Empty list = no label filter; all modified tasks are eligible.
+      exclude: ["waiting"]              # Skip tasks with these labels when pushing.
+                                        # Empty list = no exclusion by label.
 
     assignee:
-      include: []                     # Only push tasks assigned to these users
+      include: ["alice@example.com"]    # Only push tasks assigned to these users.
+                                        # Empty list = push for all assignees.
+      # Note: exclude is not supported for push.assignee — the parser ignores it.
 
-    conflict_resolution: "prompt"     # Options: "prompt", "remote_wins", "local_wins"
-                                      #   prompt      — Ask the user to resolve each conflict
-                                      #   remote_wins — Remote (Todoist) version always wins
-                                      #   local_wins  — Local (database) version always wins
+    conflict_resolution: "prompt"       # How to handle a conflict when local and remote both changed.
+                                        #   "prompt"      — Ask interactively for each conflict (default)
+                                        #   "remote_wins" — Always keep the Todoist (remote) version
+                                        #   "local_wins"  — Always keep the local (SQLite) version
 
-    require_confirmation: true        # Options: true, false
-                                      #   true  — Prompt for confirmation before pushing changes
-                                      #   false — Push changes without prompting
+    require_confirmation: true          # Whether to prompt before writing any changes back to Todoist.
+                                        #   true  — Show a summary and ask for confirmation (default)
+                                        #   false — Push without prompting (useful in automation)
 
 # ---------------------------------------------------------------------------
 # Comment sync settings
 # ---------------------------------------------------------------------------
 comments:
-  sync: true                          # Options: true, false
-                                      #   true  — Sync task comments from Todoist
-                                      #   false — Skip comment sync entirely
+  sync: true                            # Whether to fetch task comments from Todoist.
+                                        #   true  — Sync comments alongside tasks (default)
+                                        #   false — Skip comment sync entirely
 
-  include_attachments: false          # Options: true, false
-                                      #   true  — Include attachment metadata in synced comments
-                                      #   false — Ignore attachments in comments
+  include_attachments: false            # Whether to include attachment metadata in synced comments.
+                                        #   true  — Capture file name, URL, and MIME type for attachments
+                                        #   false — Ignore attachments; store comment text only (default)
 
 # ---------------------------------------------------------------------------
 # Claude involvement markers
 # Used to identify tasks assigned to Claude and link them to a repository.
+# Set claude.label to a Todoist label you apply to tasks you want Claude to handle.
 # ---------------------------------------------------------------------------
 claude:
-  label: "claude-code"                # Todoist label that marks tasks for Claude to handle
+  label: "claude-code"                  # Todoist label that marks tasks intended for Claude.
+                                        # Set to null or omit to disable Claude task detection.
 
   role:
-    repo: "deep-thought"              # Repository name where Claude should work on the task
-                                      # Should be set when claude.label is configured
+    repo: "deep-thought"                # Repository name where Claude should work on the task.
+                                        # Required when claude.label is set — validation will warn
+                                        # if label is set but repo is empty.
 
-    branch: "main"                    # Git branch to target for Claude's work
+    branch: "main"                      # Git branch Claude should target. Defaults to "main".
