@@ -66,5 +66,19 @@ CLAUDE.md
 00-*
 
 # Secrets / credentials
-files/tools/google/
-src/config/gmail/
+files/tools/*google*
+files/tools/*gdrive*
+files/tools/*gmail*
+files/tools/*gcal*
+files/tools/*google*/**
+files/tools/*gdrive*/**
+files/tools/*gmail*/**
+files/tools/*gcal*/**
+src/config/*google*
+src/config/*gdrive*
+src/config/*gmail*
+src/config/*gcal*
+src/config/*google*/**
+src/config/*gdrive*/**
+src/config/*gmail*/**
+src/config/*gcal*/**

@@ -16,6 +16,8 @@ dependencies = [
     "html2text>=2020.1.16",
     "extract-msg>=0.50.0",
     "mlx-whisper>=0.4.0",
+    "mlx-embeddings>=0.1.0",
+    "qdrant-client>=1.9.0",
     "praw>=7.7.1",
     "google-api-python-client>=2.100.0",
     "google-auth-oauthlib>=1.2.0",
@@ -52,10 +54,6 @@ whisper = [
 ]
 diarize = [
     "pyannote.audio>=3.0",
-]
-embeddings = [
-    "mlx-embeddings>=0.1.0",
-    "qdrant-client>=1.9.0",
 ]
 
 [build-system]

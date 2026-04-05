@@ -17,6 +17,9 @@ backup:
     - "output"
     - "*.db"
     - "*.log"
+    - "htmlcov"
+    - "tests"
+    - "storage"
 
 # API
 api_rate_limit_rpm: 100 # Drive API calls per minute
