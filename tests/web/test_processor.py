@@ -108,6 +108,7 @@ def _make_web_config(
             pagination_selector=None,
             pagination_wait=2.0,
             max_paginations=10,
+            qdrant_collection="deep_thought_documents",
         )
     )
 

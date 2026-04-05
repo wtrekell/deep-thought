@@ -99,6 +99,7 @@ def _process_single_post(
     pre_fetched_comments: list[Any] | None = None,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
+    qdrant_collection: str = "deep_thought_documents",
 ) -> tuple[str, bool]:
     """Fetch comments, generate markdown, write output, and upsert the database record.
 
@@ -202,7 +203,13 @@ def _process_single_post(
 
                 raw_md = _EmbedPath(output_path_str).read_text(encoding="utf-8")
                 embed_content = f"Title: {submission.title}\n\n{_strip_frontmatter(raw_md)}"
-                _write_reddit_embedding(embed_content, local_post, embedding_model, embedding_qdrant_client)
+                _write_reddit_embedding(
+                    embed_content,
+                    local_post,
+                    embedding_model,
+                    embedding_qdrant_client,
+                    qdrant_collection,
+                )
             except Exception as embed_err:
                 logger.warning("Embedding failed for post %s: %s", state_key, embed_err)
 
@@ -251,6 +258,7 @@ def process_rule(
     max_posts_per_run: int,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
+    qdrant_collection: str = "deep_thought_documents",
 ) -> CollectionResult:
     """Fetch submissions for a single rule, apply filters, and process each post.
 
@@ -355,6 +363,7 @@ def process_rule(
                 pre_fetched_comments=pre_fetch_comments,
                 embedding_model=embedding_model,
                 embedding_qdrant_client=embedding_qdrant_client,
+                qdrant_collection=qdrant_collection,
             )
 
             if action == "skipped":
@@ -396,6 +405,7 @@ def run_collection(
     output_override: Path | None,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
+    qdrant_collection: str = "deep_thought_documents",
 ) -> CollectionResult:
     """Run the full collection cycle across all configured rules.
 
@@ -447,6 +457,7 @@ def run_collection(
             max_posts_per_run=config.max_posts_per_run,
             embedding_model=embedding_model,
             embedding_qdrant_client=embedding_qdrant_client,
+            qdrant_collection=qdrant_collection,
         )
 
         aggregate_result.posts_collected += rule_result.posts_collected

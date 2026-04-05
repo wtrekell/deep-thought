@@ -116,6 +116,7 @@ def _process_page(
     dry_run: bool,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
+    qdrant_collection: str = "deep_thought_documents",
 ) -> tuple[CrawledPageLocal, PageSummary | None]:
     """Convert a fetched page to markdown and build its local model.
 
@@ -133,6 +134,7 @@ def _process_page(
             with ``embedding_qdrant_client``, the page is embedded after writing.
         embedding_qdrant_client: Optional Qdrant client. Must be provided
             together with ``embedding_model`` for embedding to occur.
+        qdrant_collection: The Qdrant collection name to write embeddings into.
 
     Returns:
         A tuple of (CrawledPageLocal, PageSummary | None). PageSummary is None
@@ -231,7 +233,14 @@ def _process_page(
 
             raw_md = written_path.read_text(encoding="utf-8")
             embed_content = f"Title: {page_model.title or ''}\n\n{_strip_frontmatter(raw_md)}"
-            _write_web_embedding(embed_content, page_model, config.crawl.mode, embedding_model, embedding_qdrant_client)
+            _write_web_embedding(
+                embed_content,
+                page_model,
+                config.crawl.mode,
+                embedding_model,
+                embedding_qdrant_client,
+                qdrant_collection,
+            )
         except Exception as embed_err:
             logger.warning("Embedding failed for page %s: %s", page_result.url, embed_err)
 
@@ -393,6 +402,7 @@ def run_blog_mode(
     force: bool,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
+    qdrant_collection: str = "deep_thought_documents",
 ) -> tuple[CrawlResult, list[PageSummary]]:
     """Traverse index pages according to index_depth, then fetch and capture articles.
 
@@ -413,6 +423,7 @@ def run_blog_mode(
             so each page is embedded after writing.
         embedding_qdrant_client: Optional Qdrant client. Threaded to
             ``_process_page`` for writing embeddings.
+        qdrant_collection: The Qdrant collection name to write embeddings into.
 
     Returns:
         A tuple of (CrawlResult, list[PageSummary]) for the crawled pages.
@@ -461,6 +472,7 @@ def run_blog_mode(
                 dry_run=dry_run,
                 embedding_model=embedding_model,
                 embedding_qdrant_client=embedding_qdrant_client,
+                qdrant_collection=qdrant_collection,
             )
             queries.upsert_crawled_page(conn, page_model.to_dict())
             conn.commit()
@@ -517,6 +529,7 @@ def run_documentation_mode(
     force: bool,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
+    qdrant_collection: str = "deep_thought_documents",
 ) -> tuple[CrawlResult, list[PageSummary]]:
     """Crawl a documentation site using breadth-first search.
 
@@ -540,6 +553,7 @@ def run_documentation_mode(
             so each page is embedded after writing.
         embedding_qdrant_client: Optional Qdrant client. Threaded to
             ``_process_page`` for writing embeddings.
+        qdrant_collection: The Qdrant collection name to write embeddings into.
 
     Returns:
         A tuple of (CrawlResult, list[PageSummary]) for the crawled pages.
@@ -611,6 +625,7 @@ def run_documentation_mode(
                     dry_run=dry_run,
                     embedding_model=embedding_model,
                     embedding_qdrant_client=embedding_qdrant_client,
+                    qdrant_collection=qdrant_collection,
                 )
                 queries.upsert_crawled_page(conn, page_model.to_dict())
                 conn.commit()
@@ -715,6 +730,7 @@ def run_direct_mode(
     force: bool,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
+    qdrant_collection: str = "deep_thought_documents",
 ) -> tuple[CrawlResult, list[PageSummary]]:
     """Fetch each URL listed in a text file.
 
@@ -733,6 +749,7 @@ def run_direct_mode(
             so each page is embedded after writing.
         embedding_qdrant_client: Optional Qdrant client. Threaded to
             ``_process_page`` for writing embeddings.
+        qdrant_collection: The Qdrant collection name to write embeddings into.
 
     Returns:
         A tuple of (CrawlResult, list[PageSummary]) for the crawled pages.
@@ -774,6 +791,7 @@ def run_direct_mode(
                 dry_run=dry_run,
                 embedding_model=embedding_model,
                 embedding_qdrant_client=embedding_qdrant_client,
+                qdrant_collection=qdrant_collection,
             )
             queries.upsert_crawled_page(conn, page_model.to_dict())
             conn.commit()
@@ -889,6 +907,7 @@ def process(
     rule_name: str | None = None,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
+    qdrant_collection: str = "deep_thought_documents",
 ) -> CrawlResult:
     """Top-level crawl dispatcher.
 
@@ -909,6 +928,7 @@ def process(
             so each page is embedded after writing. When None, embedding is skipped.
         embedding_qdrant_client: Optional Qdrant client. Passed to the mode runner
             for writing embeddings. Must be provided with ``embedding_model``.
+        qdrant_collection: The Qdrant collection name to write embeddings into.
 
     Returns:
         A CrawlResult with total, succeeded, failed, and skipped counts.
@@ -933,6 +953,7 @@ def process(
                 force=force,
                 embedding_model=embedding_model,
                 embedding_qdrant_client=embedding_qdrant_client,
+                qdrant_collection=qdrant_collection,
             )
         elif mode == "documentation":
             if input_url is None:
@@ -947,6 +968,7 @@ def process(
                 force=force,
                 embedding_model=embedding_model,
                 embedding_qdrant_client=embedding_qdrant_client,
+                qdrant_collection=qdrant_collection,
             )
         elif mode == "direct":
             if input_file is None:
@@ -961,6 +983,7 @@ def process(
                 force=force,
                 embedding_model=embedding_model,
                 embedding_qdrant_client=embedding_qdrant_client,
+                qdrant_collection=qdrant_collection,
             )
         else:
             raise ValueError(f"Unknown crawl mode: '{mode}'. Must be one of: blog, documentation, direct")

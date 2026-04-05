@@ -458,14 +458,24 @@ def cmd_search(args: argparse.Namespace) -> None:
     written_file_path = write_research_file(markdown_content, resolved_output_dir, search_result)
 
     try:
-        from deep_thought.embeddings import create_embedding_model, create_qdrant_client  # noqa: PLC0415
+        from deep_thought.embeddings import (  # noqa: PLC0415
+            create_embedding_model,
+            create_qdrant_client,
+            ensure_collection,
+        )
         from deep_thought.research.embeddings import write_embedding as _write_research_embedding  # noqa: PLC0415
 
         _embedding_model = create_embedding_model()
         _qdrant_client = create_qdrant_client()
+        ensure_collection(_qdrant_client, config.qdrant_collection)
         embed_content = f"Query: {search_result.query}\n\n{search_result.answer}"
         _write_research_embedding(
-            embed_content, search_result, str(written_file_path), _embedding_model, _qdrant_client
+            embed_content,
+            search_result,
+            str(written_file_path),
+            _embedding_model,
+            _qdrant_client,
+            config.qdrant_collection,
         )
     except Exception as embed_err:
         logger.warning("Embedding failed for query '%s': %s", search_result.query, embed_err)
@@ -530,14 +540,24 @@ def cmd_research(args: argparse.Namespace) -> None:
     written_file_path = write_research_file(markdown_content, resolved_output_dir, research_result)
 
     try:
-        from deep_thought.embeddings import create_embedding_model, create_qdrant_client  # noqa: PLC0415
+        from deep_thought.embeddings import (  # noqa: PLC0415
+            create_embedding_model,
+            create_qdrant_client,
+            ensure_collection,
+        )
         from deep_thought.research.embeddings import write_embedding as _write_research_embedding  # noqa: PLC0415
 
         _embedding_model = create_embedding_model()
         _qdrant_client = create_qdrant_client()
+        ensure_collection(_qdrant_client, config.qdrant_collection)
         embed_content = f"Query: {research_result.query}\n\n{research_result.answer}"
         _write_research_embedding(
-            embed_content, research_result, str(written_file_path), _embedding_model, _qdrant_client
+            embed_content,
+            research_result,
+            str(written_file_path),
+            _embedding_model,
+            _qdrant_client,
+            config.qdrant_collection,
         )
     except Exception as embed_err:
         logger.warning("Embedding failed for query '%s': %s", research_result.query, embed_err)

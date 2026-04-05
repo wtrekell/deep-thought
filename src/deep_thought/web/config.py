@@ -82,6 +82,7 @@ class CrawlConfig:
     pagination_selector: str | None
     pagination_wait: float
     max_paginations: int
+    qdrant_collection: str
 
 
 @dataclass
@@ -275,6 +276,7 @@ def _parse_crawl_config(raw: dict[str, Any]) -> CrawlConfig:
 
     pagination_wait: float = float(raw.get("pagination_wait", 2.0))
     max_paginations: int = int(raw.get("max_paginations", 10))
+    qdrant_collection: str = str(raw.get("qdrant_collection", "deep_thought_documents"))
 
     return CrawlConfig(
         mode=mode,
@@ -304,6 +306,7 @@ def _parse_crawl_config(raw: dict[str, Any]) -> CrawlConfig:
         pagination_selector=pagination_selector,
         pagination_wait=pagination_wait,
         max_paginations=max_paginations,
+        qdrant_collection=qdrant_collection,
     )
 
 

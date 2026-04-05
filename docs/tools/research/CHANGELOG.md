@@ -1,5 +1,11 @@
 # Research Tool — Changelog
 
+## 0.1.2 — 2026-04-05
+
+### Added
+
+- `qdrant_collection` config option in `research-configuration.yaml`: name of the Qdrant collection to write embeddings to (default: `"deep_thought_documents"`). Enables routing research results to a separate collection from other tools.
+
 ## 0.1.1 — 2026-03-30
 
 ### Changed

@@ -101,14 +101,35 @@ def strip_frontmatter(markdown_text: str) -> str:
     return remaining_content.lstrip("\n")
 
 
+def ensure_collection(qdrant_client: Any, collection_name: str) -> None:
+    """Create the Qdrant collection if it does not already exist.
+
+    Checks for the collection by name before attempting creation, making the
+    function safe to call on every run without raising on an existing collection.
+
+    Args:
+        qdrant_client: A Qdrant client returned by :func:`create_qdrant_client`.
+        collection_name: The name of the collection to create if absent.
+    """
+    from qdrant_client.models import Distance, VectorParams  # noqa: PLC0415
+
+    existing_collection_names = [c.name for c in qdrant_client.get_collections().collections]
+    if collection_name not in existing_collection_names:
+        qdrant_client.create_collection(
+            collection_name=collection_name,
+            vectors_config=VectorParams(size=VECTOR_DIMENSIONS, distance=Distance.COSINE),
+        )
+
+
 def write_embedding(
     content: str,
     payload: dict[str, Any],
     output_path: str,
     model: Any,
     qdrant_client: Any,
+    collection_name: str = COLLECTION_NAME,
 ) -> None:
-    """Embed content and upsert it into the shared Qdrant collection.
+    """Embed content and upsert it into the specified Qdrant collection.
 
     Generates a deterministic point ID from ``output_path`` using UUID5,
     making repeated calls with the same path idempotent (upsert semantics).
@@ -121,6 +142,8 @@ def write_embedding(
             the deterministic ID seed and as a payload field.
         model: The MLX embedding model returned by :func:`create_embedding_model`.
         qdrant_client: A Qdrant client returned by :func:`create_qdrant_client`.
+        collection_name: The Qdrant collection to upsert into. Defaults to
+            :data:`COLLECTION_NAME` (``"deep_thought_documents"``).
 
     Raises:
         Any exception from embedding generation or Qdrant upsert is propagated
@@ -135,6 +158,6 @@ def write_embedding(
     full_payload = {**payload, "output_path": output_path}
 
     qdrant_client.upsert(
-        collection_name=COLLECTION_NAME,
+        collection_name=collection_name,
         points=[PointStruct(id=point_id, vector=vector, payload=full_payload)],
     )
