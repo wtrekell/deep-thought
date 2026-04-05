@@ -66,6 +66,7 @@ def _make_reddit_config(rules: list[RuleConfig] | None = None) -> RedditConfig:
         user_agent_env="REDDIT_USER_AGENT",
         max_posts_per_run=100,
         output_dir="data/reddit/export/",
+        qdrant_collection="deep_thought_documents",
         rules=rules or [_make_rule_config()],
     )
 

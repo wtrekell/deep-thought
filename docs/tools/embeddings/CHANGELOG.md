@@ -1,5 +1,16 @@
 # Embeddings Infrastructure Changelog
 
+## 2026-04-05
+
+### Added
+
+- `ensure_collection(qdrant_client, collection_name)` in `src/deep_thought/embeddings.py` — checks whether the named collection exists and creates it with the configured vector dimensions and cosine distance if not. Called once per run from each tool's CLI after the client is initialized. Eliminates the need for manual collection setup.
+- `collection_name` parameter on `write_embedding()` (default: `COLLECTION_NAME`) — replaces the previously hardcoded module constant. All per-tool embedding modules (`web/embeddings.py`, `reddit/embeddings.py`, `research/embeddings.py`) accept and thread this parameter through to the shared function.
+
+### Changed
+
+- Qdrant collection name is now configurable per tool via a `qdrant_collection` field in each tool's YAML config. All three tools default to `"deep_thought_documents"` — no existing configs require changes. Web batch configs in `src/config/web/` can each specify a different collection, enabling separate corpora per crawl.
+
 ## 2026-04-04
 
 ### Changed

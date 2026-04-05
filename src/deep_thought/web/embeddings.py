@@ -14,6 +14,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
+from deep_thought.embeddings import COLLECTION_NAME
+
 if TYPE_CHECKING:
     from deep_thought.web.models import CrawledPageLocal
 
@@ -33,8 +35,9 @@ def write_embedding(
     mode: str,
     model: Any,
     qdrant_client: Any,
+    collection_name: str = COLLECTION_NAME,
 ) -> None:
-    """Embed a crawled web page and upsert it into the shared Qdrant collection.
+    """Embed a crawled web page and upsert it into the specified Qdrant collection.
 
     Constructs the payload from the page's metadata fields and calls the shared
     ``deep_thought.embeddings.write_embedding()`` function. The ``output_path``
@@ -48,6 +51,8 @@ def write_embedding(
             Controls the ``source_type`` value written to the payload.
         model: The MLX embedding model returned by ``create_embedding_model()``.
         qdrant_client: A Qdrant client returned by ``create_qdrant_client()``.
+        collection_name: The Qdrant collection to upsert into. Defaults to
+            :data:`~deep_thought.embeddings.COLLECTION_NAME`.
 
     Raises:
         Any exception from the shared ``write_embedding()`` function is propagated
@@ -81,4 +86,5 @@ def write_embedding(
         output_path=page.output_path,
         model=model,
         qdrant_client=qdrant_client,
+        collection_name=collection_name,
     )

@@ -57,6 +57,7 @@ def minimal_crawl_config() -> CrawlConfig:
         pagination_selector=None,
         pagination_wait=2.0,
         max_paginations=10,
+        qdrant_collection="deep_thought_documents",
     )
 
 
@@ -667,6 +668,7 @@ class TestMain:
                     pagination_selector=None,
                     pagination_wait=2.0,
                     max_paginations=10,
+                    qdrant_collection="deep_thought_documents",
                 )
             )
             main()

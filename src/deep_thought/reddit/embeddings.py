@@ -13,6 +13,8 @@ import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from deep_thought.embeddings import COLLECTION_NAME
+
 if TYPE_CHECKING:
     from deep_thought.reddit.models import CollectedPostLocal
 
@@ -24,8 +26,9 @@ def write_embedding(
     post: CollectedPostLocal,
     model: Any,
     qdrant_client: Any,
+    collection_name: str = COLLECTION_NAME,
 ) -> None:
-    """Embed a collected Reddit post and upsert it into the shared Qdrant collection.
+    """Embed a collected Reddit post and upsert it into the specified Qdrant collection.
 
     Constructs the payload from the post's metadata fields and calls the shared
     ``deep_thought.embeddings.write_embedding()`` function. The ``output_path``
@@ -37,6 +40,8 @@ def write_embedding(
         post: The CollectedPostLocal instance whose metadata populates the payload.
         model: The MLX embedding model returned by ``create_embedding_model()``.
         qdrant_client: A Qdrant client returned by ``create_qdrant_client()``.
+        collection_name: The Qdrant collection to upsert into. Defaults to
+            :data:`~deep_thought.embeddings.COLLECTION_NAME`.
 
     Raises:
         Any exception from the shared ``write_embedding()`` function is propagated
@@ -71,4 +76,5 @@ def write_embedding(
         output_path=post.output_path,
         model=model,
         qdrant_client=qdrant_client,
+        collection_name=collection_name,
     )

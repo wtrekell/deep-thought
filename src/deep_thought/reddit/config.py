@@ -50,6 +50,7 @@ class RedditConfig:
     user_agent_env: str
     max_posts_per_run: int
     output_dir: str
+    qdrant_collection: str
     rules: list[RuleConfig]
 
 
@@ -205,6 +206,7 @@ def load_config(config_path: Path | None = None) -> RedditConfig:
         user_agent_env=str(raw_dict.get("user_agent_env", "REDDIT_USER_AGENT")),
         max_posts_per_run=int(raw_dict.get("max_posts_per_run", 500)),
         output_dir=str(raw_dict.get("output_dir", "data/reddit/export/")),
+        qdrant_collection=str(raw_dict.get("qdrant_collection", "deep_thought_documents")),
         rules=rules,
     )
 

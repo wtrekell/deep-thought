@@ -1,0 +1,43 @@
+mode: "documentation"
+input_url: "https://cursor.com/docs"
+index_depth: 1
+min_article_words: 100
+max_depth: 4
+max_pages: 500
+js_wait: 1.0
+browser_channel: null
+headless: true
+stealth: false
+
+include_patterns:
+  - '.*/docs/.*'
+
+exclude_patterns:
+  - '.*\.pdf$'
+  - '.*#.*'
+  - '.*\?.*'
+  - '.*login.*'
+
+strip_boilerplate:
+  # Mintlify header: "Skip to main content" through the full sidebar nav, ending just before
+  # the section breadcrumb and first # heading (e.g. "Agent\n\n# Cursor Agent")
+  - 'Skip to main content.*?(?=\n[A-Z][^\n]*\n\n# )'
+  # "Copy page" combined with share/explain buttons -- appears at top of some pages
+  - 'Copy page[^\n]*'
+  # Language picker through end of file: "English\n\n  * English\n  * 简体中文..." + TOC + footer
+  - '\nEnglish\n.*'
+
+retry_attempts: 2
+retry_delay: 5.0
+changelog_url: null
+strip_path_prefix: "/docs"
+strip_domain: true
+output_dir: "00-private/cursor/"
+extract_images: false
+generate_llms_files: true
+llms_lookback_days: 30
+unwrap_tags: []
+pagination: "none"
+pagination_selector: null
+pagination_wait: 2.0
+max_paginations: 10

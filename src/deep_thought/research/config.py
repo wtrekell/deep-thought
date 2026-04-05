@@ -26,6 +26,7 @@ class ResearchConfig:
     research_model: str
     default_recency: str | None
     output_dir: str
+    qdrant_collection: str
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +122,8 @@ def load_config(config_path: Path | None = None) -> ResearchConfig:
     raw_default_recency = raw_dict.get("default_recency")
     default_recency: str | None = str(raw_default_recency) if raw_default_recency is not None else None
 
+    qdrant_collection = str(raw_dict.get("qdrant_collection", "deep_thought_documents"))
+
     return ResearchConfig(
         api_key_env=api_key_env,
         retry_max_attempts=retry_max_attempts,
@@ -129,6 +132,7 @@ def load_config(config_path: Path | None = None) -> ResearchConfig:
         research_model=research_model,
         default_recency=default_recency,
         output_dir=output_dir,
+        qdrant_collection=qdrant_collection,
     )
 
 

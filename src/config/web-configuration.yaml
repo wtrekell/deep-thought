@@ -36,3 +36,6 @@ strip_boilerplate: [] # Regex patterns to remove from markdown (e.g., nav menus,
 index_depth: 1 # Levels of index/listing pages before articles (must be >= 1)
 min_article_words: 200 # Pages below this word count are skipped (must be > 0)
 changelog_url: null # Documentation mode only: changelog URL for incremental re-crawls
+
+# Qdrant
+qdrant_collection: "deep_thought_documents" # Qdrant collection to write embeddings into

@@ -12,3 +12,6 @@ default_recency: null # Recency filter: 'hour', 'day', 'week', 'month', 'year', 
 
 # Output
 output_dir: "data/research/export/" # Directory for research output markdown files
+
+# Qdrant
+qdrant_collection: "deep_thought_documents" # Qdrant collection to write embeddings into

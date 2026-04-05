@@ -11,6 +11,9 @@ max_posts_per_run: 500 # Global cap across all rules per invocation (must be > 0
 # Output
 output_dir: "data/reddit/export/" # Directory for exported markdown files
 
+# Qdrant
+qdrant_collection: "deep_thought_documents" # Qdrant collection to write embeddings into
+
 rules:
   - name: "python_top_week" # Rule name; used as output subdirectory (must be unique)
     subreddit: "python" # Subreddit name without r/ prefix

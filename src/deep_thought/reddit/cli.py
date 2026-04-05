@@ -237,10 +237,15 @@ def cmd_collect(args: argparse.Namespace) -> None:
     embedding_qdrant_client = None
     if not args.dry_run:
         try:
-            from deep_thought.embeddings import create_embedding_model, create_qdrant_client  # noqa: PLC0415
+            from deep_thought.embeddings import (  # noqa: PLC0415
+                create_embedding_model,
+                create_qdrant_client,
+                ensure_collection,
+            )
 
             embedding_model = create_embedding_model()
             embedding_qdrant_client = create_qdrant_client()
+            ensure_collection(embedding_qdrant_client, config.qdrant_collection)
         except Exception as init_err:
             logger.error("Embedding infrastructure unavailable, continuing without embeddings: %s", init_err)
 
@@ -256,6 +261,7 @@ def cmd_collect(args: argparse.Namespace) -> None:
             output_override=output_override,
             embedding_model=embedding_model,
             embedding_qdrant_client=embedding_qdrant_client,
+            qdrant_collection=config.qdrant_collection,
         )
         connection.commit()
     finally:
