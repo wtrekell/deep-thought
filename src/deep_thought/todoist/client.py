@@ -11,16 +11,23 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import httpx
 from todoist_api_python.api import TodoistAPI
+from todoist_api_python.models import Attachment
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from todoist_api_python.models import Comment, Label, Project, Section, Task
+
+_TODOIST_SYNC_UPLOAD_URL = "https://api.todoist.com/sync/v9/uploads/add"
 
 
 class TodoistClient:
     """Wrapper around TodoistAPI that presents a simple, fully-typed interface."""
 
     def __init__(self, api_token: str) -> None:
+        self._api_token = api_token
         self._api = TodoistAPI(api_token)
 
     # ------------------------------------------------------------------
@@ -123,3 +130,65 @@ class TodoistClient:
     def delete_comment(self, comment_id: str) -> None:
         """Permanently delete a comment by ID."""
         self._api.delete_comment(comment_id)
+
+    # ------------------------------------------------------------------
+    # File upload operations (Sync API v9 — not exposed by the REST SDK)
+    # ------------------------------------------------------------------
+
+    def upload_attachment(self, file_path: Path) -> dict[str, Any]:
+        """Upload a local file to Todoist and return the attachment object.
+
+        Uses the Todoist Sync API v9 upload endpoint, which is not exposed
+        by the REST SDK. The returned dict is ready to pass directly to
+        add_comment_with_attachment().
+
+        Args:
+            file_path: Path to the local file to upload.
+
+        Returns:
+            Attachment dict with keys: file_url, file_name, file_size,
+            file_type, resource_type, upload_state.
+
+        Raises:
+            FileNotFoundError: If file_path does not exist.
+            httpx.HTTPStatusError: If the upload API returns a non-2xx response.
+        """
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        with file_path.open("rb") as file_handle:
+            response = httpx.post(
+                _TODOIST_SYNC_UPLOAD_URL,
+                headers={"Authorization": f"Bearer {self._api_token}"},
+                files={"file": (file_path.name, file_handle)},
+                timeout=120.0,
+            )
+        response.raise_for_status()
+        result: dict[str, Any] = response.json()
+        return result
+
+    def add_comment_with_attachment(
+        self,
+        task_id: str,
+        content: str,
+        attachment: dict[str, Any],
+    ) -> Comment:
+        """Add a comment to a task with a file attachment.
+
+        Args:
+            task_id: The Todoist task ID to attach the comment to.
+            content: Text body of the comment.
+            attachment: Attachment dict returned by upload_attachment().
+
+        Returns:
+            The created Comment object.
+        """
+        attachment_obj = Attachment(
+            resource_type=attachment.get("resource_type"),
+            file_name=attachment.get("file_name"),
+            file_size=attachment.get("file_size"),
+            file_type=attachment.get("file_type"),
+            file_url=attachment.get("file_url"),
+            upload_state=attachment.get("upload_state"),
+        )
+        return self._api.add_comment(content, task_id=task_id, attachment=attachment_obj)
