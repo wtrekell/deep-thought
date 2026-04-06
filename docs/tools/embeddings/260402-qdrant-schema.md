@@ -1,6 +1,6 @@
 # Qdrant Schema Reference — deep_thought_documents
 
-**Date:** 2026-04-02
+**Date:** 2026-04-06
 **Audience:** Python Developer implementing per-tool `embeddings.py` modules
 **Source of truth for:** collection configuration, payload contract, `write_embedding()` call patterns, query patterns, and error handling expectations
 
@@ -256,22 +256,33 @@ The web tool's mode is available from the rule configuration that drove the craw
 
 ## 5. Query Patterns
 
-All search calls follow the same three-step structure: embed the query text, build an optional filter, call `search` on the client.
+Use `search_embeddings()` from `src/deep_thought/embeddings.py` for all retrieval. It handles embedding generation, optional filtering, and the Qdrant call in one step.
+
+### Function signature
+
+```python
+def search_embeddings(
+    query: str,
+    model: Any,
+    qdrant_client: Any,
+    collection_name: str = COLLECTION_NAME,
+    limit: int = 10,
+    source_tool: str | None = None,
+    source_type: str | None = None,
+) -> list[Any]:
+```
+
+### Setup
 
 ```python
 from deep_thought.embeddings import (
-    COLLECTION_NAME,
     create_embedding_model,
     create_qdrant_client,
-    embed_text,
+    search_embeddings,
 )
-from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 embedding_model = create_embedding_model()
-qdrant_connection = create_qdrant_client(host="localhost", port=6333)
-
-query_text = "best practices for async error handling in Rust"
-query_vector = embed_text(query_text, embedding_model)
+qdrant_connection = create_qdrant_client()
 ```
 
 ### (a) Unfiltered search across all tools
@@ -279,9 +290,10 @@ query_vector = embed_text(query_text, embedding_model)
 Returns the top 10 most semantically similar documents regardless of source.
 
 ```python
-unfiltered_results = qdrant_connection.search(
-    collection_name=COLLECTION_NAME,
-    query_vector=query_vector,
+results = search_embeddings(
+    query="best practices for async error handling in Rust",
+    model=embedding_model,
+    qdrant_client=qdrant_connection,
     limit=10,
 )
 ```
@@ -291,19 +303,11 @@ unfiltered_results = qdrant_connection.search(
 Returns results only from the reddit tool.
 
 ```python
-source_tool_filter = Filter(
-    must=[
-        FieldCondition(
-            key="source_tool",
-            match=MatchValue(value="reddit"),
-        )
-    ]
-)
-
-reddit_results = qdrant_connection.search(
-    collection_name=COLLECTION_NAME,
-    query_vector=query_vector,
-    query_filter=source_tool_filter,
+results = search_embeddings(
+    query="best practices for async error handling in Rust",
+    model=embedding_model,
+    qdrant_client=qdrant_connection,
+    source_tool="reddit",
     limit=10,
 )
 ```
@@ -313,19 +317,11 @@ reddit_results = qdrant_connection.search(
 Returns results only from deep research queries.
 
 ```python
-source_type_filter = Filter(
-    must=[
-        FieldCondition(
-            key="source_type",
-            match=MatchValue(value="research_deep"),
-        )
-    ]
-)
-
-deep_research_results = qdrant_connection.search(
-    collection_name=COLLECTION_NAME,
-    query_vector=query_vector,
-    query_filter=source_type_filter,
+results = search_embeddings(
+    query="best practices for async error handling in Rust",
+    model=embedding_model,
+    qdrant_client=qdrant_connection,
+    source_type="research_deep",
     limit=10,
 )
 ```

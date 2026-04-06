@@ -29,7 +29,14 @@ llms_lookback_days: 30 # Days of history in llms files (0 = current run only)
 strip_path_prefix: null # Strip this prefix from URL paths for output file paths
 strip_domain: false # Omit domain directory from output file paths
 
+# Pagination (blog and documentation modes only)
+pagination: "none" # Strategy for expanding index pages: 'none', 'scroll', or 'click'
+pagination_selector: null # CSS selector for the element to click (required when pagination is 'click')
+pagination_wait: 2.0 # Seconds to wait after each scroll or click before reading the DOM
+max_paginations: 10 # Maximum scroll/click iterations per index page
+
 # Content stripping
+unwrap_tags: [] # HTML tags to unwrap — removes the tag but keeps its inner content (e.g., ['span', 'div.wrapper'])
 strip_boilerplate: [] # Regex patterns to remove from markdown (e.g., nav menus, footers)
 
 # Content quality
