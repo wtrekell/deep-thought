@@ -63,10 +63,19 @@ def get_default_config_path() -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Valid recency values
+# Valid recency values and API mapping
 # ---------------------------------------------------------------------------
 
-_VALID_RECENCY_VALUES = {"hour", "day", "week", "month", "year"}
+# The Perplexity API only accepts these five discrete values for search_recency_filter.
+# "3 months" and "6 months" are user-facing aliases that map to "year" (the closest
+# supported superset). The user-specified value is preserved in output frontmatter and
+# Qdrant payloads for transparency; only the API call receives the mapped value.
+_VALID_RECENCY_VALUES = {"hour", "day", "week", "month", "year", "3 months", "6 months"}
+
+_RECENCY_API_MAP: dict[str, str] = {
+    "3 months": "year",
+    "6 months": "year",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -168,10 +177,13 @@ def validate_config(config: ResearchConfig) -> list[str]:
         issues.append("output_dir is empty — cannot determine where to write output files.")
 
     if config.default_recency is not None and config.default_recency not in _VALID_RECENCY_VALUES:
-        valid_options = ", ".join(f'"{value}"' for value in sorted(_VALID_RECENCY_VALUES))
+        native_values = ", ".join(f'"{v}"' for v in sorted({"hour", "day", "week", "month", "year"}))
+        alias_values = ", ".join(f'"{v}"' for v in sorted(_RECENCY_API_MAP))
         issues.append(
             f"default_recency '{config.default_recency}' is not a recognised value. "
-            f"Valid options: {valid_options}, or null to disable."
+            f"Native Perplexity values: {native_values}. "
+            f'Aliases (map to "year" at the API level): {alias_values}. '
+            f"Or set to null to disable."
         )
 
     return issues

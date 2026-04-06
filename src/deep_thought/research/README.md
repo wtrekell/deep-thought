@@ -5,6 +5,7 @@ AI-powered web research via Perplexity API with two CLI entry points: `search` f
 ## Overview
 
 The Research Tool provides two modes of web research via the Perplexity API:
+
 - **`search`** — Fast synchronous queries via sonar model (5-30 seconds)
 - **`research`** — Deep asynchronous research via sonar-deep-research (minutes to hours)
 
@@ -70,14 +71,14 @@ research config
 
 ## Module Structure
 
-| Module | Role |
-| --- | --- |
-| `cli.py` | CLI entry points: `search` and `research` subcommands |
-| `config.py` | YAML config loader with Perplexity API key resolution |
-| `models.py` | Result dataclasses with source and citation metadata |
-| `researcher.py` | Perplexity API client with async polling and retry |
-| `output.py` | Markdown generation with citations and metadata |
-| `embeddings.py` | Writes research results to Qdrant vector store |
+| Module          | Role                                                  |
+| --------------- | ----------------------------------------------------- |
+| `cli.py`        | CLI entry points: `search` and `research` subcommands |
+| `config.py`     | YAML config loader with Perplexity API key resolution |
+| `models.py`     | Result dataclasses with source and citation metadata  |
+| `researcher.py` | Perplexity API client with async polling and retry    |
+| `output.py`     | Markdown generation with citations and metadata       |
+| `embeddings.py` | Writes research results to Qdrant vector store        |
 
 ## Data Storage
 
@@ -92,7 +93,9 @@ All paths are rooted at `data/research/` by default. Set `DEEP_THOUGHT_DATA_DIR`
 - **Two modes:** `search` is fast and cacheable; `research` is thorough but slower (use for complex questions)
 - **Async polling:** Deep research jobs are submitted and polled; timeout is 10 minutes
 - **Domain filters:** Use to constrain results to specific sites (max 20 domains per query)
-- **Recency filters:** Choose from `hour`, `day`, `week`, `month`, or `year` for publication date filtering
+- **Recency filters:** Choose from `hour`, `day`, `week`, `month`, `year`, `3 months`, or `6 months`. The last two are
+  aliases that map to `"year"` at the Perplexity API level (the closest supported superset); the user-specified value
+  is preserved in output frontmatter and Qdrant payloads for transparency.
 - **Context documents:** Pass markdown files to include as reference (improves relevance)
 - **Embeddings:** Requires MLX embeddings (optional extra) and Qdrant running at `localhost:6333`
 - **Citations:** Research results include source URLs and publication metadata
