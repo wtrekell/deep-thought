@@ -72,7 +72,7 @@ def get_default_config_path() -> Path:
 # Qdrant payloads for transparency; only the API call receives the mapped value.
 _VALID_RECENCY_VALUES = {"hour", "day", "week", "month", "year", "3 months", "6 months"}
 
-_RECENCY_API_MAP: dict[str, str] = {
+RECENCY_API_MAP: dict[str, str] = {
     "3 months": "year",
     "6 months": "year",
 }
@@ -178,7 +178,7 @@ def validate_config(config: ResearchConfig) -> list[str]:
 
     if config.default_recency is not None and config.default_recency not in _VALID_RECENCY_VALUES:
         native_values = ", ".join(f'"{v}"' for v in sorted({"hour", "day", "week", "month", "year"}))
-        alias_values = ", ".join(f'"{v}"' for v in sorted(_RECENCY_API_MAP))
+        alias_values = ", ".join(f'"{v}"' for v in sorted(RECENCY_API_MAP))
         issues.append(
             f"default_recency '{config.default_recency}' is not a recognised value. "
             f"Native Perplexity values: {native_values}. "

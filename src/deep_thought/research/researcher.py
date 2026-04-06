@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
-from deep_thought.research.config import _RECENCY_API_MAP
+from deep_thought.research.config import RECENCY_API_MAP
 
 if TYPE_CHECKING:
     from deep_thought.research.config import ResearchConfig
@@ -295,7 +295,7 @@ class PerplexityClient:
         }
 
         if recency is not None:
-            request_body["search_recency_filter"] = _RECENCY_API_MAP.get(recency, recency)
+            request_body["search_recency_filter"] = RECENCY_API_MAP.get(recency, recency)
 
         if domains:
             request_body["search_domain_filter"] = domains
