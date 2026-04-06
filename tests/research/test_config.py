@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from deep_thought.research.config import (
+    _RECENCY_API_MAP,
     ResearchConfig,
     get_api_key,
     load_config,
@@ -161,12 +162,24 @@ class TestValidateConfig:
         assert any("default_recency" in issue for issue in issues)
 
     def test_valid_recency_values_pass(self) -> None:
-        """Each of the five recognised recency values should produce no issues."""
+        """All recognised recency values (including aliases) should produce no issues."""
         config = load_config(FIXTURES_DIR / "test_config.yaml")
-        for valid_recency in ("hour", "day", "week", "month", "year"):
+        for valid_recency in ("hour", "day", "week", "month", "year", "3 months", "6 months"):
             config.default_recency = valid_recency
             issues = validate_config(config)
             assert issues == [], f"Expected no issues for recency='{valid_recency}', got: {issues}"
+
+    def test_recency_api_map_aliases(self) -> None:
+        """Alias recency values must map to a native Perplexity value."""
+        native_values = {"hour", "day", "week", "month", "year"}
+        for alias, mapped in _RECENCY_API_MAP.items():
+            assert mapped in native_values, f"'{alias}' maps to '{mapped}' which is not a native Perplexity value"
+
+    def test_3_months_maps_to_year(self) -> None:
+        assert _RECENCY_API_MAP["3 months"] == "year"
+
+    def test_6_months_maps_to_year(self) -> None:
+        assert _RECENCY_API_MAP["6 months"] == "year"
 
     def test_none_default_recency_passes(self) -> None:
         """A None default_recency should produce no issues."""

@@ -33,7 +33,7 @@ from deep_thought.research.config import (
 
 logger = logging.getLogger(__name__)
 
-_VALID_RECENCY_VALUES = ("hour", "day", "week", "month", "year")
+_VALID_RECENCY_VALUES = ("hour", "day", "week", "month", "year", "3 months", "6 months")
 
 
 def _get_version() -> str:

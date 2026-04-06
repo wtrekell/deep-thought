@@ -1,5 +1,14 @@
 # Research Tool — Changelog
 
+## 0.1.3 — 2026-04-05
+
+### Added
+
+- `"3 months"` and `"6 months"` as valid `default_recency` values (and `--recency` CLI flag values).
+  Both map to `"year"` at the Perplexity API level, which is the closest supported superset —
+  Perplexity's `search_recency_filter` has no native sub-year option between `month` and `year`.
+  The user-specified value is preserved in output frontmatter and Qdrant payloads for transparency.
+
 ## 0.1.2 — 2026-04-05
 
 ### Added
