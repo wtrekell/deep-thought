@@ -10,13 +10,13 @@ headless: true
 stealth: false
 
 include_patterns:
-  - '.*/docs/.*'
+  - ".*/docs/.*"
 
 exclude_patterns:
   - '.*\.pdf$'
-  - '.*#.*'
+  - ".*#.*"
   - '.*\?.*'
-  - '.*login.*'
+  - ".*login.*"
 
 strip_boilerplate:
   # Full Starlight header: top nav + repeated sidebars + "On this page" TOC

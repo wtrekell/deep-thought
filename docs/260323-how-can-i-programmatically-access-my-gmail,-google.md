@@ -7,11 +7,10 @@ You use Google’s Python client libraries plus OAuth2: create a Google Cloud pr
 ## Big picture
 
 - Install the core libraries:
-`pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib`.[^1_3][^1_4][^1_5]
+  `pip install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib`.[^1_3][^1_4][^1_5]
 - In Google Cloud Console, create a project, enable Gmail API, Google Calendar API, and any other Workspace / Google APIs you want to call.[^1_2][^1_1]
 - Create an OAuth 2.0 **Desktop app** credential, download `credentials.json` into your project folder.[^1_1][^1_2]
 - In Python, run an “installed app” OAuth flow once; it opens a browser, you log in and approve; tokens are stored in `token.json` so you can reuse them.[^1_2][^1_1]
-
 
 ## Shared auth pattern in Python
 
@@ -80,12 +79,12 @@ The Gmail and Calendar quickstart samples use this same approach and just vary t
 
 ## Common Google services and scopes
 
-| Service | API ID | Typical scope example |
-| :-- | :-- | :-- |
-| Gmail | `gmail` | `https://www.googleapis.com/auth/gmail.readonly`[^1_1] |
+| Service         | API ID     | Typical scope example                                     |
+| :-------------- | :--------- | :-------------------------------------------------------- |
+| Gmail           | `gmail`    | `https://www.googleapis.com/auth/gmail.readonly`[^1_1]    |
 | Google Calendar | `calendar` | `https://www.googleapis.com/auth/calendar.readonly`[^1_2] |
-| Google Drive | `drive` | `https://www.googleapis.com/auth/drive.readonly`[^1_3] |
-| People API | `people` | `https://www.googleapis.com/auth/contacts.readonly`[^1_3] |
+| Google Drive    | `drive`    | `https://www.googleapis.com/auth/drive.readonly`[^1_3]    |
+| People API      | `people`   | `https://www.googleapis.com/auth/contacts.readonly`[^1_3] |
 
 All of them are used with `build("service_name", "vX", credentials=creds)` from the same client library.[^1_4][^1_5][^1_3]
 
@@ -126,7 +125,6 @@ Do you mainly want to read data (emails, events) or also send emails / create ca
 
 [^1_15]: https://www.youtube.com/watch?v=1JkKtGFnua8
 
-
 ---
 
 # I need full sync with Gmail Calendar and Drive
@@ -137,13 +135,12 @@ To get “full sync” you request broader scopes for each API, then use the sam
 
 Use the smallest powerful scopes that still let you sync in both directions.
 
-- Gmail:
-    - Full mailbox access (read, send, delete, labels): `https://mail.google.com/` or
-“read, compose, send, and modify”: `https://www.googleapis.com/auth/gmail.modify`.[^2_6][^2_7][^2_8][^2_1]
+- Gmail: - Full mailbox access (read, send, delete, labels): `https://mail.google.com/` or
+  “read, compose, send, and modify”: `https://www.googleapis.com/auth/gmail.modify`.[^2_6][^2_7][^2_8][^2_1]
 - Calendar (full control of all calendars you can see):
-    - `https://www.googleapis.com/auth/calendar`.[^2_9][^2_2][^2_10][^2_11]
+  - `https://www.googleapis.com/auth/calendar`.[^2_9][^2_2][^2_10][^2_11]
 - Drive (upload, download, move, delete, organize):
-    - Full Drive: `https://www.googleapis.com/auth/drive`.[^2_3][^2_4][^2_5]
+  - Full Drive: `https://www.googleapis.com/auth/drive`.[^2_3][^2_4][^2_5]
 
 Example consolidated scopes list:
 
@@ -201,27 +198,26 @@ Now `gmail`, `calendar`, and `drive` can all perform read/write operations in yo
 These are the core building blocks for a “full sync” loop.
 
 - Gmail (list, label, send, delete):
-    - List messages: `gmail.users().messages().list(userId="me").execute()`.[^2_12][^2_6]
-    - Modify labels: `users().messages().modify(..., body={"addLabelIds":[...], "removeLabelIds":[...]})`.[^2_6]
-    - With `gmail.modify` or `mail.google.com` you can send drafts and delete messages.[^2_8][^2_1][^2_6]
+  - List messages: `gmail.users().messages().list(userId="me").execute()`.[^2_12][^2_6]
+  - Modify labels: `users().messages().modify(..., body={"addLabelIds":[...], "removeLabelIds":[...]})`.[^2_6]
+  - With `gmail.modify` or `mail.google.com` you can send drafts and delete messages.[^2_8][^2_1][^2_6]
 - Calendar (upsert events):
-    - List events: `calendar.events().list(calendarId="primary", ...)`.
-    - Create: `calendar.events().insert(calendarId="primary", body=event).execute()`.
-    - Update: `calendar.events().update(calendarId="primary", eventId=id, body=event).execute()`.[^2_14][^2_9][^2_2]
+  - List events: `calendar.events().list(calendarId="primary", ...)`.
+  - Create: `calendar.events().insert(calendarId="primary", body=event).execute()`.
+  - Update: `calendar.events().update(calendarId="primary", eventId=id, body=event).execute()`.[^2_14][^2_9][^2_2]
 - Drive (files and folders):
-    - List files: `drive.files().list(pageSize=100, fields="files(id,name,modifiedTime)").execute()`.[^2_3][^2_4][^2_5]
-    - Upload: `drive.files().create(body=metadata, media_body=media, fields="id").execute()`.
-    - Update/replace file content: `drive.files().update(fileId=id, media_body=media).execute()`.[^2_4][^2_3]
-
+  - List files: `drive.files().list(pageSize=100, fields="files(id,name,modifiedTime)").execute()`.[^2_3][^2_4][^2_5]
+  - Upload: `drive.files().create(body=metadata, media_body=media, fields="id").execute()`.
+  - Update/replace file content: `drive.files().update(fileId=id, media_body=media).execute()`.[^2_4][^2_3]
 
 ### Quick comparison of “full” scopes
 
-| API | Scope | What it allows (short) |
-| :-- | :-- | :-- |
-| Gmail | `https://www.googleapis.com/auth/gmail.modify` | Read, send, modify, delete labels, but not hard-delete all.[^2_1][^2_6][^2_8] |
-| Gmail | `https://mail.google.com/` | Full Gmail access including permanent deletes.[^2_1][^2_7] |
-| Calendar | `https://www.googleapis.com/auth/calendar` | See, create, edit, delete calendars and events you can access.[^2_9][^2_2] |
-| Drive | `https://www.googleapis.com/auth/drive` | Full read/write on your Drive files and folders.[^2_3][^2_4][^2_5] |
+| API      | Scope                                          | What it allows (short)                                                        |
+| :------- | :--------------------------------------------- | :---------------------------------------------------------------------------- |
+| Gmail    | `https://www.googleapis.com/auth/gmail.modify` | Read, send, modify, delete labels, but not hard-delete all.[^2_1][^2_6][^2_8] |
+| Gmail    | `https://mail.google.com/`                     | Full Gmail access including permanent deletes.[^2_1][^2_7]                    |
+| Calendar | `https://www.googleapis.com/auth/calendar`     | See, create, edit, delete calendars and events you can access.[^2_9][^2_2]    |
+| Drive    | `https://www.googleapis.com/auth/drive`        | Full read/write on your Drive files and folders.[^2_3][^2_4][^2_5]            |
 
 ## Architecture tips for “full sync”
 
@@ -270,7 +266,6 @@ Do you plan to run this sync from a single personal machine (desktop script/cron
 
 [^2_17]: https://www.youtube.com/watch?v=6vKMvjcGDPs
 
-
 ---
 
 # Would this allow me to forward emails unaltered? I’ve found this to be problematic in the past but it’s the only way to get reader to keep from mangling them.
@@ -280,12 +275,10 @@ Yes, you can effectively “forward” an email without mangling it by working w
 ## Two main options
 
 - Auto‑forwarding via Gmail settings
-    - You can enable account‑level auto‑forwarding or filter‑based forwarding through the Gmail API `users.settings.forwardingAddresses` and `updateAutoForwarding`.[^3_4][^3_5][^3_6]
-    - This behaves like Gmail’s built‑in forwarding (the message that arrives should look exactly as Gmail forwards it in the UI).
-- Manual forward while preserving content
-    - Fetch the original message with `format='raw'`:
-`msg = service.users().messages().get(userId='me', id=msg_id, format='raw').execute()`.[^3_2][^3_1]
-    - `msg['raw']` is the full RFC 2822 email, base64url encoded; if you decode it and then re‑encode and send it as a new message, you keep all MIME parts (HTML, text, attachments) intact.[^3_3][^3_1][^3_2]
+  - You can enable account‑level auto‑forwarding or filter‑based forwarding through the Gmail API `users.settings.forwardingAddresses` and `updateAutoForwarding`.[^3_4][^3_5][^3_6]
+  - This behaves like Gmail’s built‑in forwarding (the message that arrives should look exactly as Gmail forwards it in the UI).
+- Manual forward while preserving content - Fetch the original message with `format='raw'`:
+  `msg = service.users().messages().get(userId='me', id=msg_id, format='raw').execute()`.[^3_2][^3_1] - `msg['raw']` is the full RFC 2822 email, base64url encoded; if you decode it and then re‑encode and send it as a new message, you keep all MIME parts (HTML, text, attachments) intact.[^3_3][^3_1][^3_2]
 
 Example pattern in Python (conceptual):
 
@@ -350,7 +343,6 @@ Are you trying to forward to another email inbox or into a different system (lik
 
 [^3_15]: https://stackoverflow.com/a/44848269
 
-
 ---
 
 # Readwise service so I can access via their reader app.
@@ -362,7 +354,6 @@ For Readwise Reader, the easiest and most robust approach is to forward emails d
 - Reader gives you one or more unique email addresses (e.g. `something@feed.readwise.io` or `something@library.readwise.io`) that you can send or forward mail to; anything mailed there shows up in your Feed/Library.[^4_2][^4_3][^4_5][^4_6][^4_1]
 - You can find these addresses in Reader under import/integrations settings; they’re meant to receive normal, unmodified emails, newsletters, etc.[^4_3][^4_5][^4_1][^4_2]
 
-
 ## Best way to avoid mangling
 
 If your past problems were Reader mangling formatting when it parses content, you want the message to arrive exactly as Gmail received it.
@@ -370,11 +361,11 @@ If your past problems were Reader mangling formatting when it parses content, yo
 You have two strong options:
 
 1. **Use Gmail’s built‑in auto‑forwarding / filters (recommended if possible)**
-    - In Gmail settings → “Forwarding and POP/IMAP”, add your Reader email as a forwarding address, then complete the confirmation flow (Reader auto‑clicks the link or sends you the confirmation code).[^4_4][^4_7][^4_1][^4_2][^4_3]
-    - Use filters to forward only newsletters or specific senders to Reader; Gmail forwards the original email, keeping all headers and MIME parts intact.[^4_1][^4_2][^4_4]
+   - In Gmail settings → “Forwarding and POP/IMAP”, add your Reader email as a forwarding address, then complete the confirmation flow (Reader auto‑clicks the link or sends you the confirmation code).[^4_4][^4_7][^4_1][^4_2][^4_3]
+   - Use filters to forward only newsletters or specific senders to Reader; Gmail forwards the original email, keeping all headers and MIME parts intact.[^4_1][^4_2][^4_4]
 2. **Use the Gmail API with `format='raw'` and send to Reader**
-    - Fetch the message with `format='raw'` to get the full RFC 822 content as base64url; this keeps HTML, text, and attachments as‑is.[^4_8][^4_9][^4_10]
-    - Decode only if you need to adjust headers, then re‑encode and send to the Reader address as a new Gmail message; from Reader’s perspective it receives a normal, complete email.
+   - Fetch the message with `format='raw'` to get the full RFC 822 content as base64url; this keeps HTML, text, and attachments as‑is.[^4_8][^4_9][^4_10]
+   - Decode only if you need to adjust headers, then re‑encode and send to the Reader address as a new Gmail message; from Reader’s perspective it receives a normal, complete email.
 
 Conceptual Python snippet:
 
@@ -402,13 +393,12 @@ The key is to work with the **raw** message blob so you’re not reassembling pa
 
 Once emails land in Reader, you can use the Reader API to pull documents, locations (new, later, archive, feed), and metadata into your own system alongside Gmail/Calendar/Drive.[^4_13][^4_14]
 
+| Piece             | How it flows into Reader                                                  |
+| :---------------- | :------------------------------------------------------------------------ |
+| Gmail newsletters | Forwarded to your Reader email via Gmail or API.[^4_1][^4_2][^4_3][^4_4]  |
+| Reader documents  | Queried via Reader API `/api/v3/list/` and other endpoints.[^4_13][^4_14] |
 
-| Piece | How it flows into Reader |
-| :-- | :-- |
-| Gmail newsletters | Forwarded to your Reader email via Gmail or API.[^4_1][^4_2][^4_3][^4_4] |
-| Reader documents | Queried via Reader API `/api/v3/list/` and other endpoints.[^4_13][^4_14] |
-
-Do you want to move *all* mail that matches a filter into Reader automatically, or selectively forward only specific messages on demand from your Python script?
+Do you want to move _all_ mail that matches a filter into Reader automatically, or selectively forward only specific messages on demand from your Python script?
 <span style="display:none">[^4_15][^4_16][^4_17][^4_18][^4_19][^4_20]</span>
 
 <div align="center">⁂</div>
@@ -452,7 +442,6 @@ Do you want to move *all* mail that matches a filter into Reader automatically, 
 [^4_19]: https://docs.readwise.io/reader/docs/migrating-content
 
 [^4_20]: https://docs.readwise.io/reader/docs/faqs/importing-content
-
 
 ---
 
@@ -670,4 +659,3 @@ The key forward-without-mangling technique is in `forward_message_raw`: fetch `f
 [^5_96]: https://docs.readwise.io/reader/docs/migrating-content
 
 [^5_97]: https://docs.readwise.io/reader/docs/faqs/importing-content
-

@@ -18,8 +18,9 @@ The `docs/` directory contains:
 Start in [`tools/README.md`](tools/README.md). It lists all 8 tools with their CLI entry points and one-line descriptions. Click through to the tool you need.
 
 Each tool has:
+
 - A `CHANGELOG.md` tracking all changes and fixes
-- An `ISSUES.md` for known bugs and workarounds  
+- An `ISSUES.md` for known bugs and workarounds
 - A `260XXX-requirements.md` file documenting the tool's design and API model
 - Some tools have additional files like `api-model.md` or `ENHANCEMENTS.md`
 
@@ -71,12 +72,12 @@ docs/
 
 ## Quick Reference
 
-| If you need to… | Start here |
-|---|---|
-| Collect data from Reddit | [`tools/README.md`](tools/README.md) → Reddit tool |
-| Transcribe audio | [`tools/README.md`](tools/README.md) → Audio tool |
-| Crawl web pages | [`tools/README.md`](tools/README.md) → Web tool |
-| Check if something is a known bug | `tools/{tool}/ISSUES.md` |
-| Understand the tool taxonomy | [`spec/260402-tooling-evolution.md`](spec/260402-tooling-evolution.md) |
-| Create a new tool | [`templates/tool-requirements/requirements-template.md`](templates/tool-requirements/requirements-template.md) |
-| Find agent role definitions | [`spec/260401-agent-design.md`](spec/260401-agent-design.md) |
+| If you need to…                   | Start here                                                                                                     |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Collect data from Reddit          | [`tools/README.md`](tools/README.md) → Reddit tool                                                             |
+| Transcribe audio                  | [`tools/README.md`](tools/README.md) → Audio tool                                                              |
+| Crawl web pages                   | [`tools/README.md`](tools/README.md) → Web tool                                                                |
+| Check if something is a known bug | `tools/{tool}/ISSUES.md`                                                                                       |
+| Understand the tool taxonomy      | [`spec/260402-tooling-evolution.md`](spec/260402-tooling-evolution.md)                                         |
+| Create a new tool                 | [`templates/tool-requirements/requirements-template.md`](templates/tool-requirements/requirements-template.md) |
+| Find agent role definitions       | [`spec/260401-agent-design.md`](spec/260401-agent-design.md)                                                   |

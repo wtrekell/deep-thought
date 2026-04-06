@@ -13,9 +13,9 @@ include_patterns:
   - 'https://silentvoid13\.github\.io/Templater/.*'
 exclude_patterns:
   - '.*\.pdf$'
-  - '.*#.*'
+  - ".*#.*"
   - '.*\?.*'
-  - '.*login.*'
+  - ".*login.*"
   # Print version concatenates the entire book into one page
   - 'https://silentvoid13\.github\.io/Templater/print\.html$'
   # Known 404 stale URL schemes

@@ -10,13 +10,13 @@ headless: true
 stealth: false
 
 include_patterns:
-  - '.*/docs/.*'
+  - ".*/docs/.*"
 
 exclude_patterns:
   - '.*\.pdf$'
-  - '.*#.*'
+  - ".*#.*"
   - '.*\?.*'
-  - '.*login.*'
+  - ".*login.*"
 
 strip_boilerplate:
   # Mintlify header: "Skip to main content" through the full sidebar nav, ending just before

@@ -19,10 +19,10 @@ include_patterns:
 
 exclude_patterns:
   - '.*\.pdf$'
-  - '.*#.*'
+  - ".*#.*"
   - '.*\?.*'
-  - '.*login.*'
-  - '.*/~gitbook/.*'
+  - ".*login.*"
+  - ".*/~gitbook/.*"
 
 strip_boilerplate:
   # GitBook full header block: announcement banner (if present) + top nav bar + full sidebar nav

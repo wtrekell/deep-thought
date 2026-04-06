@@ -116,7 +116,7 @@ def _process_page(
     dry_run: bool,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
-    qdrant_collection: str = "deep_thought_documents",
+    qdrant_collection: str | None = None,
 ) -> tuple[CrawledPageLocal, PageSummary | None]:
     """Convert a fetched page to markdown and build its local model.
 
@@ -402,7 +402,7 @@ def run_blog_mode(
     force: bool,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
-    qdrant_collection: str = "deep_thought_documents",
+    qdrant_collection: str | None = None,
 ) -> tuple[CrawlResult, list[PageSummary]]:
     """Traverse index pages according to index_depth, then fetch and capture articles.
 
@@ -529,7 +529,7 @@ def run_documentation_mode(
     force: bool,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
-    qdrant_collection: str = "deep_thought_documents",
+    qdrant_collection: str | None = None,
 ) -> tuple[CrawlResult, list[PageSummary]]:
     """Crawl a documentation site using breadth-first search.
 
@@ -730,7 +730,7 @@ def run_direct_mode(
     force: bool,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
-    qdrant_collection: str = "deep_thought_documents",
+    qdrant_collection: str | None = None,
 ) -> tuple[CrawlResult, list[PageSummary]]:
     """Fetch each URL listed in a text file.
 
@@ -907,7 +907,7 @@ def process(
     rule_name: str | None = None,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
-    qdrant_collection: str = "deep_thought_documents",
+    qdrant_collection: str | None = None,
 ) -> CrawlResult:
     """Top-level crawl dispatcher.
 

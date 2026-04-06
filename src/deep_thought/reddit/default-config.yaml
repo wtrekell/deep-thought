@@ -32,6 +32,6 @@ rules:
     max_comment_depth: 3
     max_comments: 200 # Max comments to collect per post (default: 200)
     include_images: true # Include image URLs in output
-    exclude_stickied: false   # Skip mod-pinned posts
-    exclude_locked: false     # Skip posts that can no longer receive comments
-    replace_more_limit: 32   # MoreComments nodes to expand per post (0=none, null=all)
+    exclude_stickied: false # Skip mod-pinned posts
+    exclude_locked: false # Skip posts that can no longer receive comments
+    replace_more_limit: 32 # MoreComments nodes to expand per post (0=none, null=all)

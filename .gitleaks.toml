@@ -1,0 +1,12 @@
+title = "gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist for non-sensitive files"
+paths = [
+    ".env.example",
+    ".env.sample",
+    ".env.template",
+]

@@ -13,11 +13,11 @@ include_patterns:
   - 'https://jamiebrynes7\.github\.io/obsidian-todoist-plugin/docs/.*'
 exclude_patterns:
   - '.*\.pdf$'
-  - '.*#.*'
+  - ".*#.*"
   - '.*\?.*'
-  - '.*login.*'
+  - ".*login.*"
   # Exclude pre-release and old versioned docs — only collect current docs
-  - '.*/docs/next/.*'
+  - ".*/docs/next/.*"
   - '.*/docs/2\.\d+\.\d+/.*'
 unwrap_tags: []
 strip_boilerplate:

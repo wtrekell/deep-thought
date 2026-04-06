@@ -18,9 +18,9 @@ include_patterns:
 
 exclude_patterns:
   - '.*\.pdf$'
-  - '.*#.*'
+  - ".*#.*"
   - '.*\?.*'
-  - '.*login.*'
+  - ".*login.*"
 
 strip_boilerplate: []
 

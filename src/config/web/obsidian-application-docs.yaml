@@ -11,9 +11,9 @@ stealth: false
 include_patterns: []
 exclude_patterns:
   - '.*\.pdf$'
-  - '.*#.*'
+  - ".*#.*"
   - '.*\?.*'
-  - '.*login.*'
+  - ".*login.*"
 retry_attempts: 2
 retry_delay: 5.0
 changelog_url: null

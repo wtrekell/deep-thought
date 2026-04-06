@@ -1,5 +1,5 @@
 mode: "documentation"
-input_url: "https://code.claude.com/docs/en/overview"
+input_url: "https://docs.perplexity.ai/"
 index_depth: 1
 min_article_words: 100
 max_depth: 4
@@ -10,7 +10,7 @@ headless: true
 stealth: false
 
 include_patterns:
-  - ".*/docs/en/.*"
+  - ".*/docs/.*"
 
 exclude_patterns:
   - '.*\.pdf$'
@@ -20,19 +20,26 @@ exclude_patterns:
 
 strip_boilerplate:
   # Mintlify header: "Skip to main content" through the full sidebar nav and "On this page" TOC,
-  # ending at the blank line just before the page section label (e.g. "Getting started\n\n# Title")
-  - 'Skip to main content.*?(?=\n[A-Z][^\n]*\n\n# )'
+  # ending just before the first # heading. Perplexity uses single blank line before heading.
+  - 'Skip to main content.*?(?=\n# )'
   # "Copy page" button artifact -- appears twice per page immediately after the heading
   - '\nCopy page\n'
+  # Zero-width space artifact lines that appear after headings on Perplexity docs (any heading level)
+  - '\n#{1,6} \n\n\u200b\n\n'
+  # Navigation card headings of the form "## [Text](url)" -- these are nav cards, not content
+  - '\n## \[[^\]]+\]\([^)]+\)[^\n]*'
+  # AI assistant widget that appears at the bottom of some pages
+  - '\n⌘I\n\nAssistant\n.*'
   # Mintlify footer: "Was this page helpful?" through the end of the document
   - '\nWas this page helpful\?.*'
 
+qdrant_collection: deep_thought_documents
 retry_attempts: 2
 retry_delay: 5.0
 changelog_url: null
-strip_path_prefix: "/docs/en"
+strip_path_prefix: "/docs"
 strip_domain: true
-output_dir: "00-local/claude-code/"
+output_dir: "00-local/perplexity/"
 extract_images: false
 generate_llms_files: true
 llms_lookback_days: 30

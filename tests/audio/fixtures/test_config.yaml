@@ -1,16 +1,16 @@
-engine: 'mlx'
-model: 'small'
-language: 'en'
+engine: "mlx"
+model: "small"
+language: "en"
 
-output_mode: 'paragraph'
+output_mode: "paragraph"
 pause_threshold: 1.5
 
 diarize: false
-hf_token_env: 'HF_TOKEN'
+hf_token_env: "HF_TOKEN"
 
 remove_fillers: false
 
-output_dir: 'data/audio/export/'
+output_dir: "data/audio/export/"
 generate_llms_files: true
 
 max_file_size_mb: 100
@@ -25,4 +25,4 @@ hallucination_detection:
   duration_chars_per_sec_min: 2
   blocklist_enabled: true
   score_threshold: 2
-  action: 'remove'
+  action: "remove"

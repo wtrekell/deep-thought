@@ -15,9 +15,9 @@ include_patterns:
 
 exclude_patterns:
   - '.*\.pdf$'
-  - '.*#.*'
+  - ".*#.*"
   - '.*\?.*'
-  - '.*login.*'
+  - ".*login.*"
   # ReadTheDocs search and genindex pages — not content
   - '.*/search\.html.*'
   - '.*/genindex\.html$'

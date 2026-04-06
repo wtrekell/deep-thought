@@ -26,7 +26,7 @@ from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
 
 from deep_thought.gdrive.config import GDriveConfig, get_default_config_path, load_config
 from deep_thought.gdrive.db.schema import get_database_path, init_db, open_database
-from deep_thought.gdrive.uploader import run_backup
+from deep_thought.gdrive.uploader import run_backup, run_prune
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -239,6 +239,29 @@ def cmd_backup(args: argparse.Namespace) -> None:
 
     db_connection = open_database()
     try:
+        if args.prune:
+            prune_result = run_prune(
+                config=config,
+                client=drive_client,
+                db_conn=db_connection,
+                dry_run=args.dry_run,
+                verbose=args.verbose,
+            )
+            db_connection.commit()
+
+            dry_run_prefix = "[dry-run] " if args.dry_run else ""
+            print(f"{dry_run_prefix}Prune complete:")
+            print(f"  Deleted: {prune_result.deleted}")
+            print(f"  Errors:  {prune_result.errors}")
+
+            if prune_result.errors > 0:
+                print()
+                print("Files with errors:")
+                for error_path in prune_result.error_paths:
+                    print(f"  {error_path}")
+                sys.exit(2)
+            return
+
         backup_result = run_backup(
             config=config,
             client=drive_client,
@@ -312,6 +335,12 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="Clear all cached state and re-upload all files from scratch.",
+    )
+    root_parser.add_argument(
+        "--prune",
+        action="store_true",
+        default=False,
+        help="Delete Drive files whose local paths match any configured exclude_pattern.",
     )
     root_parser.add_argument(
         "--save-config",

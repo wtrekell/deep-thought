@@ -10,14 +10,14 @@ headless: true
 stealth: false
 
 include_patterns:
-  - '.*/documentation/.*'
+  - ".*/documentation/.*"
   - 'https://docs\.drawthings\.ai/.*'
 
 exclude_patterns:
   - '.*\.pdf$'
-  - '.*#.*'
+  - ".*#.*"
   - '.*\?.*'
-  - '.*login.*'
+  - ".*login.*"
 
 strip_boilerplate:
   # DocC header: "[object Module]" through the full sidebar tree and breadcrumb nav,

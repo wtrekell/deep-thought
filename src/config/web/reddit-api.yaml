@@ -15,15 +15,15 @@ include_patterns:
 
 exclude_patterns:
   - '.*\.pdf$'
-  - '.*#.*'
+  - ".*#.*"
   - '.*\?.*'
-  - '.*login.*'
+  - ".*login.*"
   # GitHub wiki action links — edit, history, new page, compare revisions
-  - '.*/wiki/.*/_edit$'
-  - '.*/wiki/.*/_history$'
-  - '.*/wiki/.*/_new$'
-  - '.*/wiki/.*/_compare.*'
-  - '.*/wiki/.*/_delete$'
+  - ".*/wiki/.*/_edit$"
+  - ".*/wiki/.*/_history$"
+  - ".*/wiki/.*/_new$"
+  - ".*/wiki/.*/_compare.*"
+  - ".*/wiki/.*/_delete$"
 
 strip_boilerplate:
   # GitHub site-wide nav + repo header: start of document through "Additional navigation options"

@@ -120,8 +120,7 @@ strip_boilerplate: [] # Regex patterns to remove from converted markdown before 
 # ---------------------------------------------------------------------------
 # HTML tag unwrapping
 # ---------------------------------------------------------------------------
-unwrap_tags:
-  [] # HTML tags to unwrap (remove the tag but keep its inner content)
+unwrap_tags: [] # HTML tags to unwrap (remove the tag but keep its inner content)
   # Runs before HTML-to-markdown conversion. Useful for stripping wrapper
   # elements that produce noise in the markdown output.
   # Format: "tagname" or "tagname.classname" to target a specific class.

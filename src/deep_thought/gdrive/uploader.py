@@ -16,14 +16,16 @@ from typing import TYPE_CHECKING
 from deep_thought.gdrive.db.queries import (
     clear_backed_up_files,
     clear_drive_folders,
+    delete_backed_up_file,
+    get_all_backed_up_files,
     get_backed_up_file,
     get_drive_folder,
     mark_file_status,
     upsert_backed_up_file,
     upsert_drive_folder,
 )
-from deep_thought.gdrive.models import BackedUpFile, BackupResult
-from deep_thought.gdrive.walker import walk_tree
+from deep_thought.gdrive.models import BackedUpFile, BackupResult, PruneResult
+from deep_thought.gdrive.walker import _is_excluded, walk_tree
 
 if TYPE_CHECKING:
     import sqlite3
@@ -270,3 +272,70 @@ def run_backup(
                 logger.debug("Could not mark error status for %s: %s", relative_file_path, mark_error)
 
     return backup_result
+
+
+def run_prune(
+    config: GDriveConfig,
+    client: DriveClient,
+    db_conn: sqlite3.Connection,
+    dry_run: bool = False,
+    verbose: bool = False,
+) -> PruneResult:
+    """Delete Drive files whose local paths match any exclude_pattern.
+
+    Scans the backed_up_files table and removes any entry whose path matches
+    a pattern in config.exclude_patterns. The file is permanently deleted from
+    Drive and its row is removed from the database so a future backup would
+    re-upload it if the pattern is later removed.
+
+    Args:
+        config: Loaded GDriveConfig with exclude_patterns to match against.
+        client: Authenticated DriveClient.
+        db_conn: Open SQLite connection to the gdrive database.
+        dry_run: If True, log what would be deleted without making API calls
+                 or modifying the database.
+        verbose: If True, log each deleted file at DEBUG level.
+
+    Returns:
+        A PruneResult summarising the run.
+    """
+    prune_result = PruneResult()
+
+    if not config.exclude_patterns:
+        logger.info("No exclude_patterns configured — nothing to prune.")
+        return prune_result
+
+    source_dir_name = Path(config.source_dir).name
+    all_files = get_all_backed_up_files(db_conn)
+    logger.info("Scanning %d backed-up file(s) against exclude_patterns.", len(all_files))
+
+    for backed_up_file in all_files:
+        local_path = backed_up_file.local_path
+
+        # DB paths are relative to parent of source_dir: "source-dir-name/subdir/file.md"
+        # Strip the source dir prefix to match against path relative to source_dir: "subdir/file.md"
+        prefix = source_dir_name + "/"
+        path_from_source = local_path[len(prefix) :] if local_path.startswith(prefix) else local_path
+        file_name = Path(local_path).name
+
+        if not _is_excluded(file_name, path_from_source, config.exclude_patterns):
+            continue
+
+        if dry_run:
+            logger.info("[dry-run] PRUNE %s", local_path)
+            prune_result.deleted += 1
+            continue
+
+        try:
+            client.delete_file(backed_up_file.drive_file_id)
+            delete_backed_up_file(db_conn, local_path)
+            db_conn.commit()
+            prune_result.deleted += 1
+            if verbose:
+                logger.debug("PRUNE %s (Drive ID: %s)", local_path, backed_up_file.drive_file_id)
+        except Exception as prune_error:
+            logger.error("Error pruning %s: %s", local_path, prune_error)
+            prune_result.errors += 1
+            prune_result.error_paths.append(local_path)
+
+    return prune_result

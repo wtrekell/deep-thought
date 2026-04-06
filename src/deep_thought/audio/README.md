@@ -45,20 +45,20 @@ Configuration lives at `src/config/audio-configuration.yaml`. Key settings:
 
 ## Module Structure
 
-| Module | Role |
-| --- | --- |
-| `cli.py` | CLI entry point with argparse subcommands |
-| `config.py` | YAML config loader with .env integration |
-| `models.py` | Local dataclasses for transcription results and metadata |
-| `processor.py` | Orchestration: filter files → transcribe → diarize → hallucinate check → export → DB write |
-| `engines/whisper_engine.py` | OpenAI Whisper API wrapper |
-| `engines/mlx_whisper_engine.py` | MLX-Whisper (Apple Silicon) implementation |
-| `diarization.py` | Speaker detection and clustering |
-| `hallucination.py` | Detects and scores hallucinated/repeated segments |
-| `filters.py` | Input file filtering and validation |
-| `output.py` | Markdown export formatting |
-| `llms.py` | LLM-specific output aggregation |
-| `db/` | SQLite schema, migrations, and query functions |
+| Module                          | Role                                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------------ |
+| `cli.py`                        | CLI entry point with argparse subcommands                                                  |
+| `config.py`                     | YAML config loader with .env integration                                                   |
+| `models.py`                     | Local dataclasses for transcription results and metadata                                   |
+| `processor.py`                  | Orchestration: filter files → transcribe → diarize → hallucinate check → export → DB write |
+| `engines/whisper_engine.py`     | OpenAI Whisper API wrapper                                                                 |
+| `engines/mlx_whisper_engine.py` | MLX-Whisper (Apple Silicon) implementation                                                 |
+| `diarization.py`                | Speaker detection and clustering                                                           |
+| `hallucination.py`              | Detects and scores hallucinated/repeated segments                                          |
+| `filters.py`                    | Input file filtering and validation                                                        |
+| `output.py`                     | Markdown export formatting                                                                 |
+| `llms.py`                       | LLM-specific output aggregation                                                            |
+| `db/`                           | SQLite schema, migrations, and query functions                                             |
 
 ## Data Storage
 

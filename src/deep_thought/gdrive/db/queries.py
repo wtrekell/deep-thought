@@ -120,6 +120,33 @@ def mark_file_status(conn: sqlite3.Connection, local_path: str, status: str) -> 
     )
 
 
+def get_all_backed_up_files(conn: sqlite3.Connection) -> list[BackedUpFile]:
+    """Return all rows from backed_up_files.
+
+    Args:
+        conn: An open SQLite connection.
+
+    Returns:
+        A list of all BackedUpFile records. Empty list if the table is empty.
+    """
+    cursor = conn.execute("SELECT * FROM backed_up_files;")
+    rows: list[Any] = cursor.fetchall()
+    return [_row_to_backed_up_file(row) for row in rows]
+
+
+def delete_backed_up_file(conn: sqlite3.Connection, local_path: str) -> None:
+    """Delete a single row from backed_up_files by local_path.
+
+    Args:
+        conn: An open SQLite connection.
+        local_path: The relative local path (primary key) to delete.
+    """
+    conn.execute(
+        "DELETE FROM backed_up_files WHERE local_path = :local_path;",
+        {"local_path": local_path},
+    )
+
+
 def clear_backed_up_files(conn: sqlite3.Connection) -> None:
     """Delete all rows from backed_up_files (used by --force).
 

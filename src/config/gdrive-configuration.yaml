@@ -20,6 +20,9 @@ backup:
     - "htmlcov"
     - "tests"
     - "storage"
+    - ".venv"
+    - "styles"
+    - ".mypy_cache"
 
 # API
 api_rate_limit_rpm: 100 # Drive API calls per minute

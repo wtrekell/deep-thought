@@ -10,13 +10,13 @@ headless: true
 stealth: false
 
 include_patterns:
-  - '.*/python/docs/.*'
+  - ".*/python/docs/.*"
 
 exclude_patterns:
   - '.*\.pdf$'
-  - '.*#.*'
+  - ".*#.*"
   - '.*\?.*'
-  - '.*login.*'
+  - ".*login.*"
 
 strip_boilerplate:
   # Docusaurus pre-heading chrome: nav, breadcrumb, sidebar, "On this page" TOC

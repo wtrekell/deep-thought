@@ -67,24 +67,24 @@ Located at `data/gcal/gcal.db` by default; respects the `DEEP_THOUGHT_DATA_DIR` 
 
 ### EventLocal
 
-| Field         | Type          | Description                                                       |
-| ------------- | ------------- | ----------------------------------------------------------------- |
-| `event_id`    | `str`         | Google Calendar event ID (composite PK with `calendar_id`)        |
-| `calendar_id` | `str`         | Calendar the event belongs to (composite PK with `event_id`)      |
-| `summary`     | `str`         | Event title                                                       |
-| `description` | `str \| None` | Event description / notes                                         |
-| `location`    | `str \| None` | Event location (free text or address)                             |
-| `start_time`  | `str`         | ISO 8601 start time (datetime for timed events, date for all-day) |
-| `end_time`    | `str`         | ISO 8601 end time                                                 |
-| `all_day`     | `bool`        | `True` if the event uses `date` rather than `dateTime`            |
-| `status`      | `str`         | `confirmed`, `tentative`, or `cancelled`                          |
-| `organizer`   | `str \| None` | Organizer email address                                           |
+| Field         | Type          | Description                                                                                          |
+| ------------- | ------------- | ---------------------------------------------------------------------------------------------------- |
+| `event_id`    | `str`         | Google Calendar event ID (composite PK with `calendar_id`)                                           |
+| `calendar_id` | `str`         | Calendar the event belongs to (composite PK with `event_id`)                                         |
+| `summary`     | `str`         | Event title                                                                                          |
+| `description` | `str \| None` | Event description / notes                                                                            |
+| `location`    | `str \| None` | Event location (free text or address)                                                                |
+| `start_time`  | `str`         | ISO 8601 start time (datetime for timed events, date for all-day)                                    |
+| `end_time`    | `str`         | ISO 8601 end time                                                                                    |
+| `all_day`     | `bool`        | `True` if the event uses `date` rather than `dateTime`                                               |
+| `status`      | `str`         | `confirmed`, `tentative`, or `cancelled`                                                             |
+| `organizer`   | `str \| None` | Organizer email address                                                                              |
 | `attendees`   | `str \| None` | Serialized JSON list of attendee objects (internal DB storage; exported to frontmatter as YAML list) |
-| `recurrence`  | `str \| None` | Serialized JSON list of RRULE strings                             |
-| `html_link`   | `str \| None` | URL to event in Google Calendar web UI                            |
-| `created_at`  | `str`         | ISO 8601 timestamp of first sync                                  |
-| `updated_at`  | `str`         | ISO 8601 timestamp from Google (`updated` field)                  |
-| `synced_at`   | `str`         | ISO 8601 timestamp of last local sync                             |
+| `recurrence`  | `str \| None` | Serialized JSON list of RRULE strings                                                                |
+| `html_link`   | `str \| None` | URL to event in Google Calendar web UI                                                               |
+| `created_at`  | `str`         | ISO 8601 timestamp of first sync                                                                     |
+| `updated_at`  | `str`         | ISO 8601 timestamp from Google (`updated` field)                                                     |
+| `synced_at`   | `str`         | ISO 8601 timestamp of last local sync                                                                |
 
 Methods: `from_api_response()` for API dict conversion, `to_dict()` for database insertion.
 

@@ -14,55 +14,62 @@
 # ---------------------------------------------------------------------------
 # Email (.eml / .msg files)
 # ---------------------------------------------------------------------------
-prefer_html: false          # Options: true, false
-                            #   true  — Use the HTML body of the email for conversion
-                            #   false — Use the plain text body when available (recommended
-                            #           for cleaner LLM input)
+prefer_html:
+  false # Options: true, false
+  #   true  — Use the HTML body of the email for conversion
+  #   false — Use the plain text body when available (recommended
+  #           for cleaner LLM input)
 
-full_headers: false         # Options: true, false
-                            #   true  — Include all email headers (CC, BCC, Reply-To, etc.)
-                            #   false — Include only From, To, Subject, and Date headers
+full_headers:
+  false # Options: true, false
+  #   true  — Include all email headers (CC, BCC, Reply-To, etc.)
+  #   false — Include only From, To, Subject, and Date headers
 
-include_attachments: true   # Options: true, false
-                            #   true  — Include attachment metadata in the markdown output
-                            #   false — Ignore attachments entirely
+include_attachments:
+  true # Options: true, false
+  #   true  — Include attachment metadata in the markdown output
+  #   false — Ignore attachments entirely
 
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
-output_dir: "output/"       # Directory where converted markdown files are written.
-                            # Relative paths are resolved from the current working directory.
+output_dir:
+  "output/" # Directory where converted markdown files are written.
+  # Relative paths are resolved from the current working directory.
 
-include_page_numbers: false # Options: true, false
-                            #   true  — Retain page number markers in PDF output
-                            #   false — Strip page number markers for cleaner LLM input
+include_page_numbers:
+  false # Options: true, false
+  #   true  — Retain page number markers in PDF output
+  #   false — Strip page number markers for cleaner LLM input
 
-extract_images: true        # Options: true, false
-                            #   true  — Extract embedded images to img/ subdirectories
-                            #           alongside each output markdown file
-                            #   false — Skip image extraction
+extract_images:
+  true # Options: true, false
+  #   true  — Extract embedded images to img/ subdirectories
+  #           alongside each output markdown file
+  #   false — Skip image extraction
 
 # ---------------------------------------------------------------------------
 # Limits
 # ---------------------------------------------------------------------------
-max_file_size_mb: 200       # Maximum input file size in megabytes. Files larger than this
-                            # value are skipped with a warning. Must be a positive integer.
+max_file_size_mb:
+  200 # Maximum input file size in megabytes. Files larger than this
+  # value are skipped with a warning. Must be a positive integer.
 
 # ---------------------------------------------------------------------------
 # File filter
 # ---------------------------------------------------------------------------
-allowed_extensions:         # List of file extensions to process. An empty list means no
-                            # files will be processed — at least one extension is required.
-  - ".pdf"                  # PDF documents (via PyMuPDF — native text extraction)
-  - ".docx"                 # Microsoft Word (via markitdown)
-  - ".pptx"                 # Microsoft PowerPoint (via markitdown)
-  - ".xlsx"                 # Microsoft Excel (via markitdown)
-  - ".html"                 # HTML files (via markitdown)
-  - ".htm"                  # HTML files (alternate extension)
-  - ".eml"                  # Email message files
-  - ".msg"                  # Outlook message files
+allowed_extensions: # List of file extensions to process. An empty list means no
+  # files will be processed — at least one extension is required.
+  - ".pdf" # PDF documents (via PyMuPDF — native text extraction)
+  - ".docx" # Microsoft Word (via markitdown)
+  - ".pptx" # Microsoft PowerPoint (via markitdown)
+  - ".xlsx" # Microsoft Excel (via markitdown)
+  - ".html" # HTML files (via markitdown)
+  - ".htm" # HTML files (alternate extension)
+  - ".eml" # Email message files
+  - ".msg" # Outlook message files
 
-exclude_patterns:           # Glob patterns for file names to skip, matched against the
-                            # file name only (not the full path). Supports * and ? wildcards.
-  - "~$*"                   # Microsoft Office lock/temporary files
-  - ".*"                    # Hidden files (dotfiles)
+exclude_patterns: # Glob patterns for file names to skip, matched against the
+  # file name only (not the full path). Supports * and ? wildcards.
+  - "~$*" # Microsoft Office lock/temporary files
+  - ".*" # Hidden files (dotfiles)

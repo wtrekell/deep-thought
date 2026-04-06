@@ -10,13 +10,13 @@ headless: true
 stealth: false
 
 include_patterns:
-  - '.*/gemini-api/docs.*'
+  - ".*/gemini-api/docs.*"
 
 exclude_patterns:
   - '.*\.pdf$'
-  - '.*#.*'
+  - ".*#.*"
   - '.*\?.*'
-  - '.*login.*'
+  - ".*login.*"
 
 strip_boilerplate:
   # Google developer portal header: language picker + top nav + full sidebar + "On this page" TOC,

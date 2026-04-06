@@ -18,7 +18,7 @@ The `google.generativeai` package shows a `FutureWarning` recommending migration
 
 ## Resolved (2026-04-02)
 
-### Service init guard missing in client._execute() — FIXED
+### Service init guard missing in client.\_execute() — FIXED
 
 **File:** `client.py`
 

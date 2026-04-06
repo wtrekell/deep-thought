@@ -15,9 +15,9 @@ include_patterns:
 
 exclude_patterns:
   - '.*\.pdf$'
-  - '.*#.*'
+  - ".*#.*"
   - '.*\?.*'
-  - '.*login.*'
+  - ".*login.*"
   # ReadTheDocs search and genindex pages — not content
   - '.*/search\.html.*'
   - '.*/genindex\.html$'
@@ -35,7 +35,7 @@ strip_boilerplate:
   # "Copy to clipboard" labels that Sphinx inserts after every code block
   - '\nCopy to clipboard'
   # Pilcrow signs (¶) appended to every heading and method signature
-  - '¶'
+  - "¶"
 
 unwrap_tags: []
 

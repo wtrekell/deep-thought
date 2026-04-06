@@ -56,19 +56,19 @@ Configuration lives at `src/config/gmail-configuration.yaml`. Key settings:
 
 ## Module Structure
 
-| Module | Role |
-| --- | --- |
-| `cli.py` | CLI entry point with argparse subcommands |
-| `client.py` | Gmail API v1 wrapper with OAuth 2.0 lifecycle |
-| `config.py` | YAML config loader and Gemini API key resolver |
-| `models.py` | Local dataclasses for emails and extraction results |
+| Module         | Role                                                                         |
+| -------------- | ---------------------------------------------------------------------------- |
+| `cli.py`       | CLI entry point with argparse subcommands                                    |
+| `client.py`    | Gmail API v1 wrapper with OAuth 2.0 lifecycle                                |
+| `config.py`    | YAML config loader and Gemini API key resolver                               |
+| `models.py`    | Local dataclasses for emails and extraction results                          |
 | `processor.py` | Orchestration: fetch by rule → clean → extract → export → actions → DB write |
-| `extractor.py` | Optional Gemini-powered structured extraction |
-| `cleaner.py` | HTML → plain text conversion and newsletter cleanup |
-| `filters.py` | Cache and deduplication logic |
-| `output.py` | Markdown generation with email metadata and body |
-| `llms.py` | LLM-specific output aggregation |
-| `db/` | SQLite schema, migrations, and query functions |
+| `extractor.py` | Optional Gemini-powered structured extraction                                |
+| `cleaner.py`   | HTML → plain text conversion and newsletter cleanup                          |
+| `filters.py`   | Cache and deduplication logic                                                |
+| `output.py`    | Markdown generation with email metadata and body                             |
+| `llms.py`      | LLM-specific output aggregation                                              |
+| `db/`          | SQLite schema, migrations, and query functions                               |
 
 ## Data Storage
 

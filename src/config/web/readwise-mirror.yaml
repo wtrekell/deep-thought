@@ -14,15 +14,15 @@ include_patterns:
 
 exclude_patterns:
   - '.*\.pdf$'
-  - '.*#.*'
+  - ".*#.*"
   - '.*\?.*'
-  - '.*login.*'
+  - ".*login.*"
   # GitHub wiki action links — edit, history, new page, compare revisions
-  - '.*/wiki/.*/_edit$'
-  - '.*/wiki/.*/_history$'
-  - '.*/wiki/.*/_new$'
-  - '.*/wiki/.*/_compare.*'
-  - '.*/wiki/.*/_delete$'
+  - ".*/wiki/.*/_edit$"
+  - ".*/wiki/.*/_history$"
+  - ".*/wiki/.*/_new$"
+  - ".*/wiki/.*/_compare.*"
+  - ".*/wiki/.*/_delete$"
 retry_attempts: 2
 retry_delay: 5.0
 changelog_url: null

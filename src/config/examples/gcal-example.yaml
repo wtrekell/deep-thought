@@ -7,97 +7,109 @@
 # ---------------------------------------------------------------------------
 # Auth (OAuth 2.0)
 # ---------------------------------------------------------------------------
-credentials_path: "src/config/gmail/credentials.json"  # Path to Google OAuth client secret JSON.
-                                                        # The Gmail and GCal tools can share the same
-                                                        # OAuth client credentials file — this is the
-                                                        # recommended setup when both tools are in use.
-                                                        # Code default: "src/config/gcal/credentials.json"
+credentials_path:
+  "src/config/gmail/credentials.json" # Path to Google OAuth client secret JSON.
+  # The Gmail and GCal tools can share the same
+  # OAuth client credentials file — this is the
+  # recommended setup when both tools are in use.
+  # Code default: "src/config/gcal/credentials.json"
 
-token_path: "data/gcal/token.json"  # Path where the OAuth refresh token is persisted after the
-                                    # first interactive authorization flow. If the file does not
-                                    # exist the tool will open a browser window to authorize.
-                                    # Code default: "data/gcal/token.json"
+token_path:
+  "data/gcal/token.json" # Path where the OAuth refresh token is persisted after the
+  # first interactive authorization flow. If the file does not
+  # exist the tool will open a browser window to authorize.
+  # Code default: "data/gcal/token.json"
 
-scopes:                             # Google OAuth scopes to request. Changing scopes after the
+scopes: # Google OAuth scopes to request. Changing scopes after the
   - "https://www.googleapis.com/auth/calendar"
-                                    # initial authorization requires deleting the token file and
-                                    # re-authorizing. Available options:
-                                    #   "https://www.googleapis.com/auth/calendar"
-                                    #       — Full read/write access (required for create/update/delete)
-                                    #   "https://www.googleapis.com/auth/calendar.readonly"
-                                    #       — Read-only access (sufficient for pull-only workflows)
-                                    #   "https://www.googleapis.com/auth/calendar.events"
-                                    #       — Read/write access to events only (no calendar metadata)
+    # initial authorization requires deleting the token file and
+    # re-authorizing. Available options:
+    #   "https://www.googleapis.com/auth/calendar"
+    #       — Full read/write access (required for create/update/delete)
+    #   "https://www.googleapis.com/auth/calendar.readonly"
+    #       — Read-only access (sufficient for pull-only workflows)
+    #   "https://www.googleapis.com/auth/calendar.events"
+    #       — Read/write access to events only (no calendar metadata)
 
 # ---------------------------------------------------------------------------
 # Calendar API behaviour
 # ---------------------------------------------------------------------------
-api_rate_limit_rpm: 250     # Maximum requests per minute to the Google Calendar API.
-                            # The default Google Calendar API quota is 250 RPM; lower
-                            # this if you observe 429 errors or share quota with other tools.
-                            # Must be > 0. Code default: 250
+api_rate_limit_rpm:
+  250 # Maximum requests per minute to the Google Calendar API.
+  # The default Google Calendar API quota is 250 RPM; lower
+  # this if you observe 429 errors or share quota with other tools.
+  # Must be > 0. Code default: 250
 
-retry_max_attempts: 3       # Number of retry attempts for a failed API call before giving up.
-                            # Uses exponential backoff starting from retry_base_delay_seconds.
-                            # Must be > 0. Code default: 3
+retry_max_attempts:
+  3 # Number of retry attempts for a failed API call before giving up.
+  # Uses exponential backoff starting from retry_base_delay_seconds.
+  # Must be > 0. Code default: 3
 
-retry_base_delay_seconds: 1 # Initial delay in seconds before the first retry attempt.
-                            # Each subsequent attempt doubles the delay (1s → 2s → 4s …).
-                            # Code default: 1
+retry_base_delay_seconds:
+  1 # Initial delay in seconds before the first retry attempt.
+  # Each subsequent attempt doubles the delay (1s → 2s → 4s …).
+  # Code default: 1
 
 # ---------------------------------------------------------------------------
 # Pull settings
 # ---------------------------------------------------------------------------
-calendars:                  # List of Google Calendar IDs to pull events from.
-  - "primary"               # "primary" always resolves to the authenticated user's main calendar.
-                            # Additional calendars use their full calendar ID, visible in the
-                            # Google Calendar settings under "Integrate calendar". Examples:
-                            #   - "family@group.calendar.google.com"
-                            #   - "work-team@group.calendar.google.com"
-                            #   - "en.usa#holiday@group.v.calendar.google.com"
-                            # IDs must not contain path separators or start with a dot.
-                            # At least one entry is required; an empty list collects nothing.
-                            # Code default: ["primary"]
+calendars: # List of Google Calendar IDs to pull events from.
+  - "primary" # "primary" always resolves to the authenticated user's main calendar.
+    # Additional calendars use their full calendar ID, visible in the
+    # Google Calendar settings under "Integrate calendar". Examples:
+    #   - "family@group.calendar.google.com"
+    #   - "work-team@group.calendar.google.com"
+    #   - "en.usa#holiday@group.v.calendar.google.com"
+    # IDs must not contain path separators or start with a dot.
+    # At least one entry is required; an empty list collects nothing.
+    # Code default: ["primary"]
 
-lookback_days: 7            # Number of calendar days in the past to include in the pull window.
-                            # Must be >= 0. Values above 365 are allowed but will trigger a
-                            # warning and may produce very slow API calls and large exports.
-                            # Code default: 7
+lookback_days:
+  7 # Number of calendar days in the past to include in the pull window.
+  # Must be >= 0. Values above 365 are allowed but will trigger a
+  # warning and may produce very slow API calls and large exports.
+  # Code default: 7
 
-lookahead_days: 30          # Number of calendar days in the future to include in the pull window.
-                            # Must be >= 0. Values above 365 are allowed but will trigger a
-                            # warning and may produce very slow API calls and large exports.
-                            # Code default: 30
+lookahead_days:
+  30 # Number of calendar days in the future to include in the pull window.
+  # Must be >= 0. Values above 365 are allowed but will trigger a
+  # warning and may produce very slow API calls and large exports.
+  # Code default: 30
 
-include_cancelled: false    # Whether to include cancelled or deleted events in the export.
-                            #   true  — Include cancelled/deleted events (useful for auditing)
-                            #   false — Only include active, non-cancelled events
-                            # Code default: false
+include_cancelled:
+  false # Whether to include cancelled or deleted events in the export.
+  #   true  — Include cancelled/deleted events (useful for auditing)
+  #   false — Only include active, non-cancelled events
+  # Code default: false
 
-single_events: true         # Whether to expand recurring events into individual instances.
-                            #   true  — Each occurrence of a recurring event appears as its own
-                            #           entry with its specific date and time
-                            #   false — Return the master recurring-event entry only; individual
-                            #           instances are not enumerated
-                            # Code default: true
+single_events:
+  true # Whether to expand recurring events into individual instances.
+  #   true  — Each occurrence of a recurring event appears as its own
+  #           entry with its specific date and time
+  #   false — Return the master recurring-event entry only; individual
+  #           instances are not enumerated
+  # Code default: true
 
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
-output_dir: "data/gcal/export/"  # Directory where exported markdown files are written.
-                                 # Created automatically if it does not exist.
-                                 # Code default: "data/gcal/export/"
+output_dir:
+  "data/gcal/export/" # Directory where exported markdown files are written.
+  # Created automatically if it does not exist.
+  # Code default: "data/gcal/export/"
 
-generate_llms_files: false  # Whether to generate aggregate llms.txt index files alongside
-                            # the per-event markdown files.
-                            #   true  — Writes llms.txt (titles + links) and llms-full.txt
-                            #           (full content) in output_dir for use with llms.txt-aware tools
-                            #   false — Only individual event markdown files are written
-                            # Code default: false
+generate_llms_files:
+  false # Whether to generate aggregate llms.txt index files alongside
+  # the per-event markdown files.
+  #   true  — Writes llms.txt (titles + links) and llms-full.txt
+  #           (full content) in output_dir for use with llms.txt-aware tools
+  #   false — Only individual event markdown files are written
+  # Code default: false
 
-flat_output: false          # Whether to write all event files into a single flat directory
-                            # or organize them into per-calendar subdirectories.
-                            #   true  — All files land directly in output_dir (no subdirectories)
-                            #   false — Files are grouped under output_dir/<calendar-id>/ subdirectories,
-                            #           keeping events from different calendars separated
-                            # Code default: false
+flat_output:
+  false # Whether to write all event files into a single flat directory
+  # or organize them into per-calendar subdirectories.
+  #   true  — All files land directly in output_dir (no subdirectories)
+  #   false — Files are grouped under output_dir/<calendar-id>/ subdirectories,
+  #           keeping events from different calendars separated
+  # Code default: false

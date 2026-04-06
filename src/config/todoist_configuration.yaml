@@ -6,15 +6,12 @@ todoist:
 
 # Projects to sync (opt-in list; empty = all projects)
 projects:
-  - name: "Inbox"
-  - name: "Quiet Evolution"
-
 # Meta class filter rules for pull and push
 filters:
   # Rules applied when pulling tasks from Todoist to local DB
   pull:
     labels:
-      include: [] # Task must have at least one of these labels (empty = no filter)
+      include: [deep-thought] # Task must have at least one of these labels (empty = no filter)
       exclude: [] # Task must not have any of these labels
     projects:
       include: [] # Task must belong to one of these projects (empty = no filter)

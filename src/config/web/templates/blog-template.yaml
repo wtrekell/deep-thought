@@ -53,7 +53,8 @@ strip_domain: false # omit the domain directory from output file paths
 # pagination: "scroll"   # scroll to the bottom to trigger lazy loading
 # pagination: "click"    # click a button to load more articles
 pagination: "none"
-pagination_selector: null # CSS selector for the "load more" button (required when pagination is "click")
+pagination_selector:
+  null # CSS selector for the "load more" button (required when pagination is "click")
   # pagination_selector: "button.load-more"
 pagination_wait: 2.0 # seconds to wait after each scroll or click
 max_paginations: 10 # maximum scroll/click iterations per index page

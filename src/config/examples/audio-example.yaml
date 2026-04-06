@@ -7,103 +7,122 @@
 # ---------------------------------------------------------------------------
 # Engine
 # ---------------------------------------------------------------------------
-engine: "mlx"               # Options: "mlx" (Apple Silicon default), "whisper", "auto"
-                            #   mlx    — MLX-optimized Whisper for Apple Silicon
-                            #   whisper — OpenAI Whisper (CPU/CUDA)
-                            #   auto   — Selects MLX on Apple Silicon, Whisper otherwise
+engine:
+  "mlx" # Options: "mlx" (Apple Silicon default), "whisper", "auto"
+  #   mlx    — MLX-optimized Whisper for Apple Silicon
+  #   whisper — OpenAI Whisper (CPU/CUDA)
+  #   auto   — Selects MLX on Apple Silicon, Whisper otherwise
 
-model: "large-v3-turbo"    # Options: "tiny", "base", "small", "medium", "large-v3",
-                            #          "large-v3-turbo"
-                            #   tiny           — Fastest, lowest accuracy
-                            #   base           — Fast, low accuracy
-                            #   small          — Moderate speed and accuracy
-                            #   medium         — Slower, good accuracy
-                            #   large-v3       — Slowest, best accuracy
-                            #   large-v3-turbo — Near large-v3 accuracy, faster inference
+model:
+  "large-v3-turbo" # Options: "tiny", "base", "small", "medium", "large-v3",
+  #          "large-v3-turbo"
+  #   tiny           — Fastest, lowest accuracy
+  #   base           — Fast, low accuracy
+  #   small          — Moderate speed and accuracy
+  #   medium         — Slower, good accuracy
+  #   large-v3       — Slowest, best accuracy
+  #   large-v3-turbo — Near large-v3 accuracy, faster inference
 
-language: null              # Options: null (auto-detect), or an ISO 639-1 language code
-                            #   null — Auto-detect language from audio
-                            #   "en" — English
-                            #   "fr" — French
-                            #   "es" — Spanish
-                            #   (any valid ISO 639-1 code)
+language:
+  null # Options: null (auto-detect), or an ISO 639-1 language code
+  #   null — Auto-detect language from audio
+  #   "en" — English
+  #   "fr" — French
+  #   "es" — Spanish
+  #   (any valid ISO 639-1 code)
 
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
-output_mode: "paragraph"    # Options: "paragraph", "segment", "timestamp"
-                            #   paragraph — Groups segments into paragraphs using pause detection
-                            #   segment   — One line per Whisper segment, no grouping
-                            #   timestamp — Includes start/end timestamps for each segment
+output_mode:
+  "paragraph" # Options: "paragraph", "segment", "timestamp"
+  #   paragraph — Groups segments into paragraphs using pause detection
+  #   segment   — One line per Whisper segment, no grouping
+  #   timestamp — Includes start/end timestamps for each segment
 
-pause_threshold: 1.5        # Seconds of silence that triggers a paragraph break
-                            # Only applies when output_mode is "paragraph"
-                            # Must be a positive number
+pause_threshold:
+  1.5 # Seconds of silence that triggers a paragraph break
+  # Only applies when output_mode is "paragraph"
+  # Must be a positive number
 
-output_dir: "data/audio/export/"  # Directory where transcript files are written
+output_dir: "data/audio/export/" # Directory where transcript files are written
 
-generate_llms_files: false  # Options: true, false
-                            #   true  — Generate .llms.txt and .llms-full.txt aggregate files
-                            #   false — Only generate individual transcript files
+generate_llms_files:
+  false # Options: true, false
+  #   true  — Generate .llms.txt and .llms-full.txt aggregate files
+  #   false — Only generate individual transcript files
 
 # ---------------------------------------------------------------------------
 # Diarization (speaker identification)
 # ---------------------------------------------------------------------------
-diarize: false              # Options: true, false
-                            #   true  — Enable speaker diarization (requires HuggingFace token)
-                            #   false — No speaker identification
+diarize:
+  false # Options: true, false
+  #   true  — Enable speaker diarization (requires HuggingFace token)
+  #   false — No speaker identification
 
-hf_token_env: "HF_TOKEN"   # Name of the environment variable holding your HuggingFace token
-                            # Required only when diarize is true
+hf_token_env:
+  "HF_TOKEN" # Name of the environment variable holding your HuggingFace token
+  # Required only when diarize is true
 
 # ---------------------------------------------------------------------------
 # Filler words
 # ---------------------------------------------------------------------------
-remove_fillers: false       # Options: true, false
-                            #   true  — Strip filler words (um, uh, etc.) from transcript
-                            #   false — Keep all words as transcribed
+remove_fillers:
+  false # Options: true, false
+  #   true  — Strip filler words (um, uh, etc.) from transcript
+  #   false — Keep all words as transcribed
 
 # ---------------------------------------------------------------------------
 # Limits
 # ---------------------------------------------------------------------------
-max_file_size_mb: 500       # Maximum file size in megabytes; must be a positive integer
+max_file_size_mb: 500 # Maximum file size in megabytes; must be a positive integer
 
-chunk_duration_minutes: 5   # MLX only: audio longer than this is split into chunks
-                            # Must be a positive integer
+chunk_duration_minutes:
+  5 # MLX only: audio longer than this is split into chunks
+  # Must be a positive integer
 
 # ---------------------------------------------------------------------------
 # Hallucination detection (multi-signal scoring system)
 # ---------------------------------------------------------------------------
 hallucination_detection:
-  repetition_threshold: 3         # Max allowed phrase repetitions in a sliding window
-                                  # Segments exceeding this count are flagged
+  repetition_threshold:
+    3 # Max allowed phrase repetitions in a sliding window
+    # Segments exceeding this count are flagged
 
-  compression_ratio_threshold: 2.4  # Flag segments with compression ratio above this value
-                                    # High ratios indicate repetitive or nonsensical text
+  compression_ratio_threshold:
+    2.4 # Flag segments with compression ratio above this value
+    # High ratios indicate repetitive or nonsensical text
 
-  confidence_floor: -1.0          # Average log-probability floor per segment
-                                  # Segments below this value are flagged as low confidence
+  confidence_floor:
+    -1.0 # Average log-probability floor per segment
+    # Segments below this value are flagged as low confidence
 
-  no_speech_prob_threshold: 0.6   # Flag segments where Whisper's no-speech probability
-                                  # exceeds this value (range: 0.0 to 1.0)
+  no_speech_prob_threshold:
+    0.6 # Flag segments where Whisper's no-speech probability
+    # exceeds this value (range: 0.0 to 1.0)
 
-  duration_chars_per_sec_max: 25  # Flag segments with text density above this
-                                  # (characters per second of audio)
+  duration_chars_per_sec_max:
+    25 # Flag segments with text density above this
+    # (characters per second of audio)
 
-  duration_chars_per_sec_min: 2   # Flag segments with text density below this
-                                  # (for segments longer than 0.5 seconds)
+  duration_chars_per_sec_min:
+    2 # Flag segments with text density below this
+    # (for segments longer than 0.5 seconds)
 
   # use_vad: DEPRECATED — this field is no longer supported and has no effect.
   # Remove it from any existing configuration files.
 
-  blocklist_enabled: true         # Options: true, false
-                                  #   true  — Check against known hallucination phrases
-                                  #   false — Skip blocklist checking
+  blocklist_enabled:
+    true # Options: true, false
+    #   true  — Check against known hallucination phrases
+    #   false — Skip blocklist checking
 
-  score_threshold: 2              # Number of detection layers that must flag a segment
-                                  # before the configured action is taken; must be >= 1
+  score_threshold:
+    2 # Number of detection layers that must flag a segment
+    # before the configured action is taken; must be >= 1
 
-  action: "remove"                # Options: "remove", "flag", "log"
-                                  #   remove — Silently drop flagged segments from output
-                                  #   flag   — Keep flagged segments but mark them in output
-                                  #   log    — Keep segments unchanged, log warnings only
+  action:
+    "remove" # Options: "remove", "flag", "log"
+    #   remove — Silently drop flagged segments from output
+    #   flag   — Keep flagged segments but mark them in output
+    #   log    — Keep segments unchanged, log warnings only
