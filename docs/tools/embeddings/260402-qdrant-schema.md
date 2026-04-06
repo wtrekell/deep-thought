@@ -82,10 +82,11 @@ Every point stored in `deep_thought_documents` carries a payload. The fields bel
 | `comment_count`  | integer  | no      | reddit       | `134`                                             |
 | `flair`          | keyword  | no      | reddit       | `Discussion`                                      |
 | `url`            | keyword  | no      | web, reddit  | `https://www.reddit.com/r/rust/comments/1abcdef/` |
+| `domain`         | keyword  | no      | web          | `docs.rust-lang.org`                              |
 | `status_code`    | integer  | no      | web          | `200`                                             |
 | `word_count`     | integer  | no      | reddit, web  | `1204`                                            |
 | `query`          | keyword  | no      | research     | `What are the best practices for Rust async?`     |
-| `mode`           | keyword  | yes     | research     | `search`                                          |
+| `mode`           | keyword  | no      | research     | `search`                                          |
 | `model`          | keyword  | no      | research     | `sonar`                                           |
 | `recency`        | keyword  | no      | research     | `month`                                           |
 | `source_count`   | integer  | no      | research     | `8`                                               |
@@ -111,6 +112,7 @@ def write_embedding(
     output_path: str,
     model: Any,
     qdrant_client: Any,
+    collection_name: str = COLLECTION_NAME,
 ) -> None:
 ```
 
@@ -155,6 +157,7 @@ write_embedding(
     output_path=collected_post.output_path,
     model=embedding_model,
     qdrant_client=qdrant_connection,
+    collection_name=COLLECTION_NAME,
 )
 ```
 
@@ -191,6 +194,7 @@ write_embedding(
     output_path=crawled_page.output_path,
     model=embedding_model,
     qdrant_client=qdrant_connection,
+    collection_name=COLLECTION_NAME,
 )
 ```
 
@@ -202,7 +206,7 @@ write_embedding(
 
 **`output_path`:** The path where the markdown output file was written, from `SearchCommandResult.output_path` or `ResearchCommandResult.output_path`.
 
-**`rule_name`:** The research tool is stateless (no SQLite, no rule config file driving collection). Use the slugified query as a stable stand-in, or pass an explicit label if the calling context has one. A reasonable default is `"research"` when no rule context exists.
+**`rule_name`:** The research tool has no rule system (no SQLite, no rule config file). `rule_name` is always `""` (empty string). Do not pass a slugified query or any other label — the implementation always stores the empty string.
 
 ```python
 from deep_thought.embeddings import write_embedding
@@ -210,7 +214,7 @@ from deep_thought.embeddings import write_embedding
 research_payload: dict[str, Any] = {
     "source_tool": "research",
     "source_type": source_type_for_mode,  # see section 4
-    "rule_name": rule_label,              # slugified query or caller-supplied label
+    "rule_name": "",
     "collected_date": research_result.processed_date,
     "title": research_result.query,
     "query": research_result.query,
@@ -227,6 +231,7 @@ write_embedding(
     output_path=output_file_path,
     model=embedding_model,
     qdrant_client=qdrant_connection,
+    collection_name=COLLECTION_NAME,
 )
 ```
 

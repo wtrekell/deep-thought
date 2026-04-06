@@ -126,19 +126,20 @@ class TestWriteEmbeddingCallsSharedFunction:
         assert payload["source_type"] == "article"
 
     def test_title_included_when_present(self) -> None:
-        """When title is not None, the payload must include the title field."""
+        """When title is not None, the payload must include the title field with its value."""
         page = _make_crawled_page(title="My Blog Post")
         mock_shared = _call_write_embedding(page)
         payload = mock_shared.call_args.kwargs["payload"]
         assert "title" in payload
         assert payload["title"] == "My Blog Post"
 
-    def test_title_omitted_when_none(self) -> None:
-        """When page.title is None, the payload must not contain the 'title' key."""
+    def test_write_embedding_title_always_present(self) -> None:
+        """When page.title is None, the payload must still contain 'title' as an empty string."""
         page = _make_crawled_page(title=None)
         mock_shared = _call_write_embedding(page)
         payload = mock_shared.call_args.kwargs["payload"]
-        assert "title" not in payload
+        assert "title" in payload
+        assert payload["title"] == ""
 
     def test_status_code_included_when_present(self) -> None:
         """When status_code is not None, it should appear in the payload."""

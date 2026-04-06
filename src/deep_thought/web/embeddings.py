@@ -69,13 +69,11 @@ def write_embedding(
         "source_type": source_type,
         "rule_name": page.rule_name or "",
         "collected_date": collected_timestamp,
+        "title": page.title or "",
         "domain": domain,
         "url": page.url,
         "word_count": page.word_count,
     }
-
-    if page.title is not None:
-        page_payload["title"] = page.title
 
     if page.status_code is not None:
         page_payload["status_code"] = page.status_code
