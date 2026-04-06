@@ -26,7 +26,6 @@ PAYLOAD_INDEX_FIELDS: dict[str, str] = {
     "rule_name": "KEYWORD",
     "collected_date": "DATETIME",
     "title": "KEYWORD",
-    "mode": "KEYWORD",
 }
 
 
@@ -192,3 +191,60 @@ def write_embedding(
         collection_name=collection_name,
         points=[PointStruct(id=point_id, vector=vector, payload=full_payload)],
     )
+
+
+def search_embeddings(
+    query: str,
+    model: Any,
+    qdrant_client: Any,
+    collection_name: str = COLLECTION_NAME,
+    limit: int = 10,
+    source_tool: str | None = None,
+    source_type: str | None = None,
+) -> list[Any]:
+    """Search the Qdrant collection for documents semantically similar to query.
+
+    Embeds the query text and performs a vector similarity search against the
+    specified collection.  Optional ``source_tool`` and ``source_type`` filters
+    narrow results to a specific origin or content category using the indexed
+    payload fields.
+
+    Args:
+        query: The natural-language query string to embed and search with.
+        model: The ``(model, tokenizer)`` tuple returned by
+            :func:`create_embedding_model`.
+        qdrant_client: A Qdrant client returned by :func:`create_qdrant_client`.
+        collection_name: The Qdrant collection to search. Defaults to
+            :data:`COLLECTION_NAME` (``"deep_thought_documents"``).
+        limit: Maximum number of results to return. Defaults to 10.
+        source_tool: Optional filter — restrict results to a single tool.
+            Valid values: ``"reddit"``, ``"web"``, ``"research"``.
+        source_type: Optional filter — restrict results to a single content type.
+            Valid values: ``"forum_post"``, ``"blog_post"``, ``"documentation"``,
+            ``"article"``, ``"research_search"``, ``"research_deep"``.
+
+    Returns:
+        A list of Qdrant ``ScoredPoint`` objects. Each has a ``.payload`` dict
+        with all stored metadata and a ``.score`` float (cosine similarity,
+        higher is more similar). The ``output_path`` in the payload is the
+        canonical pointer back to the source markdown file on disk.
+    """
+    from qdrant_client.models import FieldCondition, Filter, MatchValue  # noqa: PLC0415
+
+    query_vector = embed_text(query, model)
+
+    must_conditions: list[Any] = []
+    if source_tool is not None:
+        must_conditions.append(FieldCondition(key="source_tool", match=MatchValue(value=source_tool)))
+    if source_type is not None:
+        must_conditions.append(FieldCondition(key="source_type", match=MatchValue(value=source_type)))
+
+    query_filter: Any = Filter(must=must_conditions) if must_conditions else None
+
+    results: list[Any] = qdrant_client.search(
+        collection_name=collection_name,
+        query_vector=query_vector,
+        query_filter=query_filter,
+        limit=limit,
+    )
+    return results

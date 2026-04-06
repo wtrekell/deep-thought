@@ -5,9 +5,9 @@ All tests mock the Qdrant client so no live server is required.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
-from deep_thought.embeddings import PAYLOAD_INDEX_FIELDS, ensure_collection
+from deep_thought.embeddings import COLLECTION_NAME, PAYLOAD_INDEX_FIELDS, ensure_collection, search_embeddings
 
 
 def _make_qdrant_client(
@@ -96,8 +96,8 @@ class TestEnsureCollection:
         for index_call in mock_client.create_payload_index.call_args_list:
             assert index_call.kwargs["collection_name"] == "target_collection"
 
-    def test_all_seven_index_field_names_are_submitted(self) -> None:
-        """The exact set of 7 required field names is submitted when no indexes exist."""
+    def test_all_six_index_field_names_are_submitted(self) -> None:
+        """The exact set of 6 required field names is submitted when no indexes exist."""
         mock_client = _make_qdrant_client(existing_collections=[])
 
         ensure_collection(mock_client, "my_collection")
@@ -106,3 +106,153 @@ class TestEnsureCollection:
             index_call.kwargs["field_name"] for index_call in mock_client.create_payload_index.call_args_list
         }
         assert submitted_field_names == set(PAYLOAD_INDEX_FIELDS.keys())
+
+
+class TestSearchEmbeddings:
+    """Tests for search_embeddings() — the shared Qdrant retrieval interface."""
+
+    def _make_mock_client(self) -> MagicMock:
+        """Return a mock Qdrant client whose search() returns an empty list by default."""
+        mock_client = MagicMock()
+        mock_client.search.return_value = []
+        return mock_client
+
+    def test_unfiltered_search_passes_no_query_filter(self) -> None:
+        """When no source_tool or source_type is given, query_filter must be None."""
+        mock_client = self._make_mock_client()
+        mock_model = MagicMock()
+        fake_vector = [0.1] * 384
+
+        with patch("deep_thought.embeddings.embed_text", return_value=fake_vector):
+            search_embeddings(query="async Rust patterns", model=mock_model, qdrant_client=mock_client)
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs["query_filter"] is None
+
+    def test_source_tool_filter_produces_correct_field_condition(self) -> None:
+        """Passing source_tool='reddit' must build a Filter with one FieldCondition on source_tool."""
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+        mock_client = self._make_mock_client()
+        mock_model = MagicMock()
+        fake_vector = [0.1] * 384
+
+        with patch("deep_thought.embeddings.embed_text", return_value=fake_vector):
+            search_embeddings(
+                query="Rust memory safety",
+                model=mock_model,
+                qdrant_client=mock_client,
+                source_tool="reddit",
+            )
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        query_filter = call_kwargs["query_filter"]
+        assert isinstance(query_filter, Filter)
+        assert len(query_filter.must) == 1
+        condition = query_filter.must[0]
+        assert isinstance(condition, FieldCondition)
+        assert condition.key == "source_tool"
+        assert condition.match == MatchValue(value="reddit")
+
+    def test_source_type_filter_produces_correct_field_condition(self) -> None:
+        """Passing source_type='research_deep' must build a Filter with one FieldCondition on source_type."""
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+        mock_client = self._make_mock_client()
+        mock_model = MagicMock()
+        fake_vector = [0.1] * 384
+
+        with patch("deep_thought.embeddings.embed_text", return_value=fake_vector):
+            search_embeddings(
+                query="error handling patterns",
+                model=mock_model,
+                qdrant_client=mock_client,
+                source_type="research_deep",
+            )
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        query_filter = call_kwargs["query_filter"]
+        assert isinstance(query_filter, Filter)
+        assert len(query_filter.must) == 1
+        condition = query_filter.must[0]
+        assert isinstance(condition, FieldCondition)
+        assert condition.key == "source_type"
+        assert condition.match == MatchValue(value="research_deep")
+
+    def test_both_filters_produce_two_must_conditions(self) -> None:
+        """Passing both source_tool and source_type must produce a Filter with two must conditions."""
+        from qdrant_client.models import Filter
+
+        mock_client = self._make_mock_client()
+        mock_model = MagicMock()
+        fake_vector = [0.1] * 384
+
+        with patch("deep_thought.embeddings.embed_text", return_value=fake_vector):
+            search_embeddings(
+                query="documentation quality",
+                model=mock_model,
+                qdrant_client=mock_client,
+                source_tool="web",
+                source_type="documentation",
+            )
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        query_filter = call_kwargs["query_filter"]
+        assert isinstance(query_filter, Filter)
+        assert len(query_filter.must) == 2
+        condition_keys = {cond.key for cond in query_filter.must}
+        assert condition_keys == {"source_tool", "source_type"}
+
+    def test_limit_parameter_forwarded_to_client_search(self) -> None:
+        """The limit argument must be passed through to the Qdrant client search call."""
+        mock_client = self._make_mock_client()
+        mock_model = MagicMock()
+        fake_vector = [0.1] * 384
+
+        with patch("deep_thought.embeddings.embed_text", return_value=fake_vector):
+            search_embeddings(
+                query="test query",
+                model=mock_model,
+                qdrant_client=mock_client,
+                limit=25,
+            )
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs["limit"] == 25
+
+    def test_default_collection_name_used_when_not_specified(self) -> None:
+        """When collection_name is omitted, the call must target COLLECTION_NAME."""
+        mock_client = self._make_mock_client()
+        mock_model = MagicMock()
+        fake_vector = [0.1] * 384
+
+        with patch("deep_thought.embeddings.embed_text", return_value=fake_vector):
+            search_embeddings(query="test query", model=mock_model, qdrant_client=mock_client)
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs["collection_name"] == COLLECTION_NAME
+
+    def test_query_vector_passed_to_client_search(self) -> None:
+        """The embedded query vector must be forwarded to the Qdrant search call."""
+        mock_client = self._make_mock_client()
+        mock_model = MagicMock()
+        distinctive_vector = [0.42] * 384
+
+        with patch("deep_thought.embeddings.embed_text", return_value=distinctive_vector):
+            search_embeddings(query="vector passthrough test", model=mock_model, qdrant_client=mock_client)
+
+        call_kwargs = mock_client.search.call_args.kwargs
+        assert call_kwargs["query_vector"] == distinctive_vector
+
+    def test_results_returned_from_client_search(self) -> None:
+        """The list returned by the Qdrant client search call must be returned to the caller."""
+        mock_client = self._make_mock_client()
+        mock_model = MagicMock()
+        fake_vector = [0.1] * 384
+        expected_results = [MagicMock(), MagicMock()]
+        mock_client.search.return_value = expected_results
+
+        with patch("deep_thought.embeddings.embed_text", return_value=fake_vector):
+            results = search_embeddings(query="return value test", model=mock_model, qdrant_client=mock_client)
+
+        assert results is expected_results
