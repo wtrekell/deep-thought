@@ -166,6 +166,28 @@ class TestBuildRequestBody:
 
         assert "search_domain_filter" not in body
 
+    def test_recency_alias_3_months_maps_to_year(self, sample_config: ResearchConfig) -> None:
+        """'3 months' alias must be translated to 'year' before the API call."""
+        client = _make_client(sample_config)
+        body = client._build_request_body("sonar", [], "3 months", [])
+
+        assert body["search_recency_filter"] == "year"
+
+    def test_recency_alias_6_months_maps_to_year(self, sample_config: ResearchConfig) -> None:
+        """'6 months' alias must be translated to 'year' before the API call."""
+        client = _make_client(sample_config)
+        body = client._build_request_body("sonar", [], "6 months", [])
+
+        assert body["search_recency_filter"] == "year"
+
+    def test_native_recency_values_pass_through_unchanged(self, sample_config: ResearchConfig) -> None:
+        """Native Perplexity values must not be remapped."""
+        client = _make_client(sample_config)
+        for native in ("hour", "day", "week", "month", "year"):
+            body = client._build_request_body("sonar", [], native, [])
+            got = body["search_recency_filter"]
+            assert got == native, f"Expected '{native}' unchanged, got '{got}'"
+
 
 # ---------------------------------------------------------------------------
 # TestSearch

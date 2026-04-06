@@ -562,8 +562,11 @@ def cmd_attach(args: argparse.Namespace) -> None:
               arguments, and optional --message and global --dry-run flags.
     """
     config = _load_config_from_args(args)
-    todoist_client = _make_client_from_config(config)
     file_path = Path(args.file_path)
+
+    # Defer token resolution until after dry-run validation so that
+    # --dry-run works without a configured API token.
+    todoist_client = None if args.dry_run else _make_client_from_config(config)
 
     connection = initialize_database()
     try:

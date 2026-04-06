@@ -48,7 +48,7 @@ class AttachResult:
 
 
 def attach_file(
-    client: TodoistClient,
+    client: TodoistClient | None,
     conn: sqlite3.Connection,
     task_id: str,
     file_path: Path,
@@ -65,7 +65,8 @@ def attach_file(
     metadata) to the local SQLite database so it appears in exports immediately.
 
     Args:
-        client: An authenticated TodoistClient instance.
+        client: An authenticated TodoistClient instance. May be None only when
+            dry_run is True — passing None with dry_run=False raises ValueError.
         conn: An open SQLite connection to the local database.
         task_id: Todoist task ID to attach the file to.
         file_path: Path to the local file to upload.
@@ -76,7 +77,8 @@ def attach_file(
         An AttachResult describing the operation.
 
     Raises:
-        ValueError: If the task ID is not found in the local database.
+        ValueError: If the task ID is not found in the local database, or if
+            client is None and dry_run is False.
         FileNotFoundError: If file_path does not exist on disk.
     """
     task_row = get_task_by_id(conn, task_id)
@@ -98,6 +100,9 @@ def attach_file(
             comment_id="",
             dry_run=True,
         )
+
+    if client is None:
+        raise ValueError("client must not be None when dry_run is False.")
 
     logger.debug("Uploading %s to Todoist…", file_path.name)
     attachment: dict[str, Any] = client.upload_attachment(file_path)

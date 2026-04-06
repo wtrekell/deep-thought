@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from deep_thought.research.config import (
-    _RECENCY_API_MAP,
+    RECENCY_API_MAP,
     ResearchConfig,
     get_api_key,
     load_config,
@@ -172,14 +172,14 @@ class TestValidateConfig:
     def test_recency_api_map_aliases(self) -> None:
         """Alias recency values must map to a native Perplexity value."""
         native_values = {"hour", "day", "week", "month", "year"}
-        for alias, mapped in _RECENCY_API_MAP.items():
+        for alias, mapped in RECENCY_API_MAP.items():
             assert mapped in native_values, f"'{alias}' maps to '{mapped}' which is not a native Perplexity value"
 
     def test_3_months_maps_to_year(self) -> None:
-        assert _RECENCY_API_MAP["3 months"] == "year"
+        assert RECENCY_API_MAP["3 months"] == "year"
 
     def test_6_months_maps_to_year(self) -> None:
-        assert _RECENCY_API_MAP["6 months"] == "year"
+        assert RECENCY_API_MAP["6 months"] == "year"
 
     def test_none_default_recency_passes(self) -> None:
         """A None default_recency should produce no issues."""
