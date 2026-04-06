@@ -25,6 +25,7 @@ from deep_thought.todoist.config import (
 )
 from deep_thought.todoist.db.schema import initialize_database
 from deep_thought.todoist.export import (
+    _render_comment_line,
     _render_section_file,
     _safe_directory_name,
     export_to_markdown,
@@ -143,6 +144,94 @@ def _insert_task(
         ),
     )
     conn.commit()
+
+
+def _insert_comment(
+    conn: sqlite3.Connection,
+    comment_id: str,
+    task_id: str,
+    content: str,
+    posted_at: str = "2026-01-15T10:00:00",
+    poster_id: str = "user123",
+    attachment_json: str | None = None,
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO comments (id, task_id, project_id, content, posted_at, poster_id, attachment_json, synced_at)
+        VALUES (?, ?, NULL, ?, ?, ?, ?, '2026-01-15T10:00:00');
+        """,
+        (comment_id, task_id, content, posted_at, poster_id, attachment_json),
+    )
+    conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# _render_comment_line
+# ---------------------------------------------------------------------------
+
+
+class TestRenderCommentLine:
+    def test_renders_basic_comment(self, memory_conn: sqlite3.Connection) -> None:
+        comment: dict[str, object] = {
+            "posted_at": "2026-01-15T10:00:00",
+            "poster_id": "user123",
+            "content": "Hello world",
+            "attachment_json": None,
+        }
+        result = _render_comment_line(memory_conn, comment, include_attachments=False)
+        assert result == "[2026-01-15 user123] Hello world"
+
+    def test_no_attachment_when_flag_false(self, memory_conn: sqlite3.Connection) -> None:
+        attachment_data = json.dumps(
+            {
+                "file_name": "doc.pdf",
+                "file_url": "https://example.com/doc.pdf",
+                "file_type": "application/pdf",
+                "file_size": 10240,
+            }
+        )
+        comment: dict[str, object] = {
+            "posted_at": "2026-01-15T10:00:00",
+            "poster_id": "user123",
+            "content": "See file",
+            "attachment_json": attachment_data,
+        }
+        result = _render_comment_line(memory_conn, comment, include_attachments=False)
+        assert "attachment" not in result
+        assert result == "[2026-01-15 user123] See file"
+
+    def test_includes_attachment_when_flag_true(self, memory_conn: sqlite3.Connection) -> None:
+        attachment_data = json.dumps(
+            {
+                "file_name": "report.pdf",
+                "file_url": "https://example.com/report.pdf",
+                "file_type": "application/pdf",
+                "file_size": 20480,
+            }
+        )
+        comment: dict[str, object] = {
+            "posted_at": "2026-01-15T10:00:00",
+            "poster_id": "user123",
+            "content": "See attached report",
+            "attachment_json": attachment_data,
+        }
+        result = _render_comment_line(memory_conn, comment, include_attachments=True)
+        assert "[2026-01-15 user123] See attached report" in result
+        assert "attachment: report.pdf" in result
+        assert "application/pdf" in result
+        assert "https://example.com/report.pdf" in result
+        assert "20.0 KB" in result
+
+    def test_no_attachment_appended_when_attachment_json_is_none(self, memory_conn: sqlite3.Connection) -> None:
+        comment: dict[str, object] = {
+            "posted_at": "2026-01-15T10:00:00",
+            "poster_id": "user123",
+            "content": "No file here",
+            "attachment_json": None,
+        }
+        result = _render_comment_line(memory_conn, comment, include_attachments=True)
+        assert "attachment" not in result
+        assert result == "[2026-01-15 user123] No file here"
 
 
 # ---------------------------------------------------------------------------

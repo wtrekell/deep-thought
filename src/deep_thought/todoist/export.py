@@ -130,10 +130,14 @@ def _get_poster_name(poster_id: str) -> str:
     return poster_id
 
 
-def _render_comment_line(conn: sqlite3.Connection, comment: dict[str, Any]) -> str:
+def _render_comment_line(conn: sqlite3.Connection, comment: dict[str, Any], include_attachments: bool) -> str:
     """Render a single comment as a markdown list entry.
 
     Format: [YYYY-MM-DD poster-name] Comment text
+
+    When include_attachments is True and the comment has an attachment,
+    appends the attachment details inline after the comment text:
+        [attachment: filename.pdf (application/pdf, 42 KB) — https://…]
 
     The date is extracted from the ISO-8601 posted_at timestamp. If the
     content spans multiple lines only the first line is included to keep
@@ -142,6 +146,7 @@ def _render_comment_line(conn: sqlite3.Connection, comment: dict[str, Any]) -> s
     Args:
         conn: An open SQLite connection (for poster name lookup).
         comment: A comment dict from get_comments_for_task().
+        include_attachments: When True, append attachment metadata if present.
 
     Returns:
         A formatted string like '[2026-03-10 poster-name] Comment text'.
@@ -151,7 +156,20 @@ def _render_comment_line(conn: sqlite3.Connection, comment: dict[str, Any]) -> s
     poster_name = _get_poster_name(comment.get("poster_id") or "unknown")
     # Keep comment content to the first line for parsability
     content_first_line = (comment.get("content") or "").split("\n")[0]
-    return f"[{date_part} {poster_name}] {content_first_line}"
+    line = f"[{date_part} {poster_name}] {content_first_line}"
+
+    if include_attachments:
+        raw_attachment = comment.get("attachment_json")
+        if raw_attachment is not None:
+            attachment: dict[str, Any] = json.loads(raw_attachment)
+            file_name: str = attachment.get("file_name") or "attachment"
+            file_type: str = attachment.get("file_type") or "unknown"
+            raw_size = attachment.get("file_size") or 0
+            size_kb = round(int(raw_size) / 1024, 1)
+            file_url: str = attachment.get("file_url") or ""
+            line += f"  [attachment: {file_name} ({file_type}, {size_kb} KB) — {file_url}]"
+
+    return line
 
 
 def _render_task_block(
@@ -241,7 +259,7 @@ def _render_task_block(
         if comments:
             lines.append(f"{indent}  - comments:")
             for comment in comments:
-                comment_line = _render_comment_line(conn, comment)
+                comment_line = _render_comment_line(conn, comment, config.comments.include_attachments)
                 lines.append(f"{indent}    - {comment_line}")
 
     # Subtasks (one level of indentation added)

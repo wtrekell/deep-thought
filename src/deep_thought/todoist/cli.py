@@ -17,6 +17,7 @@ Subcommands:
     export    — Export current DB state to markdown files
     create    — Create a new task in Todoist
     complete  — Mark a task as completed
+    attach    — Upload a local file and attach it to a task as a comment
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from deep_thought.todoist.attach import AttachResult, attach_file
 from deep_thought.todoist.client import TodoistClient
 from deep_thought.todoist.config import (
     TodoistConfig,
@@ -548,6 +550,44 @@ def cmd_complete(args: argparse.Namespace) -> None:
         connection.close()
 
 
+def cmd_attach(args: argparse.Namespace) -> None:
+    """Upload a local file to Todoist and attach it to a task as a comment.
+
+    Validates that the task exists in the local database before uploading.
+    Use --dry-run to verify the task ID and file path without making any
+    API calls.
+
+    Args:
+        args: Parsed argparse namespace with task_id and file_path positional
+              arguments, and optional --message and global --dry-run flags.
+    """
+    config = _load_config_from_args(args)
+    todoist_client = _make_client_from_config(config)
+    file_path = Path(args.file_path)
+
+    connection = initialize_database()
+    try:
+        attach_result: AttachResult = attach_file(
+            todoist_client,
+            connection,
+            args.task_id,
+            file_path,
+            message=args.message,
+            dry_run=args.dry_run,
+        )
+    finally:
+        connection.close()
+
+    size_kb = round(attach_result.file_size / 1024, 1)
+    file_summary = f"'{attach_result.file_name}' ({size_kb} KB)"
+    task_summary = f"[{attach_result.task_id}]: {attach_result.task_content}"
+    if attach_result.dry_run:
+        print(f"[dry-run] Would attach {file_summary} to task {task_summary}")
+    else:
+        print(f"Attached {file_summary} to task {task_summary}")
+        print(f"Comment ID: {attach_result.comment_id}")
+
+
 # ---------------------------------------------------------------------------
 # Argument parser
 # ---------------------------------------------------------------------------
@@ -694,6 +734,25 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         help="Section within the project to place the task in.",
     )
 
+    attach_parser = subparsers.add_parser(
+        "attach",
+        help="Upload a local file and attach it to a task as a comment.",
+    )
+    attach_parser.add_argument(
+        "task_id",
+        help="Todoist task ID to attach the file to (shown in export output after 'id:').",
+    )
+    attach_parser.add_argument(
+        "file_path",
+        help="Path to the local file to upload.",
+    )
+    attach_parser.add_argument(
+        "--message",
+        metavar="TEXT",
+        default="File attachment",
+        help="Comment text to accompany the attachment (default: 'File attachment').",
+    )
+
     return root_parser
 
 
@@ -712,6 +771,7 @@ _COMMAND_HANDLERS = {
     "export": cmd_export,
     "create": cmd_create,
     "complete": cmd_complete,
+    "attach": cmd_attach,
 }
 
 
