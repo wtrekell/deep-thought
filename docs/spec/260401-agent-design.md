@@ -37,12 +37,14 @@ The code-quality-integration agent was blocked at ruff formatting in 6 of 13 run
 Owns all Python application code across every tool in the `deep_thought` namespace. Same role as before, expanded scope.
 
 **In scope**
+
 - Python application code for any tool: business logic, CLI, data models, config loading, output formatting, progress display
 - Embedding integration: at collection time, calling the embedding model and writing to Qdrant — following patterns established by the Workflow Architect
 - Tests for all new and modified functionality
 - CHANGELOG and ISSUES updates
 
 **Out of scope**
+
 - Raw SQL — no schema decisions, no migration files, no query authoring
 - Qdrant collection design or index configuration (Schema and Data Agent)
 - Cross-tool design or shared infrastructure (Workflow Architect)
@@ -55,11 +57,13 @@ Owns all Python application code across every tool in the `deep_thought` namespa
 Owns the structure of all stored data: SQLite schemas and Qdrant collection design. Expanded from the original sqlite-schema-expert role, which was SQLite only.
 
 **In scope**
+
 - SQLite: table design, migrations, query authoring, index strategy
 - Qdrant: collection configuration, payload schema, which fields are indexed for filtering, embedding storage patterns
 - Handoff to the Python Developer: Python-facing interfaces showing how to call queries and upsert to the vector store
 
 **Out of scope**
+
 - Python application code (Python Developer)
 - Cross-tool design (Workflow Architect)
 - Quality audit (Quality Gate)
@@ -71,6 +75,7 @@ Owns the structure of all stored data: SQLite schemas and Qdrant collection desi
 Designs and implements work that spans multiple tools: the shared Qdrant collection, cross-tool pipelines, and the retrieval interface Claude uses to query the corpus.
 
 **In scope**
+
 - Shared Qdrant collection: design, setup, index management
 - Embedding model: selection and MLX integration, establishing the pattern individual tools follow
 - Retrieval layer: the query interface that embeds a user query, searches Qdrant, and returns relevant document paths for Claude to read
@@ -78,6 +83,7 @@ Designs and implements work that spans multiple tools: the shared Qdrant collect
 - Shared utilities consumed by multiple tools
 
 **Out of scope**
+
 - Individual tool implementation (Python Developer and Schema and Data Agent)
 - Per-tool embedding calls within each collection pipeline (Python Developer, following patterns Workflow Architect establishes)
 - Quality audit (Quality Gate)
@@ -91,6 +97,7 @@ Designs and implements work that spans multiple tools: the shared Qdrant collect
 Independent quality audit after any implementation work. Diagnoses issues with clear, actionable output. Does not implement fixes — with one exception.
 
 **In scope**
+
 - Full toolchain in order: `ruff check` → `ruff format` → `mypy` → `pytest`
 - Auto-applying `ruff format` and `ruff check --fix` — mechanical corrections, not logic changes
 - CLI smoke tests across all tools (not hardcoded Todoist commands)
@@ -99,6 +106,7 @@ Independent quality audit after any implementation work. Diagnoses issues with c
 - Classifying issues by owner (Python Developer, Schema and Data Agent, Workflow Architect, or spec issue)
 
 **Out of scope**
+
 - Implementing any fix beyond auto-fixable formatting
 - Modifying tests to pass, relaxing type annotations, skipping failures
 
@@ -119,6 +127,7 @@ These agents operate against collected data rather than building the tools that 
 Owns setup and ongoing maintenance of tool configuration across any repo. Knows every tool's YAML schema, how rules work, and how consuming repos are initialized.
 
 **In scope**
+
 - Creating and modifying tool YAML configs: rules, filters, limits, API key env var references
 - Validating configs against tool schemas — catching errors before a collection run fails
 - Per-repo initialization: `npm install`, `.vale.ini`, Prettier config, `lint.config.yaml`, `.env` structure with `DEEP_THOUGHT_DATA_DIR`
@@ -126,6 +135,7 @@ Owns setup and ongoing maintenance of tool configuration across any repo. Knows 
 - Tuning rules based on collection results — adjusting filters, limits, age windows
 
 **Out of scope**
+
 - Running the tools (Collection Agent)
 - Writing Python code or modifying tool source (Python Developer)
 - Schema or DB changes (Schema and Data Agent)
@@ -139,6 +149,7 @@ Owns setup and ongoing maintenance of tool configuration across any repo. Knows 
 Autonomous scheduler and dispatcher. Reads the Todoist work queue, decides what to run based on priority, timing, and resource state, dispatches work to the appropriate repo and agent, and surfaces only what genuinely needs a human decision. Runs on a launchd schedule rather than waiting to be invoked.
 
 **In scope**
+
 - Reading the Todoist queue via the existing SQLite database or markdown export
 - Categorizing work: autonomous (Claude can execute without input) vs. human-required (needs a decision or review)
 - Dispatching autonomous work to the correct repo by invoking `claude --directory /path/to/repo` with a prompt derived from the task
@@ -147,6 +158,7 @@ Autonomous scheduler and dispatcher. Reads the Todoist work queue, decides what 
 - Escalating blocked or ambiguous tasks clearly rather than stalling
 
 **Out of scope**
+
 - Executing the work itself — it dispatches, it does not implement
 - Collecting content (Collection Agent)
 - Querying the knowledge base (Research Agent)
@@ -154,6 +166,7 @@ Autonomous scheduler and dispatcher. Reads the Todoist work queue, decides what 
 **Trigger mechanism.** Runs on a launchd schedule (macOS equivalent of cron). Also triggered by Collection Agent after a run completes when new items or errors need routing.
 
 **Todoist label convention.** Tasks intended for autonomous dispatch carry labels that encode:
+
 - Target repo — `deep-thought`, `magrathea`, or `quiet-evolution` (exact repo names, already in use)
 - Autonomy flag — whether Claude can execute without human input
 - Priority (Todoist p1–p4 maps directly to dispatch urgency)
@@ -170,6 +183,7 @@ Autonomous scheduler and dispatcher. Reads the Todoist work queue, decides what 
 Runs the deep-thought CLI tools for a given repo's configuration. Knows the entry points, flags, and expected output for every tool. Surfaces what's new after a run and hands off to Context when items need attention.
 
 **In scope**
+
 - Running tools: deciding which tools to run, in what order, with what flags
 - Interpreting run output: what was collected, what was skipped, what errored
 - Handling partial failures: rate limits, API errors, retry decisions
@@ -177,6 +191,7 @@ Runs the deep-thought CLI tools for a given repo's configuration. Knows the entr
 - Triggering Context after a run completes when new items or errors need attention
 
 **Out of scope**
+
 - Modifying config to change what gets collected (Configuration Agent)
 - Writing or modifying tool source code (Python Developer)
 - Querying or synthesizing collected content (Research Agent)
@@ -231,18 +246,18 @@ The retrieval layer is Workflow Architect territory, but the design is captured 
 
 **Which tools write to the vector store.**
 
-| Tool | State DB | Embeddings | Rationale |
-|---|---|---|---|
-| Reddit | Yes | Yes | Community knowledge and discussion |
-| Web | Yes | Yes | Blogs (expert writing) and official articles |
-| Stack Exchange | Yes | Yes | Technical Q&A |
-| Research | No | Yes | Curated knowledge, already stateless |
-| Gmail | Yes | No | Personal and operational |
-| GCal | Yes | No | Personal and operational |
-| YouTube | Yes | TBD | Depends on content type |
-| Audio | Yes | No | Converter behavior |
-| File-txt | No | No | Pure converter, no state needed |
-| Krea / generative | Yes | No | Tracks output, not knowledge content |
+| Tool              | State DB | Embeddings | Rationale                                    |
+| ----------------- | -------- | ---------- | -------------------------------------------- |
+| Reddit            | Yes      | Yes        | Community knowledge and discussion           |
+| Web               | Yes      | Yes        | Blogs (expert writing) and official articles |
+| Stack Exchange    | Yes      | Yes        | Technical Q&A                                |
+| Research          | No       | Yes        | Curated knowledge, already stateless         |
+| Gmail             | Yes      | No         | Personal and operational                     |
+| GCal              | Yes      | No         | Personal and operational                     |
+| YouTube           | Yes      | TBD        | Depends on content type                      |
+| Audio             | Yes      | No         | Converter behavior                           |
+| File-txt          | No       | No         | Pure converter, no state needed              |
+| Krea / generative | Yes      | No         | Tracks output, not knowledge content         |
 
 **Payload fields on each embedded document.**
 
@@ -254,6 +269,7 @@ The retrieval layer is Workflow Architect territory, but the design is captured 
 - Tool-specific fields indexed for filtering (e.g. `subreddit`, `site`, `domain`)
 
 **Query flow.**
+
 1. User query is embedded using the same local model
 2. Qdrant searches the single shared collection, optionally filtered by `source_type` or tool
 3. Top-N most semantically similar document paths are returned

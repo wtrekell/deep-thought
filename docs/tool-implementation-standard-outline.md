@@ -14,11 +14,11 @@ Periodically fetches content from an external source. Tracks what has been seen 
 
 Examples: Reddit, Web, Stack Exchange, YouTube, Gmail, GCal (read-only mode), Audio
 
-| Attribute | Value |
-|---|---|
-| State DB | Yes — flat state tracking table, not relational |
-| Sync direction | Read-only |
-| Embeddings | Yes, if the content is knowledge (informs Claude's reasoning). No, if the content is operational or personal (Gmail, GCal). |
+| Attribute      | Value                                                                                                                       |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| State DB       | Yes — flat state tracking table, not relational                                                                             |
+| Sync direction | Read-only                                                                                                                   |
+| Embeddings     | Yes, if the content is knowledge (informs Claude's reasoning). No, if the content is operational or personal (Gmail, GCal). |
 
 ### Bidirectional Collector
 
@@ -26,11 +26,11 @@ A collector that can also write back to the source. Requires full relational sch
 
 Examples: Todoist, GCal (create/update/delete)
 
-| Attribute | Value |
-|---|---|
-| State DB | Yes — relational, multiple tables, sync state tracking |
-| Sync direction | Read + write |
-| Embeddings | No — operational/personal data, not knowledge content |
+| Attribute      | Value                                                  |
+| -------------- | ------------------------------------------------------ |
+| State DB       | Yes — relational, multiple tables, sync state tracking |
+| Sync direction | Read + write                                           |
+| Embeddings     | No — operational/personal data, not knowledge content  |
 
 ### Converter
 
@@ -38,11 +38,11 @@ Processes input you explicitly provide (files, URLs). Does not poll for new cont
 
 Examples: File-txt, Audio (one-off conversion mode)
 
-| Attribute | Value |
-|---|---|
-| State DB | No |
+| Attribute      | Value                              |
+| -------------- | ---------------------------------- |
+| State DB       | No                                 |
 | Sync direction | None — triggered by explicit input |
-| Embeddings | No |
+| Embeddings     | No                                 |
 
 ### Generative
 
@@ -50,30 +50,30 @@ Creates output via an external API from a prompt or spec. Tracks what has been g
 
 Examples: Krea, ElevenLabs, APNG
 
-| Attribute | Value |
-|---|---|
-| State DB | Yes — flat table keyed by a hash of the generation parameters |
-| Sync direction | Write-only (to external API) |
-| Embeddings | No — tracks output, not knowledge content |
+| Attribute      | Value                                                         |
+| -------------- | ------------------------------------------------------------- |
+| State DB       | Yes — flat table keyed by a hash of the generation parameters |
+| Sync direction | Write-only (to external API)                                  |
+| Embeddings     | No — tracks output, not knowledge content                     |
 
 ### Which Tools Write to the Embedding Store
 
 Only collectors that produce knowledge content write embeddings to Qdrant. The distinction is whether the content is meant to inform Claude's reasoning about a topic versus tracking personal, operational, or generated output.
 
-| Tool | Type | State DB | Embeddings |
-|---|---|---|---|
-| Reddit | Collector | Yes | Yes |
-| Web | Collector | Yes | Yes |
-| Stack Exchange | Collector | Yes | Yes |
-| Research | Collector (stateless) | No | Yes |
-| Gmail | Collector | Yes | No |
-| GCal | Bidirectional | Yes | No |
-| Todoist | Bidirectional | Yes | No |
-| YouTube | Collector | Yes | TBD |
-| Audio | Converter / Collector | Conditional | No |
-| File-txt | Converter | No | No |
-| Krea | Generative | Yes | No |
-| ElevenLabs | Generative | Yes | No |
+| Tool           | Type                  | State DB    | Embeddings |
+| -------------- | --------------------- | ----------- | ---------- |
+| Reddit         | Collector             | Yes         | Yes        |
+| Web            | Collector             | Yes         | Yes        |
+| Stack Exchange | Collector             | Yes         | Yes        |
+| Research       | Collector (stateless) | No          | Yes        |
+| Gmail          | Collector             | Yes         | No         |
+| GCal           | Bidirectional         | Yes         | No         |
+| Todoist        | Bidirectional         | Yes         | No         |
+| YouTube        | Collector             | Yes         | TBD        |
+| Audio          | Converter / Collector | Conditional | No         |
+| File-txt       | Converter             | No          | No         |
+| Krea           | Generative            | Yes         | No         |
+| ElevenLabs     | Generative            | Yes         | No         |
 
 ---
 
@@ -81,23 +81,23 @@ Only collectors that produce knowledge content write embeddings to Qdrant. The d
 
 Not every section below applies to every tool type. Use this matrix to determine which sections are relevant.
 
-| Section | Collector | Bidirectional | Converter | Generative |
-|---|---|---|---|---|
-| 1. Planning | ✓ | ✓ | ✓ | ✓ |
-| 2. Project Structure | ✓ | ✓ | ✓ | ✓ |
-| 3. Configuration | ✓ | ✓ | ✓ | ✓ |
-| 4. Data Models | ✓ | ✓ | ✓ | ✓ |
-| 5. Database Layer | Flat only | Relational | — | Flat only |
-| 6. API Client | ✓ | ✓ | If needed | ✓ |
-| 7. Sync Operations | — | ✓ | — | — |
-| 8. Filtering | ✓ | ✓ | — | — |
-| 9. Export | ✓ | ✓ | ✓ | — |
-| 10. CLI | ✓ | ✓ | ✓ | ✓ |
-| 11. Error Handling | ✓ | ✓ | ✓ | ✓ |
-| 12. Type Safety | ✓ | ✓ | ✓ | ✓ |
-| 13. Testing | ✓ | ✓ | ✓ | ✓ |
-| 14. Embeddings | Knowledge collectors only | — | — | — |
-| 15. Documentation | ✓ | ✓ | ✓ | ✓ |
+| Section              | Collector                 | Bidirectional | Converter | Generative |
+| -------------------- | ------------------------- | ------------- | --------- | ---------- |
+| 1. Planning          | ✓                         | ✓             | ✓         | ✓          |
+| 2. Project Structure | ✓                         | ✓             | ✓         | ✓          |
+| 3. Configuration     | ✓                         | ✓             | ✓         | ✓          |
+| 4. Data Models       | ✓                         | ✓             | ✓         | ✓          |
+| 5. Database Layer    | Flat only                 | Relational    | —         | Flat only  |
+| 6. API Client        | ✓                         | ✓             | If needed | ✓          |
+| 7. Sync Operations   | —                         | ✓             | —         | —          |
+| 8. Filtering         | ✓                         | ✓             | —         | —          |
+| 9. Export            | ✓                         | ✓             | ✓         | —          |
+| 10. CLI              | ✓                         | ✓             | ✓         | ✓          |
+| 11. Error Handling   | ✓                         | ✓             | ✓         | ✓          |
+| 12. Type Safety      | ✓                         | ✓             | ✓         | ✓          |
+| 13. Testing          | ✓                         | ✓             | ✓         | ✓          |
+| 14. Embeddings       | Knowledge collectors only | —             | —         | —          |
+| 15. Documentation    | ✓                         | ✓             | ✓         | ✓          |
 
 ---
 
@@ -140,7 +140,7 @@ Not every section below applies to every tool type. Use this matrix to determine
 - Bundle a default config template inside the tool's package (`src/deep_thought/<tool>/default-config.yaml`); this is the source of truth for defaults and the file that `init` copies out to the project-level location (`src/config/<tool>-configuration.yaml`)
 - The `init` command must reference the bundled template — never the project-level config, which does not exist yet when `init` runs
 - All other commands (`config`, tool-specific subcommands) read from the project-level config at `src/config/<tool>-configuration.yaml`
-- **Symlink-aware path resolution:** Tools in deep-thought may be referenced from other repos via symlink. Config and data paths that target the *calling repo* (project-level config, data directories) must resolve relative to the current working directory — never by traversing `__file__` parent directories, which would follow symlinks back to deep-thought. Paths that target files *bundled inside the package* (e.g., `default-config.yaml`, source templates) should use `__file__`-relative resolution so they always find the template regardless of where the tool is invoked
+- **Symlink-aware path resolution:** Tools in deep-thought may be referenced from other repos via symlink. Config and data paths that target the _calling repo_ (project-level config, data directories) must resolve relative to the current working directory — never by traversing `__file__` parent directories, which would follow symlinks back to deep-thought. Paths that target files _bundled inside the package_ (e.g., `default-config.yaml`, source templates) should use `__file__`-relative resolution so they always find the template regardless of where the tool is invoked
 - **config.py path helper pattern:** Every tool's `config.py` must define these module-level constants and two public helpers:
   - `_PACKAGE_DIR = Path(__file__).resolve().parent` — resolves to the package directory inside deep-thought (follows symlinks)
   - `_BUNDLED_DEFAULT_CONFIG = _PACKAGE_DIR / "default-config.yaml"` — bundled template
@@ -226,7 +226,7 @@ Not every section below applies to every tool type. Use this matrix to determine
 - Print typed result objects to stdout
 - Catch specific exceptions with descriptive messages
 - Return proper exit codes: `0` success, `1` fatal error, `2` partial failure (some items errored)
-- The `init` subcommand bootstraps a tool for first use in the *calling repo*: locates the bundled `default-config.yaml` inside the package (via `__file__`), copies it to `src/config/<tool>-configuration.yaml` relative to the current working directory, creates data directories under `data/<tool>/` (also cwd-relative, respecting `DEEP_THOUGHT_DATA_DIR`), and prints a summary of what was created — it must never attempt to load the project-level config as a prerequisite, since that file does not yet exist
+- The `init` subcommand bootstraps a tool for first use in the _calling repo_: locates the bundled `default-config.yaml` inside the package (via `__file__`), copies it to `src/config/<tool>-configuration.yaml` relative to the current working directory, creates data directories under `data/<tool>/` (also cwd-relative, respecting `DEEP_THOUGHT_DATA_DIR`), and prints a summary of what was created — it must never attempt to load the project-level config as a prerequisite, since that file does not yet exist
 
 ## 11. Error Handling
 

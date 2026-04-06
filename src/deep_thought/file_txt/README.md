@@ -43,20 +43,20 @@ Configuration lives at `src/config/file-txt-configuration.yaml`. Key settings:
 
 ## Module Structure
 
-| Module | Role |
-| --- | --- |
-| `cli.py` | CLI entry point with argparse subcommands |
-| `config.py` | YAML config loader with .env integration |
-| `convert.py` | Dispatcher: routes each file to appropriate engine, returns ConvertResult |
-| `engines/pymupdf_engine.py` | PDF text extraction via pymupdf4llm |
-| `engines/markitdown_engine.py` | Office/HTML conversion via markitdown |
-| `engines/eml_engine.py` | Email (EML) parsing and conversion |
-| `engines/msg_engine.py` | Outlook message (MSG) file handling |
-| `engines/email_utils.py` | Shared email parsing utilities |
-| `filters.py` | Input file discovery and filtering |
-| `image_extractor.py` | Extracts and saves embedded images |
-| `output.py` | Markdown file writing and LLM aggregation |
-| `llms.py` | Aggregates converted docs into LLM-friendly summary files |
+| Module                         | Role                                                                      |
+| ------------------------------ | ------------------------------------------------------------------------- |
+| `cli.py`                       | CLI entry point with argparse subcommands                                 |
+| `config.py`                    | YAML config loader with .env integration                                  |
+| `convert.py`                   | Dispatcher: routes each file to appropriate engine, returns ConvertResult |
+| `engines/pymupdf_engine.py`    | PDF text extraction via pymupdf4llm                                       |
+| `engines/markitdown_engine.py` | Office/HTML conversion via markitdown                                     |
+| `engines/eml_engine.py`        | Email (EML) parsing and conversion                                        |
+| `engines/msg_engine.py`        | Outlook message (MSG) file handling                                       |
+| `engines/email_utils.py`       | Shared email parsing utilities                                            |
+| `filters.py`                   | Input file discovery and filtering                                        |
+| `image_extractor.py`           | Extracts and saves embedded images                                        |
+| `output.py`                    | Markdown file writing and LLM aggregation                                 |
+| `llms.py`                      | Aggregates converted docs into LLM-friendly summary files                 |
 
 ## Data Storage
 

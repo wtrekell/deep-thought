@@ -17,6 +17,18 @@ COLLECTION_NAME: str = "deep_thought_documents"
 EMBEDDING_MODEL_ID: str = "mlx-community/bge-small-en-v1.5-bf16"
 VECTOR_DIMENSIONS: int = 384
 
+# Payload fields that must have a Qdrant index for efficient filtered queries.
+# Values are PayloadSchemaType member names resolved lazily inside ensure_collection().
+PAYLOAD_INDEX_FIELDS: dict[str, str] = {
+    "output_path": "KEYWORD",
+    "source_tool": "KEYWORD",
+    "source_type": "KEYWORD",
+    "rule_name": "KEYWORD",
+    "collected_date": "DATETIME",
+    "title": "KEYWORD",
+    "mode": "KEYWORD",
+}
+
 
 def create_embedding_model() -> Any:
     """Load the MLX embedding model used for all document vectorization.
@@ -102,16 +114,20 @@ def strip_frontmatter(markdown_text: str) -> str:
 
 
 def ensure_collection(qdrant_client: Any, collection_name: str) -> None:
-    """Create the Qdrant collection if it does not already exist.
+    """Create the Qdrant collection and all required payload indexes if absent.
 
-    Checks for the collection by name before attempting creation, making the
-    function safe to call on every run without raising on an existing collection.
+    Checks for the collection by name before attempting creation, and inspects
+    the existing payload schema before creating each index, making the function
+    fully idempotent and safe to call on every run.  Any collection created
+    through this function — including named collections configured via
+    ``qdrant_collection`` in per-tool YAML configs — will have the correct
+    payload indexes for efficient filtered queries.
 
     Args:
         qdrant_client: A Qdrant client returned by :func:`create_qdrant_client`.
         collection_name: The name of the collection to create if absent.
     """
-    from qdrant_client.models import Distance, VectorParams  # noqa: PLC0415
+    from qdrant_client.models import Distance, PayloadSchemaType, VectorParams  # noqa: PLC0415
 
     existing_collection_names = [c.name for c in qdrant_client.get_collections().collections]
     if collection_name not in existing_collection_names:
@@ -119,6 +135,21 @@ def ensure_collection(qdrant_client: Any, collection_name: str) -> None:
             collection_name=collection_name,
             vectors_config=VectorParams(size=VECTOR_DIMENSIONS, distance=Distance.COSINE),
         )
+
+    collection_info = qdrant_client.get_collection(collection_name)
+    existing_indexed_fields = set(collection_info.payload_schema.keys())
+
+    schema_type_map: dict[str, Any] = {
+        "KEYWORD": PayloadSchemaType.KEYWORD,
+        "DATETIME": PayloadSchemaType.DATETIME,
+    }
+    for field_name, schema_type_key in PAYLOAD_INDEX_FIELDS.items():
+        if field_name not in existing_indexed_fields:
+            qdrant_client.create_payload_index(
+                collection_name=collection_name,
+                field_name=field_name,
+                field_schema=schema_type_map[schema_type_key],
+            )
 
 
 def write_embedding(

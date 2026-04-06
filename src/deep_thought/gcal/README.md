@@ -47,17 +47,17 @@ Configuration lives at `src/config/gcal-configuration.yaml`. Key settings:
 
 ## Module Structure
 
-| Module | Role |
-| --- | --- |
-| `cli.py` | CLI entry point with argparse subcommands |
-| `client.py` | Google Calendar API v3 wrapper |
-| `config.py` | YAML config loader with .env integration |
-| `models.py` | Local dataclasses mirroring Calendar API events |
-| `filters.py` | Event filtering and selection logic |
-| `pull.py` | API → models → filters → DB upsert → markdown export |
-| `push.py` | Markdown → API updates (create, update, delete) |
-| `output.py` | DB → structured markdown files |
-| `db/` | SQLite schema, migrations, and query functions |
+| Module       | Role                                                 |
+| ------------ | ---------------------------------------------------- |
+| `cli.py`     | CLI entry point with argparse subcommands            |
+| `client.py`  | Google Calendar API v3 wrapper                       |
+| `config.py`  | YAML config loader with .env integration             |
+| `models.py`  | Local dataclasses mirroring Calendar API events      |
+| `filters.py` | Event filtering and selection logic                  |
+| `pull.py`    | API → models → filters → DB upsert → markdown export |
+| `push.py`    | Markdown → API updates (create, update, delete)      |
+| `output.py`  | DB → structured markdown files                       |
+| `db/`        | SQLite schema, migrations, and query functions       |
 
 ## Data Storage
 

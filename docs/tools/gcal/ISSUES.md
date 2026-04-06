@@ -10,7 +10,7 @@ Issues identified during code review on 2026-03-23. Updated 2026-03-30 with addi
 
 **Files:** `create.py:206`, `update.py:183`
 
-`run_create` and `run_update` called `db_conn.commit()` immediately after `upsert_event()` and *before* calling `write_event_file()`. If the file write failed (e.g., disk full, permission error), the Calendar API event would already exist, the local DB record would be committed, but no markdown file would be on disk. The event would be orphaned — present in both Google Calendar and the local database but missing from the output directory.
+`run_create` and `run_update` called `db_conn.commit()` immediately after `upsert_event()` and _before_ calling `write_event_file()`. If the file write failed (e.g., disk full, permission error), the Calendar API event would already exist, the local DB record would be committed, but no markdown file would be on disk. The event would be orphaned — present in both Google Calendar and the local database but missing from the output directory.
 
 Additionally, the CLI callers (`cmd_create`, `cmd_update`) also called `connection.commit()` after the function returned, creating a redundant double-commit.
 

@@ -10,14 +10,15 @@
 
 **Type:** {Collector | Bidirectional Collector | Converter | Generative}
 
-| Type | State DB | Sync | Embeddings |
-|---|---|---|---|
-| Collector | Flat | Read-only | Yes, if knowledge content |
-| Bidirectional Collector | Relational | Read + write | No |
-| Converter | None | None (explicit input) | No |
-| Generative | Flat (param hash) | Write-only | No |
+| Type                    | State DB          | Sync                  | Embeddings                |
+| ----------------------- | ----------------- | --------------------- | ------------------------- |
+| Collector               | Flat              | Read-only             | Yes, if knowledge content |
+| Bidirectional Collector | Relational        | Read + write          | No                        |
+| Converter               | None              | None (explicit input) | No                        |
+| Generative              | Flat (param hash) | Write-only            | No                        |
 
 **Writes to embedding store:** {Yes / No}
+
 <!-- Yes only for Collectors producing knowledge content (Reddit, Web, Stack Exchange, Research). -->
 
 ## Sync Modes
@@ -79,25 +80,25 @@ All operations use subcommands (not flags). Running `{tool}` with no subcommand 
 <!-- Converters: replace fetch/pull with convert. Remove push, sync, status, diff, export. -->
 <!-- Generative: replace fetch/pull with generate. Remove push, sync, status, diff. -->
 
-| Subcommand         | Description                                              | Types                    |
-| ------------------ | -------------------------------------------------------- | ------------------------ |
-| `{tool} fetch`     | Fetch new content from {source}, apply filter rules      | Collector                |
-| `{tool} pull`      | Pull data from {source}, apply filter rules              | Bidirectional Collector  |
-| `{tool} push`      | Push local changes back to {source}                      | Bidirectional Collector  |
-| `{tool} sync`      | Run pull then push sequentially                          | Bidirectional Collector  |
-| `{tool} status`    | Show sync state: last sync time, pending local changes   | Bidirectional Collector  |
-| `{tool} diff`      | Show differences between local DB and last pull          | Bidirectional Collector  |
-| `{tool} convert`   | Convert provided input to markdown                       | Converter                |
-| `{tool} generate`  | Generate output from a prompt or spec via external API   | Generative               |
-| `{tool} export`    | Export current DB state to markdown files                | Collector, Bidirectional |
-| `{tool} config`    | Validate and display current YAML configuration          | All                      |
-| `{tool} init`      | Create DB, config file, and directory structure          | All                      |
+| Subcommand        | Description                                            | Types                    |
+| ----------------- | ------------------------------------------------------ | ------------------------ |
+| `{tool} fetch`    | Fetch new content from {source}, apply filter rules    | Collector                |
+| `{tool} pull`     | Pull data from {source}, apply filter rules            | Bidirectional Collector  |
+| `{tool} push`     | Push local changes back to {source}                    | Bidirectional Collector  |
+| `{tool} sync`     | Run pull then push sequentially                        | Bidirectional Collector  |
+| `{tool} status`   | Show sync state: last sync time, pending local changes | Bidirectional Collector  |
+| `{tool} diff`     | Show differences between local DB and last pull        | Bidirectional Collector  |
+| `{tool} convert`  | Convert provided input to markdown                     | Converter                |
+| `{tool} generate` | Generate output from a prompt or spec via external API | Generative               |
+| `{tool} export`   | Export current DB state to markdown files              | Collector, Bidirectional |
+| `{tool} config`   | Validate and display current YAML configuration        | All                      |
+| `{tool} init`     | Create DB, config file, and directory structure        | All                      |
 
-| Global Flag        | Description                                             |
-| ------------------ | ------------------------------------------------------- |
+| Global Flag        | Description                                              |
+| ------------------ | -------------------------------------------------------- |
 | `--dry-run`        | Show what would change without writing to {source} or DB |
-| `--verbose` / `-v` | Increase log output                                     |
-| `--config <path>`  | Override default config file path                       |
+| `--verbose` / `-v` | Increase log output                                      |
+| `--config <path>`  | Override default config file path                        |
 
 <!-- Add tool-specific global flags as needed. -->
 
@@ -147,11 +148,11 @@ Configuration is stored in `configuration/{tool}_configuration.yaml`. All values
 
 ```yaml
 # {Source} API
-{tool}:
-  api_token_env: "{TOOL}_API_TOKEN"   # Name of env var holding the API token
+{ tool }:
+  api_token_env: "{TOOL}_API_TOKEN" # Name of env var holding the API token
 
 # {Entities} to sync (opt-in list)
-{entities}:
+{ entities }:
   - name: "Entity Name"
 
 # Filter rules for pull and push
@@ -160,19 +161,19 @@ filters:
   pull:
     # {describe pull filter dimensions}
     example_field:
-      include: []                     # Only pull items matching these values (empty = all)
-      exclude: []                     # Exclude items matching these values
+      include: [] # Only pull items matching these values (empty = all)
+      exclude: [] # Exclude items matching these values
   push:
     # {describe push filter dimensions}
-    conflict_resolution: "prompt"     # How to handle conflicts: "prompt", "remote_wins", "local_wins"
-    require_confirmation: true        # Prompt user before pushing changes
+    conflict_resolution: "prompt" # How to handle conflicts: "prompt", "remote_wins", "local_wins"
+    require_confirmation: true # Prompt user before pushing changes
 
 # Claude involvement markers
 claude:
-  label: "claude-code"                # Label applied to items involving Claude
+  label: "claude-code" # Label applied to items involving Claude
   role:
-    repo: ""                          # Repository name (required when label is present)
-    branch: "main"                    # Branch name (defaults to main if not provided)
+    repo: "" # Repository name (required when label is present)
+    branch: "main" # Branch name (defaults to main if not provided)
 ```
 
 <!-- Replace placeholders with tool-specific config values. Add or remove sections as needed. -->

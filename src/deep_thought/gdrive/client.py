@@ -238,6 +238,20 @@ class DriveClient:
         self._execute(request)
         logger.debug("Updated Drive file ID %s from %s", drive_file_id, local_path)
 
+    def delete_file(self, drive_file_id: str) -> None:
+        """Permanently delete a file from Google Drive.
+
+        Args:
+            drive_file_id: The Drive file ID to delete.
+
+        Raises:
+            RuntimeError: If authenticate() has not been called.
+            HttpError: If the API call fails after all retries.
+        """
+        request = self._service.files().delete(fileId=drive_file_id)
+        self._execute(request)
+        logger.debug("Deleted Drive file ID %s", drive_file_id)
+
     def ensure_folder(self, folder_name: str, parent_folder_id: str) -> str:
         """Return the Drive folder ID for folder_name under parent_folder_id.
 

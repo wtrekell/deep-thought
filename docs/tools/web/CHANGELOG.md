@@ -1,6 +1,6 @@
 # Changelog — Web Tool
 
-## [Unreleased]
+## [0.2.0] — 2026-04-05
 
 ### Added
 

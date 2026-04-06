@@ -144,6 +144,7 @@ Ships as part of the main Microsoft MarkItDown repo under `packages/markitdown-m
 #### Reddit
 
 No official server. Best community options:
+
 - [adhikasp/mcp-reddit](https://github.com/adhikasp/mcp-reddit) — ~384 stars, Python, read-focused
 - [jordanburke/reddit-mcp-server](https://github.com/jordanburke/reddit-mcp-server) — supports fetching and posting
 - [netixc/reddit-mcp-server](https://github.com/netixc/reddit-mcp-server) — explicitly uses PRAW
@@ -153,6 +154,7 @@ No official server. Best community options:
 No fully official server. Google lists a [Workspace MCP extension](https://github.com/gemini-cli-extensions/workspace) in their `google/mcp` catalog, but that repo explicitly states it is "not an officially supported Google product." Google's fully-managed MCP servers (announced April 2026) cover Cloud infrastructure only — not Gmail or Calendar.
 
 Best community options:
+
 - [taylorwilsdon/google_workspace_mcp](https://github.com/taylorwilsdon/google_workspace_mcp) — ~2,000 stars, covers 12 Google services including Gmail and Calendar, OAuth 2.1, actively maintained. Strongest option overall.
 - [nspady/google-calendar-mcp](https://github.com/nspady/google-calendar-mcp) — Calendar-only, multi-account, smart scheduling, can import events from images/PDFs.
 - [aaronsb/google-workspace-mcp](https://github.com/aaronsb/google-workspace-mcp) — Gmail + Calendar + Drive bundle.
@@ -162,6 +164,7 @@ Best community options:
 No official server. Google's MCP catalog focuses on Cloud infrastructure; the Gemini CLI consumes MCP servers but Google has not published one that exposes Gemini as a callable service for other agents.
 
 Best community options:
+
 - [aliargun/mcp-server-gemini](https://github.com/aliargun/mcp-server-gemini) — ~248 stars, exposes Gemini 2.5 with thinking, vision, and embeddings. Published on npm as `mcp-server-gemini`.
 - [eternnoir/aistudio-mcp-server](https://github.com/eternnoir/aistudio-mcp-server) — supports all Gemini 2.5 models, multimodal file processing, PDF-to-Markdown, image analysis, audio transcription.
 

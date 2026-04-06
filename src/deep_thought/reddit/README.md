@@ -56,19 +56,19 @@ Configuration lives at `src/config/reddit-configuration.yaml`. Key settings:
 
 ## Module Structure
 
-| Module | Role |
-| --- | --- |
-| `cli.py` | CLI entry point with argparse subcommands |
-| `client.py` | PRAW wrapper with authenticated session management |
-| `config.py` | YAML config loader with Reddit credential resolution |
-| `models.py` | Local dataclasses for posts, comments, and metadata |
-| `processor.py` | Rule engine: fetch posts → apply filters → retry on rate-limit → export → DB write |
-| `filters.py` | Meta-based filter engine (score, age, keyword, flair, locked, stickied) |
-| `output.py` | Markdown generation with Reddit metadata, YAML frontmatter, and word counts |
-| `image_extractor.py` | Downloads post images and thumbnails to local `img/` directory |
-| `embeddings.py` | Writes post embeddings to Qdrant vector store |
-| `utils.py` | Shared utilities (slugification, date handling) |
-| `db/` | SQLite schema, migrations, and query functions |
+| Module               | Role                                                                               |
+| -------------------- | ---------------------------------------------------------------------------------- |
+| `cli.py`             | CLI entry point with argparse subcommands                                          |
+| `client.py`          | PRAW wrapper with authenticated session management                                 |
+| `config.py`          | YAML config loader with Reddit credential resolution                               |
+| `models.py`          | Local dataclasses for posts, comments, and metadata                                |
+| `processor.py`       | Rule engine: fetch posts → apply filters → retry on rate-limit → export → DB write |
+| `filters.py`         | Meta-based filter engine (score, age, keyword, flair, locked, stickied)            |
+| `output.py`          | Markdown generation with Reddit metadata, YAML frontmatter, and word counts        |
+| `image_extractor.py` | Downloads post images and thumbnails to local `img/` directory                     |
+| `embeddings.py`      | Writes post embeddings to Qdrant vector store                                      |
+| `utils.py`           | Shared utilities (slugification, date handling)                                    |
+| `db/`                | SQLite schema, migrations, and query functions                                     |
 
 ## Data Storage
 

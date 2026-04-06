@@ -52,20 +52,20 @@ Embeddings: No — tracks output, not knowledge content
 
 Only collectors that produce knowledge content write embeddings to Qdrant. The distinction is whether the content is meant to inform Claude's reasoning about a topic versus tracking personal, operational, or generated output.
 
-| Tool | Type | State DB | Embeddings |
-|---|---|---|---|
-| Reddit | Collector | Yes | Yes |
-| Web | Collector | Yes | Yes |
-| Stack Exchange | Collector | Yes | Yes |
-| Research | Collector (stateless) | No | Yes |
-| Gmail | Collector | Yes | No |
-| GCal | Bidirectional | Yes | No |
-| Todoist | Bidirectional | Yes | No |
-| YouTube | Collector | Yes | TBD |
-| Audio | Converter / Collector | Conditional | No |
-| File-txt | Converter | No | No |
-| Krea | Generative | Yes | No |
-| ElevenLabs | Generative | Yes | No |
+| Tool           | Type                  | State DB    | Embeddings |
+| -------------- | --------------------- | ----------- | ---------- |
+| Reddit         | Collector             | Yes         | Yes        |
+| Web            | Collector             | Yes         | Yes        |
+| Stack Exchange | Collector             | Yes         | Yes        |
+| Research       | Collector (stateless) | No          | Yes        |
+| Gmail          | Collector             | Yes         | No         |
+| GCal           | Bidirectional         | Yes         | No         |
+| Todoist        | Bidirectional         | Yes         | No         |
+| YouTube        | Collector             | Yes         | TBD        |
+| Audio          | Converter / Collector | Conditional | No         |
+| File-txt       | Converter             | No          | No         |
+| Krea           | Generative            | Yes         | No         |
+| ElevenLabs     | Generative            | Yes         | No         |
 
 ---
 
@@ -88,6 +88,7 @@ The following describes how each section of `files/templates/tool-requirements/t
 **Add:** Tools that write embeddings include an `embeddings.py` module responsible for content preparation and Qdrant writes. This module follows the interface established by the Workflow Architect.
 
 Updated structure for a collector with embeddings:
+
 ```
 src/deep_thought/{tool}/
 ├── __init__.py
@@ -153,11 +154,13 @@ Insert after Section 9. Applies only to tools that write to the embedding store.
 **What to embed.** The content that represents the document's meaning: title, body text, and the most substantive portion of any threaded content (top comments, accepted answers, etc.). Strip frontmatter before embedding — metadata is stored as Qdrant payload, not embedded into the vector.
 
 **The `embeddings.py` module.**
+
 - `prepare_content(document) -> str` — extracts and formats the text to embed
 - `write_embedding(content, payload, output_path)` — calls the embedding model and upserts to Qdrant
 - The embedding model and Qdrant client are initialized once and passed in — not instantiated inside the module
 
 **Payload fields written to Qdrant** (in addition to the shared fields defined by the Workflow Architect):
+
 - `source_tool` — the tool name
 - `source_type` — content category for the tool (blog, article, forum_post, q_and_a, research)
 - `output_path` — path to the markdown file
@@ -212,6 +215,7 @@ These are not the same decision. They should be evaluated and sequenced independ
 **Status: Complete (2026-04-02)**
 
 Added embedding support to Reddit, Web, and Research:
+
 - `src/deep_thought/embeddings.py` — shared infrastructure module (model init, Qdrant client init, `write_embedding()`, `strip_frontmatter()`)
 - `src/deep_thought/reddit/embeddings.py`, `web/embeddings.py`, `research/embeddings.py` — per-tool modules
 - One guarded call added to each processor/CLI after the markdown write
@@ -219,6 +223,7 @@ Added embedding support to Reddit, Web, and Research:
 - Schema reference at `files/tools/embeddings/260402-qdrant-schema.md`
 
 Infrastructure established by the cross-tool-architect:
+
 - Qdrant running as a persistent binary service (`~/bin/qdrant`, storage at `~/qdrant_storage`)
 - Collection: `deep_thought_documents`, 384-dim COSINE, 6 indexed payload fields
 - Embedding model: `mlx-community/bge-small-en-v1.5-bf16` via `mlx-embeddings` (optional extra)
@@ -233,6 +238,7 @@ Embedding failures are isolated: logged as a warning, collection continues. Docu
 The five existing collectors (Reddit, Web, Gmail, GCal, Audio) all carry SQLite infrastructure that is heavier than their actual needs. Each has `schema.py`, `queries.py`, `migrations/`, and tests that fixture against the database. The data they track is flat — a single table with a primary key — but they were built following the Todoist pattern which assumes relational complexity.
 
 Simplifying these would mean:
+
 - Rewriting `db/schema.py`, `db/queries.py`, and migration files per tool
 - Updating processors to use the new query interfaces
 - Rewriting all DB-touching tests per tool — which is a significant portion of each tool's test suite
@@ -262,21 +268,21 @@ YouTube is a Collector: flat state DB, embeddings TBD based on content type deci
 
 ### Tool-by-Tool Summary
 
-| Tool | Status | Additive work | Invasive work | Recommendation |
-|---|---|---|---|---|
-| Reddit | Built | ~~Add `embeddings.py`~~ **Done** | Simplify DB layer | Skip DB simplification. |
-| Web | Built | ~~Add `embeddings.py`~~ **Done** | Simplify DB layer | Skip DB simplification. |
-| Research | Built | ~~Add `embeddings.py`~~ **Done** | Nothing (already stateless) | Complete. |
-| Gmail | Built | None | Simplify DB layer | No changes needed. |
-| GCal | Built | None | Simplify DB layer | No changes needed. |
-| Audio | Built | None | Simplify DB layer | No changes needed. |
-| File-txt | Built | None | None | Complete. (`marker-pdf` → `pymupdf4llm`, 2026-04-02) |
-| Todoist | Built | None | None | No changes needed. Schema is correct for its type. |
-| Stack Exchange | Not built | N/A | N/A | Build correctly from start: Collector with embeddings. |
-| YouTube | Not built | N/A | N/A | Build correctly from start: Collector, embeddings TBD. |
-| Krea | Not built | N/A | N/A | Build correctly from start: Generative, no embeddings. |
-| ElevenLabs | Not built | N/A | N/A | Build correctly from start: Generative, no embeddings. |
-| APNG | Not built | N/A | N/A | Build correctly from start: type TBD from requirements. |
+| Tool           | Status    | Additive work                    | Invasive work               | Recommendation                                          |
+| -------------- | --------- | -------------------------------- | --------------------------- | ------------------------------------------------------- |
+| Reddit         | Built     | ~~Add `embeddings.py`~~ **Done** | Simplify DB layer           | Skip DB simplification.                                 |
+| Web            | Built     | ~~Add `embeddings.py`~~ **Done** | Simplify DB layer           | Skip DB simplification.                                 |
+| Research       | Built     | ~~Add `embeddings.py`~~ **Done** | Nothing (already stateless) | Complete.                                               |
+| Gmail          | Built     | None                             | Simplify DB layer           | No changes needed.                                      |
+| GCal           | Built     | None                             | Simplify DB layer           | No changes needed.                                      |
+| Audio          | Built     | None                             | Simplify DB layer           | No changes needed.                                      |
+| File-txt       | Built     | None                             | None                        | Complete. (`marker-pdf` → `pymupdf4llm`, 2026-04-02)    |
+| Todoist        | Built     | None                             | None                        | No changes needed. Schema is correct for its type.      |
+| Stack Exchange | Not built | N/A                              | N/A                         | Build correctly from start: Collector with embeddings.  |
+| YouTube        | Not built | N/A                              | N/A                         | Build correctly from start: Collector, embeddings TBD.  |
+| Krea           | Not built | N/A                              | N/A                         | Build correctly from start: Generative, no embeddings.  |
+| ElevenLabs     | Not built | N/A                              | N/A                         | Build correctly from start: Generative, no embeddings.  |
+| APNG           | Not built | N/A                              | N/A                         | Build correctly from start: type TBD from requirements. |
 
 ---
 
@@ -285,6 +291,8 @@ YouTube is a Collector: flat state DB, embeddings TBD based on content type deci
 **Do not rebuild anything.** The existing tools are correct, tested, and in use. Rebuilding eight working tools to gain architectural cleanliness is not justified.
 
 **Do not refactor the DB layer as a dedicated effort.** The invasive changes are high cost, zero functional gain, and high risk to a stable test suite. If a tool is being significantly modified for another reason — a new feature that requires touching the DB layer anyway — that is the right moment to simplify it. Not before.
+
+**DB simplification reviewed 2026-04-05 — deferred decision stands.** Verified that Reddit, Web, Gmail, GCal, and Audio all retain the full `created_at` / `updated_at` / `synced_at` timestamp pattern and migration system. No simplification was performed. The deferred recommendation above remains the correct call.
 
 **Embedding integration is complete** for Reddit, Web, and Research. Cross-tool semantic search is now available via `uv sync --extra embeddings`. The Qdrant collection `deep_thought_documents` is running locally.
 

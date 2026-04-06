@@ -64,3 +64,12 @@ class BackupResult:
     skipped: int = 0
     errors: int = 0
     error_paths: list[str] = field(default_factory=list)
+
+
+@dataclass
+class PruneResult:
+    """Summary of a prune run."""
+
+    deleted: int = 0
+    errors: int = 0
+    error_paths: list[str] = field(default_factory=list)

@@ -24,44 +24,15 @@ The LaunchAgent plist is at `~/Library/LaunchAgents/com.williamtrekell.qdrant.pl
 
 ### Collection initialization
 
-The `deep_thought_documents` collection must be created before any tool can write embeddings. There is no auto-creation — `write_embedding()` calls `upsert()` directly and will fail if the collection does not exist.
+`ensure_collection()` in `src/deep_thought/embeddings.py` handles all initialization automatically. Every tool calls it before writing embeddings. It is fully idempotent:
 
-Run this once on a fresh Qdrant instance:
+- Creates the collection if it does not exist
+- Inspects the collection's existing payload schema and creates any missing indexes
+- Safe to call on every run — no manual bootstrap required
 
-```bash
-uv run python - <<'EOF'
-from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PayloadSchemaType
+This applies to every collection name, including named collections configured via `qdrant_collection` in per-tool YAML configs. No separate setup step is needed when pointing a tool at a new collection.
 
-client = QdrantClient(host="localhost", port=6333)
-
-client.create_collection(
-    collection_name="deep_thought_documents",
-    vectors_config=VectorParams(size=384, distance=Distance.COSINE),
-)
-
-indexed_fields = {
-    "output_path":    PayloadSchemaType.KEYWORD,
-    "source_tool":    PayloadSchemaType.KEYWORD,
-    "source_type":    PayloadSchemaType.KEYWORD,
-    "rule_name":      PayloadSchemaType.KEYWORD,
-    "collected_date": PayloadSchemaType.DATETIME,
-    "title":          PayloadSchemaType.KEYWORD,
-    "mode":           PayloadSchemaType.KEYWORD,
-}
-
-for field, schema in indexed_fields.items():
-    client.create_payload_index(
-        collection_name="deep_thought_documents",
-        field_name=field,
-        field_schema=schema,
-    )
-
-print("Collection and payload indexes created.")
-EOF
-```
-
-This is a one-time operation. Running it again on an existing collection will raise `UnexpectedResponse` — that is safe to ignore if you know the collection already exists. To check:
+To verify the current state of any collection:
 
 ```bash
 uv run python -c "
@@ -75,17 +46,17 @@ print(c.get_collection('deep_thought_documents'))
 
 ## 1. Collection Overview
 
-| Property | Value |
-|---|---|
-| Collection name | `deep_thought_documents` |
-| Vector dimensions | `384` |
-| Distance metric | `Cosine` |
-| Storage type | Dense |
-| Embedding model | `mlx-community/bge-small-en-v1.5-bf16` |
-| Qdrant host | `localhost` |
-| Qdrant port | `6333` |
-| Qdrant server version | `1.17.1` |
-| qdrant-client version | `1.17.1` |
+| Property              | Value                                  |
+| --------------------- | -------------------------------------- |
+| Collection name       | `deep_thought_documents`               |
+| Vector dimensions     | `384`                                  |
+| Distance metric       | `Cosine`                               |
+| Storage type          | Dense                                  |
+| Embedding model       | `mlx-community/bge-small-en-v1.5-bf16` |
+| Qdrant host           | `localhost`                            |
+| Qdrant port           | `6333`                                 |
+| Qdrant server version | `1.17.1`                               |
+| qdrant-client version | `1.17.1`                               |
 
 The collection is shared across all tools. There is one collection, not one per tool. Tool identity is carried in the `source_tool` payload field and filtered at query time.
 
@@ -95,29 +66,29 @@ The collection is shared across all tools. There is one collection, not one per 
 
 Every point stored in `deep_thought_documents` carries a payload. The fields below are the full contract. Fields marked **indexed** have a Qdrant payload index and can be used in filtered searches efficiently.
 
-| Field name | Type | Indexed | Populated by | Example value |
-|---|---|---|---|---|
-| `output_path` | keyword | yes | all | `/Users/wt/data/reddit/rust/260402-some-post.md` |
-| `source_tool` | keyword | yes | all | `reddit` |
-| `source_type` | keyword | yes | all | `forum_post` |
-| `rule_name` | keyword | yes | all | `rust_jobs` |
-| `collected_date` | datetime | yes | all | `2026-04-02T14:30:00Z` |
-| `title` | keyword | yes | all | `Ask HN: What does your Rust stack look like?` |
-| `subreddit` | keyword | yes | reddit | `rust` |
-| `post_id` | keyword | no | reddit | `1abcdef` |
-| `author` | keyword | no | reddit | `ferris_the_crab` |
-| `score` | integer | no | reddit | `842` |
-| `upvote_ratio` | float | no | reddit | `0.97` |
-| `comment_count` | integer | no | reddit | `134` |
-| `flair` | keyword | no | reddit | `Discussion` |
-| `url` | keyword | no | web, reddit | `https://www.reddit.com/r/rust/comments/1abcdef/` |
-| `status_code` | integer | no | web | `200` |
-| `word_count` | integer | no | reddit, web | `1204` |
-| `query` | keyword | no | research | `What are the best practices for Rust async?` |
-| `mode` | keyword | yes | research | `search` |
-| `model` | keyword | no | research | `sonar` |
-| `recency` | keyword | no | research | `month` |
-| `source_count` | integer | no | research | `8` |
+| Field name       | Type     | Indexed | Populated by | Example value                                     |
+| ---------------- | -------- | ------- | ------------ | ------------------------------------------------- |
+| `output_path`    | keyword  | yes     | all          | `/Users/wt/data/reddit/rust/260402-some-post.md`  |
+| `source_tool`    | keyword  | yes     | all          | `reddit`                                          |
+| `source_type`    | keyword  | yes     | all          | `forum_post`                                      |
+| `rule_name`      | keyword  | yes     | all          | `rust_jobs`                                       |
+| `collected_date` | datetime | yes     | all          | `2026-04-02T14:30:00Z`                            |
+| `title`          | keyword  | yes     | all          | `Ask HN: What does your Rust stack look like?`    |
+| `subreddit`      | keyword  | no      | reddit       | `rust`                                            |
+| `post_id`        | keyword  | no      | reddit       | `1abcdef`                                         |
+| `author`         | keyword  | no      | reddit       | `ferris_the_crab`                                 |
+| `score`          | integer  | no      | reddit       | `842`                                             |
+| `upvote_ratio`   | float    | no      | reddit       | `0.97`                                            |
+| `comment_count`  | integer  | no      | reddit       | `134`                                             |
+| `flair`          | keyword  | no      | reddit       | `Discussion`                                      |
+| `url`            | keyword  | no      | web, reddit  | `https://www.reddit.com/r/rust/comments/1abcdef/` |
+| `status_code`    | integer  | no      | web          | `200`                                             |
+| `word_count`     | integer  | no      | reddit, web  | `1204`                                            |
+| `query`          | keyword  | no      | research     | `What are the best practices for Rust async?`     |
+| `mode`           | keyword  | yes     | research     | `search`                                          |
+| `model`          | keyword  | no      | research     | `sonar`                                           |
+| `recency`        | keyword  | no      | research     | `month`                                           |
+| `source_count`   | integer  | no      | research     | `8`                                               |
 
 **Notes:**
 
@@ -125,6 +96,7 @@ Every point stored in `deep_thought_documents` carries a payload. The fields bel
 - `collected_date` must be an ISO 8601 UTC string (e.g., `"2026-04-02T14:30:00Z"`). Qdrant's datetime index requires this format.
 - Fields that are `no` for indexed are stored in the payload and returned with results, but cannot be used in efficient filtered searches. If a new query pattern emerges that filters on an unindexed field, a payload index must be added to the collection before that filter will perform acceptably.
 - `flair`, `recency`, `status_code`, and `url` are nullable — omit from the payload dict when the value is `None` rather than passing `None` explicitly.
+- All fields marked `indexed: yes` are created automatically by `ensure_collection()`. No manual bootstrap is required.
 
 ---
 
@@ -264,14 +236,14 @@ write_embedding(
 
 `source_type` encodes both the originating tool and the nature of the content. It is a primary filter dimension for Claude when narrowing retrieval to a content category.
 
-| Tool | Condition | `source_type` value |
-|---|---|---|
-| reddit | all posts | `forum_post` |
-| web | mode `blog` | `blog_post` |
-| web | mode `documentation` | `documentation` |
-| web | mode `direct` | `article` |
-| research | mode `search` | `research_search` |
-| research | mode `research` | `research_deep` |
+| Tool     | Condition            | `source_type` value |
+| -------- | -------------------- | ------------------- |
+| reddit   | all posts            | `forum_post`        |
+| web      | mode `blog`          | `blog_post`         |
+| web      | mode `documentation` | `documentation`     |
+| web      | mode `direct`        | `article`           |
+| research | mode `search`        | `research_search`   |
+| research | mode `research`      | `research_deep`     |
 
 The web tool's mode is available from the rule configuration that drove the crawl. Map it at the call site before constructing the payload.
 
