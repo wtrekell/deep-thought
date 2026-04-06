@@ -1,5 +1,16 @@
 # Embeddings Infrastructure Changelog
 
+## 2026-04-06
+
+### Added
+
+- `search_embeddings(query, model, qdrant_client, collection_name, limit, source_tool, source_type)` in `src/deep_thought/embeddings.py` — performs semantic vector search against the Qdrant collection. Embeds the query, applies optional `source_tool` and `source_type` filters, and returns a list of `ScoredPoint` objects with `.payload` metadata and `.score` cosine similarity. Replaces the hand-written query patterns documented in the schema reference with a single callable interface.
+
+### Changed
+
+- `mode` field removed from `PAYLOAD_INDEX_FIELDS` in `src/deep_thought/embeddings.py`. Only the research tool writes this field, and its two values (`search`, `research`) are already fully covered by the cross-tool `source_type` field (`research_search`, `research_deep`). The index was redundant. Existing collections retain their `mode` index; new collections will not have one. The field still appears in research payloads as unindexed metadata.
+- Web tool now always writes `title` to embedding payloads (previously omitted when a page had no HTML title). Defaults to an empty string, consistent with the `rule_name` field. Prevents silent misses when querying by `title`.
+
 ## 2026-04-05
 
 ### Added
