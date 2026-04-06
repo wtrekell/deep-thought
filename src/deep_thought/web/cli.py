@@ -280,7 +280,7 @@ def cmd_crawl(args: argparse.Namespace) -> None:
                 print(f"ERROR: Batch config directory not found: {batch_configs_dir}", file=sys.stderr)
                 sys.exit(1)
 
-            batch_config_files = sorted(batch_configs_dir.glob("*.yaml"))
+            batch_config_files = sorted(batch_configs_dir.glob("[!_]*.yaml"))
             if not batch_config_files:
                 print(f"No batch config files found in: {batch_configs_dir}")
                 sys.exit(0)

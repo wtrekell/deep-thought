@@ -215,6 +215,42 @@ def copy_default_templates(batch_config_dir: Path | None = None) -> list[tuple[s
 # Parsing helpers
 # ---------------------------------------------------------------------------
 
+_LIST_FIELDS: frozenset[str] = frozenset(
+    {
+        "include_patterns",
+        "exclude_patterns",
+        "strip_boilerplate",
+        "unwrap_tags",
+    }
+)
+
+
+def _merge_configs(parent: dict[str, Any], child: dict[str, Any]) -> dict[str, Any]:
+    """Merge a parent base config dict into a child config dict.
+
+    For list fields (include_patterns, exclude_patterns, strip_boilerplate,
+    unwrap_tags), the result is parent list + child list. For all other fields,
+    the child value takes precedence when present; otherwise the parent value is
+    used. Neither input is mutated.
+
+    Args:
+        parent: The raw YAML dict from the base config file.
+        child: The raw YAML dict from the child config file, with 'inherits'
+            already removed.
+
+    Returns:
+        A merged dict suitable for passing to _parse_crawl_config().
+    """
+    merged: dict[str, Any] = dict(parent)
+    for key, child_value in child.items():
+        if key in _LIST_FIELDS:
+            parent_list = merged.get(key) or []
+            child_list = child_value if isinstance(child_value, list) else []
+            merged[key] = list(parent_list) + list(child_list)
+        else:
+            merged[key] = child_value
+    return merged
+
 
 def _parse_crawl_config(raw: dict[str, Any]) -> CrawlConfig:
     """Parse crawl-related fields from the top-level YAML mapping.
@@ -344,6 +380,39 @@ def load_config(config_path: Path | None = None) -> WebConfig:
         raise ValueError(f"Configuration file must contain a YAML mapping, got: {type(raw).__name__}")
 
     raw_dict: dict[str, Any] = raw
+
+    inherits_value = raw_dict.get("inherits")
+    if inherits_value is not None:
+        inherits_name = str(inherits_value)
+        base_path = resolved_path.parent / inherits_name
+
+        if base_path.resolve() == resolved_path.resolve():
+            raise ValueError(f"Batch config '{resolved_path.name}' cannot inherit from itself.")
+
+        if not base_path.exists():
+            raise FileNotFoundError(
+                f"Base config '{inherits_name}' not found "
+                f"(referenced from '{resolved_path.name}', "
+                f"looked in '{resolved_path.parent}')."
+            )
+
+        with base_path.open("r", encoding="utf-8") as base_file:
+            base_raw: Any = yaml.safe_load(base_file)
+
+        if not isinstance(base_raw, dict):
+            raise ValueError(
+                f"Base config '{inherits_name}' must contain a YAML mapping, got: {type(base_raw).__name__}"
+            )
+
+        if base_raw.get("inherits") is not None:
+            raise ValueError(
+                f"Base config '{inherits_name}' contains 'inherits', "
+                f"but base files cannot themselves inherit from other files."
+            )
+
+        child_without_inherits = {k: v for k, v in raw_dict.items() if k != "inherits"}
+        raw_dict = _merge_configs(base_raw, child_without_inherits)
+
     crawl_config = _parse_crawl_config(raw_dict)
 
     return WebConfig(crawl=crawl_config)

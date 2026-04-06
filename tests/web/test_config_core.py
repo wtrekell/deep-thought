@@ -6,7 +6,14 @@ from pathlib import Path  # noqa: TC003
 
 import pytest
 
-from deep_thought.web.config import CrawlConfig, WebConfig, _parse_crawl_config, load_config, validate_config
+from deep_thought.web.config import (
+    CrawlConfig,
+    WebConfig,
+    _merge_configs,
+    _parse_crawl_config,
+    load_config,
+    validate_config,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -304,3 +311,185 @@ class TestParseRawConfig:
         raw["pagination"] = "scroll"
         config = _parse_crawl_config(raw)
         assert config.pagination == "scroll"
+
+
+# ---------------------------------------------------------------------------
+# TestLoadConfigInheritance
+# ---------------------------------------------------------------------------
+
+
+class TestLoadConfigInheritance:
+    """Tests for the 'inherits' base-config feature in load_config."""
+
+    def test_inherits_scalar_child_overrides_parent(self, tmp_path: Path) -> None:
+        """A scalar field in the child must override the same field from the parent."""
+        base = tmp_path / "_base.yaml"
+        base.write_text("mode: blog\nmax_pages: 50\noutput_dir: output/web/\n", encoding="utf-8")
+        child = tmp_path / "child.yaml"
+        child.write_text("inherits: _base.yaml\nmode: documentation\noutput_dir: output/web/\n", encoding="utf-8")
+        config = load_config(child)
+        assert config.crawl.mode == "documentation"
+        assert config.crawl.max_pages == 50
+
+    def test_inherits_list_concatenation_parent_first(self, tmp_path: Path) -> None:
+        """List fields must be concatenated parent-first."""
+        base = tmp_path / "_base.yaml"
+        base.write_text("include_patterns:\n  - /docs/\noutput_dir: output/web/\n", encoding="utf-8")
+        child = tmp_path / "child.yaml"
+        child_content = "inherits: _base.yaml\ninclude_patterns:\n  - /api/\noutput_dir: output/web/\n"
+        child.write_text(child_content, encoding="utf-8")
+        config = load_config(child)
+        assert config.crawl.include_patterns == ["/docs/", "/api/"]
+
+    def test_inherits_child_list_extends_empty_parent(self, tmp_path: Path) -> None:
+        """When the parent has no list field, the child list is used as-is."""
+        base = tmp_path / "_base.yaml"
+        base.write_text("output_dir: output/web/\n", encoding="utf-8")
+        child = tmp_path / "child.yaml"
+        child_content = "inherits: _base.yaml\ninclude_patterns:\n  - /api/\noutput_dir: output/web/\n"
+        child.write_text(child_content, encoding="utf-8")
+        config = load_config(child)
+        assert config.crawl.include_patterns == ["/api/"]
+
+    def test_inherits_parent_list_used_when_child_omits(self, tmp_path: Path) -> None:
+        """When the child omits a list field, the parent list is preserved."""
+        base = tmp_path / "_base.yaml"
+        base.write_text("exclude_patterns:\n  - /login/\noutput_dir: output/web/\n", encoding="utf-8")
+        child = tmp_path / "child.yaml"
+        child.write_text("inherits: _base.yaml\noutput_dir: output/web/\n", encoding="utf-8")
+        config = load_config(child)
+        assert config.crawl.exclude_patterns == ["/login/"]
+
+    def test_inherits_all_four_list_fields_concatenated(self, tmp_path: Path) -> None:
+        """All four list fields must be concatenated parent-first when both define them."""
+        base = tmp_path / "_base.yaml"
+        base.write_text(
+            "include_patterns:\n  - /a/\nexclude_patterns:\n  - /b/\n"
+            "strip_boilerplate:\n  - 'nav'\nunwrap_tags:\n  - span\noutput_dir: output/web/\n",
+            encoding="utf-8",
+        )
+        child = tmp_path / "child.yaml"
+        child.write_text(
+            "inherits: _base.yaml\ninclude_patterns:\n  - /c/\nexclude_patterns:\n  - /d/\n"
+            "strip_boilerplate:\n  - 'footer'\nunwrap_tags:\n  - div\noutput_dir: output/web/\n",
+            encoding="utf-8",
+        )
+        config = load_config(child)
+        assert config.crawl.include_patterns == ["/a/", "/c/"]
+        assert config.crawl.exclude_patterns == ["/b/", "/d/"]
+        assert config.crawl.strip_boilerplate == ["nav", "footer"]
+        assert config.crawl.unwrap_tags == ["span", "div"]
+
+    def test_inherits_missing_key_falls_through_to_parse_default(self, tmp_path: Path) -> None:
+        """A key absent from both parent and child must resolve to _parse_crawl_config's default."""
+        base = tmp_path / "_base.yaml"
+        base.write_text("output_dir: output/web/\n", encoding="utf-8")
+        child = tmp_path / "child.yaml"
+        child.write_text("inherits: _base.yaml\noutput_dir: output/web/\n", encoding="utf-8")
+        config = load_config(child)
+        assert config.crawl.max_pages == 100  # _parse_crawl_config default
+
+    def test_inherits_missing_base_file_raises_file_not_found(self, tmp_path: Path) -> None:
+        """A missing base file must raise FileNotFoundError with the base filename in the message."""
+        child = tmp_path / "child.yaml"
+        child.write_text("inherits: _nonexistent.yaml\noutput_dir: output/web/\n", encoding="utf-8")
+        with pytest.raises(FileNotFoundError, match="_nonexistent.yaml"):
+            load_config(child)
+
+    def test_inherits_self_reference_raises_value_error(self, tmp_path: Path) -> None:
+        """A config that declares inherits pointing at itself must raise ValueError."""
+        child = tmp_path / "child.yaml"
+        child.write_text("inherits: child.yaml\noutput_dir: output/web/\n", encoding="utf-8")
+        with pytest.raises(ValueError, match="itself"):
+            load_config(child)
+
+    def test_inherits_chained_base_file_raises_value_error(self, tmp_path: Path) -> None:
+        """A base file that itself declares inherits must raise ValueError."""
+        base = tmp_path / "_base.yaml"
+        base.write_text("inherits: _other.yaml\noutput_dir: output/web/\n", encoding="utf-8")
+        child = tmp_path / "child.yaml"
+        child.write_text("inherits: _base.yaml\noutput_dir: output/web/\n", encoding="utf-8")
+        with pytest.raises(ValueError, match="cannot themselves inherit"):
+            load_config(child)
+
+    def test_inherits_base_file_non_mapping_raises_value_error(self, tmp_path: Path) -> None:
+        """A base file containing a YAML list instead of a mapping must raise ValueError."""
+        base = tmp_path / "_base.yaml"
+        base.write_text("- item_one\n- item_two\n", encoding="utf-8")
+        child = tmp_path / "child.yaml"
+        child.write_text("inherits: _base.yaml\noutput_dir: output/web/\n", encoding="utf-8")
+        with pytest.raises(ValueError, match="YAML mapping"):
+            load_config(child)
+
+    def test_no_inherits_field_is_unchanged(self, tmp_path: Path) -> None:
+        """A config with no 'inherits' field must load identically to before this feature."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("mode: documentation\noutput_dir: output/web/\n", encoding="utf-8")
+        config = load_config(config_file)
+        assert config.crawl.mode == "documentation"
+        assert config.crawl.max_pages == 100
+
+    def test_inherits_base_file_with_null_inherits_is_allowed(self, tmp_path: Path) -> None:
+        """A base file that contains 'inherits: null' must not be rejected."""
+        base = tmp_path / "_base.yaml"
+        base.write_text("inherits: null\nmax_pages: 75\noutput_dir: output/web/\n", encoding="utf-8")
+        child = tmp_path / "child.yaml"
+        child.write_text("inherits: _base.yaml\noutput_dir: output/web/\n", encoding="utf-8")
+        config = load_config(child)
+        assert config.crawl.max_pages == 75
+
+    def test_inherits_child_null_list_field_preserves_parent(self, tmp_path: Path) -> None:
+        """A child that sets a list field to null preserves the parent list rather than clearing it."""
+        base = tmp_path / "_base.yaml"
+        base.write_text("exclude_patterns:\n  - /login/\noutput_dir: output/web/\n", encoding="utf-8")
+        child = tmp_path / "child.yaml"
+        child.write_text("inherits: _base.yaml\nexclude_patterns: null\noutput_dir: output/web/\n", encoding="utf-8")
+        config = load_config(child)
+        assert config.crawl.exclude_patterns == ["/login/"]
+
+
+# ---------------------------------------------------------------------------
+# TestMergeConfigs
+# ---------------------------------------------------------------------------
+
+
+class TestMergeConfigs:
+    """Unit tests for _merge_configs."""
+
+    def test_scalar_child_wins(self) -> None:
+        """A scalar key present in both parent and child must use the child value."""
+        parent = {"mode": "blog", "max_pages": 50}
+        child = {"mode": "documentation"}
+        result = _merge_configs(parent, child)
+        assert result["mode"] == "documentation"
+        assert result["max_pages"] == 50
+
+    def test_scalar_parent_used_when_child_absent(self) -> None:
+        """A scalar key present only in the parent must appear in the merged result."""
+        parent = {"max_pages": 50, "output_dir": "output/web/"}
+        child = {"output_dir": "output/web/"}
+        result = _merge_configs(parent, child)
+        assert result["max_pages"] == 50
+
+    def test_list_concatenates_parent_first(self) -> None:
+        """List fields must be concatenated with parent entries before child entries."""
+        parent = {"include_patterns": ["/a/"]}
+        child = {"include_patterns": ["/b/"]}
+        result = _merge_configs(parent, child)
+        assert result["include_patterns"] == ["/a/", "/b/"]
+
+    def test_null_parent_list_treated_as_empty(self) -> None:
+        """A null parent list field must be treated as an empty list during merge."""
+        parent = {"include_patterns": None}
+        child = {"include_patterns": ["/b/"]}
+        result = _merge_configs(parent, child)
+        assert result["include_patterns"] == ["/b/"]
+
+    def test_does_not_mutate_inputs(self) -> None:
+        """_merge_configs must not mutate either the parent or child dict."""
+        parent = {"include_patterns": ["/a/"]}
+        child = {"include_patterns": ["/b/"]}
+        original_parent_list_id = id(parent["include_patterns"])
+        _merge_configs(parent, child)
+        assert id(parent["include_patterns"]) == original_parent_list_id
+        assert parent["include_patterns"] == ["/a/"]
