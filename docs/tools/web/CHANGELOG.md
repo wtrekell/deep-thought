@@ -1,5 +1,21 @@
 # Changelog — Web Tool
 
+## [0.3.0] — 2026-04-06
+
+### Added
+
+- `inherits` field for batch configs. Set `inherits: "_base-filename.yaml"` in
+  any batch config to load shared settings from a base file in the same
+  directory. List fields (`include_patterns`, `exclude_patterns`,
+  `strip_boilerplate`, `unwrap_tags`) are concatenated parent-first; all other
+  fields use last-write-wins (child overrides parent).
+
+### Changed
+
+- Batch auto-discovery now skips YAML files with a `_` prefix. Place base
+  config files in `src/config/web/` using a `_` name (e.g. `_base-docs.yaml`)
+  to prevent them from being executed as standalone crawl configs.
+
 ## [0.2.0] — 2026-04-05
 
 ### Added

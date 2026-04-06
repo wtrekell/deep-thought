@@ -137,6 +137,40 @@ Place YAML files in `src/config/web/` for use with `--batch`. Each file is one c
 - `blog-template.yaml` — for blog/article sites (copied as `blog.yaml`)
 - `docs-template.yaml` — for documentation sites with optional changelog awareness (copied as `docs.yaml`)
 
+### Shared base configs (`inherits`)
+
+When multiple batch configs share common settings, extract the shared values into a base file and reference it with `inherits`. Base files use a `_` prefix so batch auto-discovery skips them.
+
+**Create a base file** in `src/config/web/`:
+
+```yaml
+# src/config/web/_base-docs.yaml
+output_dir: docs/
+exclude_patterns:
+  - '.*\.pdf$'
+  - ".*login.*"
+strip_boilerplate:
+  - 'Subscribe.*'
+```
+
+**Reference it** from a child config:
+
+```yaml
+# src/config/web/my-site.yaml
+inherits: "_base-docs.yaml"
+mode: documentation
+input_url: "https://docs.example.com/"
+exclude_patterns:
+  - ".*changelog.*"   # appended after the parent list
+```
+
+**Merge semantics:**
+
+- **List fields** (`include_patterns`, `exclude_patterns`, `strip_boilerplate`, `unwrap_tags`): parent entries come first, then child entries. Both lists are preserved. Setting a list field to `null` in the child is treated as an empty list — the parent's entries are kept. To clear a parent's list entirely, omit the field in the parent rather than nulling it in the child.
+- **All other fields**: child wins. If the child omits a field, the parent value is used.
+
+**Constraint:** one level only. A base file cannot itself declare `inherits` — this is detected at load time and raises an error.
+
 ### Key config fields
 
 **`index_depth`** — how many levels of navigation/listing pages the crawler must traverse before reaching article content. Set this manually based on the site structure.
