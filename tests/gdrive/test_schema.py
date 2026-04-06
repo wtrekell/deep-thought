@@ -39,8 +39,8 @@ def test_init_db_creates_key_value_table() -> None:
     assert cursor.fetchone() is not None
 
 
-def test_init_db_sets_schema_version_to_one() -> None:
-    """init_db inserts schema_version = '1' into key_value."""
+def test_init_db_sets_schema_version_to_current() -> None:
+    """init_db sets schema_version to the latest migration number in key_value."""
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     init_db(conn)
@@ -48,7 +48,7 @@ def test_init_db_sets_schema_version_to_one() -> None:
     cursor = conn.execute("SELECT value FROM key_value WHERE key = 'schema_version';")
     row = cursor.fetchone()
     assert row is not None
-    assert row["value"] == "1"
+    assert row["value"] == "2"
 
 
 def test_init_db_is_idempotent() -> None:
