@@ -8,7 +8,7 @@ All notable changes to the Reddit Tool will be documented in this file.
 
 ### Added
 
-- `qdrant_collection` config option in `reddit-configuration.yaml`: name of the Qdrant collection to write embeddings to (default: `"deep_thought_documents"`). Enables routing Reddit posts to a separate collection from other tools.
+- `qdrant_collection` config option in `reddit-configuration.yaml`: name of the Qdrant collection to write embeddings to (default: `"deep_thought_db"`). Enables routing Reddit posts to a separate collection from other tools.
 
 ## [0.1.4] — 2026-04-03
 

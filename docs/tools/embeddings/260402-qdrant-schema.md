@@ -1,4 +1,4 @@
-# Qdrant Schema Reference — deep_thought_documents
+# Qdrant Schema Reference — deep_thought_db
 
 **Date:** 2026-04-06
 **Audience:** Python Developer implementing per-tool `embeddings.py` modules
@@ -38,7 +38,7 @@ To verify the current state of any collection:
 uv run python -c "
 from qdrant_client import QdrantClient
 c = QdrantClient(host='localhost', port=6333)
-print(c.get_collection('deep_thought_documents'))
+print(c.get_collection('deep_thought_db'))
 "
 ```
 
@@ -48,7 +48,7 @@ print(c.get_collection('deep_thought_documents'))
 
 | Property              | Value                                  |
 | --------------------- | -------------------------------------- |
-| Collection name       | `deep_thought_documents`               |
+| Collection name       | `deep_thought_db`               |
 | Vector dimensions     | `384`                                  |
 | Distance metric       | `Cosine`                               |
 | Storage type          | Dense                                  |
@@ -64,7 +64,7 @@ The collection is shared across all tools. There is one collection, not one per 
 
 ## 2. Payload Field Table
 
-Every point stored in `deep_thought_documents` carries a payload. The fields below are the full contract. Fields marked **indexed** have a Qdrant payload index and can be used in filtered searches efficiently.
+Every point stored in `deep_thought_db` carries a payload. The fields below are the full contract. Fields marked **indexed** have a Qdrant payload index and can be used in filtered searches efficiently.
 
 | Field name       | Type     | Indexed | Populated by | Example value                                     |
 | ---------------- | -------- | ------- | ------------ | ------------------------------------------------- |

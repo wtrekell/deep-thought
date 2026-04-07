@@ -85,7 +85,7 @@ research config
 All paths are rooted at `data/research/` by default. Set `DEEP_THOUGHT_DATA_DIR` to redirect.
 
 - **Markdown export** — `<data_dir>/export/<query_slug>.md`
-- **Embeddings** — Written to Qdrant at `localhost:6333`; collection name set by `qdrant_collection` in `research-configuration.yaml` (default: `deep_thought_documents`)
+- **Embeddings** — Written to Qdrant at `localhost:6333`; collection name set by `qdrant_collection` in `research-configuration.yaml` (default: `deep_thought_db`)
 
 ## Tool-Specific Notes
 

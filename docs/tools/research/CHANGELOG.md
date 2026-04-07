@@ -13,7 +13,7 @@
 
 ### Added
 
-- `qdrant_collection` config option in `research-configuration.yaml`: name of the Qdrant collection to write embeddings to (default: `"deep_thought_documents"`). Enables routing research results to a separate collection from other tools.
+- `qdrant_collection` config option in `research-configuration.yaml`: name of the Qdrant collection to write embeddings to (default: `"deep_thought_db"`). Enables routing research results to a separate collection from other tools.
 
 ## 0.1.1 — 2026-03-30
 

@@ -77,7 +77,7 @@ All paths are rooted at `data/reddit/` by default. Set `DEEP_THOUGHT_DATA_DIR` t
 - **SQLite database** — `<data_dir>/reddit.db` (canonical store)
 - **Markdown export** — `<data_dir>/export/<subreddit>/<post_id>.md`
 - **Post images** — `<data_dir>/export/<subreddit>/img/<post_id>/`
-- **Embeddings** — Written to Qdrant at `localhost:6333`; collection name set by `qdrant_collection` in `reddit-configuration.yaml` (default: `deep_thought_documents`)
+- **Embeddings** — Written to Qdrant at `localhost:6333`; collection name set by `qdrant_collection` in `reddit-configuration.yaml` (default: `deep_thought_db`)
 
 ## Tool-Specific Notes
 

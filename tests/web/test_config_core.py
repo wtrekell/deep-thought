@@ -69,7 +69,7 @@ def _make_crawl_config(
         pagination_selector=pagination_selector,
         pagination_wait=pagination_wait,
         max_paginations=max_paginations,
-        qdrant_collection="deep_thought_documents",
+        qdrant_collection="deep_thought_db",
     )
     return WebConfig(crawl=crawl)
 

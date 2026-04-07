@@ -99,7 +99,7 @@ def _process_single_post(
     pre_fetched_comments: list[Any] | None = None,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
-    qdrant_collection: str = "deep_thought_documents",
+    qdrant_collection: str = "deep_thought_db",
 ) -> tuple[str, bool]:
     """Fetch comments, generate markdown, write output, and upsert the database record.
 
@@ -258,7 +258,7 @@ def process_rule(
     max_posts_per_run: int,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
-    qdrant_collection: str = "deep_thought_documents",
+    qdrant_collection: str = "deep_thought_db",
 ) -> CollectionResult:
     """Fetch submissions for a single rule, apply filters, and process each post.
 
@@ -405,7 +405,7 @@ def run_collection(
     output_override: Path | None,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
-    qdrant_collection: str = "deep_thought_documents",
+    qdrant_collection: str = "deep_thought_db",
 ) -> CollectionResult:
     """Run the full collection cycle across all configured rules.
 
