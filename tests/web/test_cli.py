@@ -673,3 +673,82 @@ class TestMain:
             )
             main()
         assert exc_info.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# TestCmdCrawlBatch
+# ---------------------------------------------------------------------------
+
+
+class TestCmdCrawlBatch:
+    """Tests for batch mode ensure_collection behaviour in cmd_crawl."""
+
+    def _make_batch_config(self, collection: str | None, output_dir: str = "data/web/export/") -> WebConfig:
+        return WebConfig(
+            crawl=CrawlConfig(
+                mode="documentation",
+                input_url="https://example.com",
+                max_depth=1,
+                max_pages=10,
+                js_wait=0.0,
+                browser_channel=None,
+                stealth=False,
+                headless=True,
+                include_patterns=[],
+                exclude_patterns=[],
+                retry_attempts=0,
+                retry_delay=0.0,
+                output_dir=output_dir,
+                extract_images=False,
+                generate_llms_files=False,
+                index_depth=1,
+                min_article_words=10,
+                changelog_url=None,
+                strip_path_prefix=None,
+                strip_domain=False,
+                llms_lookback_days=0,
+                strip_boilerplate=[],
+                unwrap_tags=[],
+                pagination="none",
+                pagination_selector=None,
+                pagination_wait=0.0,
+                max_paginations=1,
+                qdrant_collection=collection,
+            )
+        )
+
+    def test_batch_mode_calls_ensure_collection_per_batch_config(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """ensure_collection must be called for each batch config's collection, not just once at startup."""
+        batch_dir = tmp_path / "web"
+        batch_dir.mkdir()
+        (batch_dir / "site-a.yaml").write_text("url: https://a.com\n", encoding="utf-8")
+        (batch_dir / "site-b.yaml").write_text("url: https://b.com\n", encoding="utf-8")
+
+        main_config = self._make_batch_config("deep_thought_db")
+        batch_config_a = self._make_batch_config("research_db", output_dir="data/web/a/")
+        batch_config_b = self._make_batch_config("magrathea_db", output_dir="data/web/b/")
+
+        mock_process_result = MagicMock()
+        mock_process_result.succeeded = 1
+        mock_process_result.failed = 0
+        mock_process_result.skipped = 0
+
+        with (
+            patch("sys.argv", ["web", "crawl", "--batch"]),
+            patch("deep_thought.web.cli.load_config", side_effect=[main_config, batch_config_a, batch_config_b]),
+            patch("deep_thought.web.cli.get_batch_config_dir", return_value=batch_dir),
+            patch("deep_thought.web.cli.initialize_database"),
+            patch("deep_thought.embeddings.create_embedding_model", return_value=MagicMock()),
+            patch("deep_thought.embeddings.create_qdrant_client", return_value=MagicMock()),
+            patch("deep_thought.embeddings.ensure_collection") as mock_ensure,
+            patch("deep_thought.web.cli.process", return_value=mock_process_result),
+        ):
+            main()
+
+        called_collections = [call.args[1] for call in mock_ensure.call_args_list]
+        assert "research_db" in called_collections
+        assert "magrathea_db" in called_collections

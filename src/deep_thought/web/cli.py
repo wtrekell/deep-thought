@@ -288,6 +288,17 @@ def cmd_crawl(args: argparse.Namespace) -> None:
             for batch_config_path in batch_config_files:
                 batch_config = load_config(batch_config_path)
                 batch_rule_name = batch_config_path.stem
+
+                if embedding_qdrant_client is not None and batch_config.crawl.qdrant_collection is not None:
+                    try:
+                        ensure_collection(embedding_qdrant_client, batch_config.crawl.qdrant_collection)
+                    except Exception as ensure_err:
+                        logger.warning(
+                            "Could not initialize collection '%s' for batch '%s': %s",
+                            batch_config.crawl.qdrant_collection,
+                            batch_rule_name,
+                            ensure_err,
+                        )
                 batch_input_url: str | None = getattr(batch_config.crawl, "input_url", None)
                 batch_output_root = Path(batch_config.crawl.output_dir)
 
