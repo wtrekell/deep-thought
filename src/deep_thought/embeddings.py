@@ -2,7 +2,7 @@
 
 Provides the canonical embedding function, Qdrant client factory, and helper
 utilities consumed by all tools that ingest content into the shared
-``deep_thought_documents`` Qdrant collection.
+``deep_thought_db`` Qdrant collection.
 
 All third-party imports are lazy (inside function bodies) so the module can
 be imported without requiring mlx-embeddings or qdrant-client to be installed.
@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, cast
 
-COLLECTION_NAME: str = "deep_thought_documents"
+COLLECTION_NAME: str = "deep_thought_db"
 EMBEDDING_MODEL_ID: str = "mlx-community/bge-small-en-v1.5-bf16"
 VECTOR_DIMENSIONS: int = 384
 
@@ -173,7 +173,7 @@ def write_embedding(
         model: The MLX embedding model returned by :func:`create_embedding_model`.
         qdrant_client: A Qdrant client returned by :func:`create_qdrant_client`.
         collection_name: The Qdrant collection to upsert into. Defaults to
-            :data:`COLLECTION_NAME` (``"deep_thought_documents"``).
+            :data:`COLLECTION_NAME` (``"deep_thought_db"``).
 
     Raises:
         Any exception from embedding generation or Qdrant upsert is propagated
@@ -215,7 +215,7 @@ def search_embeddings(
             :func:`create_embedding_model`.
         qdrant_client: A Qdrant client returned by :func:`create_qdrant_client`.
         collection_name: The Qdrant collection to search. Defaults to
-            :data:`COLLECTION_NAME` (``"deep_thought_documents"``).
+            :data:`COLLECTION_NAME` (``"deep_thought_db"``).
         limit: Maximum number of results to return. Defaults to 10.
         source_tool: Optional filter — restrict results to a single tool.
             Valid values: ``"reddit"``, ``"web"``, ``"research"``.

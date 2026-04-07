@@ -20,7 +20,7 @@
 
 ### Added
 
-- `qdrant_collection` config option: name of the Qdrant collection to write embeddings to (default: `"deep_thought_documents"`). Can be set in `web-configuration.yaml` for all crawls or overridden per batch config in `src/config/web/`, enabling separate corpora for different sites or consumers.
+- `qdrant_collection` config option: name of the Qdrant collection to write embeddings to (default: `"deep_thought_db"`). Can be set in `web-configuration.yaml` for all crawls or overridden per batch config in `src/config/web/`, enabling separate corpora for different sites or consumers.
 
 - JS pagination support for index/listing pages: new `pagination` config option (`"none"` / `"scroll"` / `"click"`) controls how the crawler expands JS-rendered content before extracting article links; scroll mode scrolls to the page bottom and waits for height growth up to `max_paginations` iterations; click mode clicks the element matching `pagination_selector` until it disappears or `max_paginations` is reached; errors in individual pagination steps log a warning and return the HTML accumulated so far rather than crashing; pagination applies only to index pages, not individual article pages
 - `pagination_selector` config option: CSS selector string for the "load more" button (required when `pagination` is `"click"`)

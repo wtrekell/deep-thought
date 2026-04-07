@@ -131,7 +131,7 @@ def load_config(config_path: Path | None = None) -> ResearchConfig:
     raw_default_recency = raw_dict.get("default_recency")
     default_recency: str | None = str(raw_default_recency) if raw_default_recency is not None else None
 
-    qdrant_collection = str(raw_dict.get("qdrant_collection", "deep_thought_documents"))
+    qdrant_collection = str(raw_dict.get("qdrant_collection", "deep_thought_db"))
 
     return ResearchConfig(
         api_key_env=api_key_env,

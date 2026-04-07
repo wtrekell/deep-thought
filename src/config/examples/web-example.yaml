@@ -181,10 +181,10 @@ max_paginations:
 # Vector store
 # ---------------------------------------------------------------------------
 qdrant_collection:
-  "deep_thought_documents" # Qdrant collection name to write embeddings into
+  "deep_thought_db" # Qdrant collection name to write embeddings into
   # Options: null or a collection name string
   #   null                    — Embeddings are disabled for this crawl
-  #   "deep_thought_documents" — Default shared collection used by all tools
+  #   "deep_thought_db" — Default shared collection used by all tools
   #   "my_project_docs"       — A dedicated collection to keep this corpus
   #                             separate from other tools' embeddings
   # Each batch config in src/config/web/ can specify a different collection

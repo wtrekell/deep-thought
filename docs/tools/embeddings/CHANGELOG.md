@@ -20,7 +20,7 @@
 
 ### Changed
 
-- Qdrant collection name is now configurable per tool via a `qdrant_collection` field in each tool's YAML config. All three tools default to `"deep_thought_documents"` — no existing configs require changes. Web batch configs in `src/config/web/` can each specify a different collection, enabling separate corpora per crawl.
+- Qdrant collection name is now configurable per tool via a `qdrant_collection` field in each tool's YAML config. All three tools default to `"deep_thought_db"` — no existing configs require changes. Web batch configs in `src/config/web/` can each specify a different collection, enabling separate corpora per crawl.
 
 ## 2026-04-04
 

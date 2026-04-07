@@ -28,7 +28,7 @@ max_posts_per_run:
 output_dir: "data/reddit/export/" # Directory where collected posts are written
 
 qdrant_collection:
-  "deep_thought_documents" # Qdrant vector store collection name for semantic search.
+  "deep_thought_db" # Qdrant vector store collection name for semantic search.
   # Embeddings are written here after each post is collected.
   # The collection is created automatically on first write.
   # Change this to isolate reddit content into its own

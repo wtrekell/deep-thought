@@ -110,7 +110,7 @@ Most tools store canonical data in SQLite, with one database per tool:
 
 Knowledge-content tools (Reddit, Web, Research) write embeddings to a shared Qdrant instance:
 
-- Collection: `deep_thought_documents`
+- Collection: `deep_thought_db`
 - Local server: `localhost:6333`
 - Model: `mlx-community/bge-small-en-v1.5-mlx`
 - Details: [`embeddings/260402-qdrant-schema.md`](embeddings/260402-qdrant-schema.md)

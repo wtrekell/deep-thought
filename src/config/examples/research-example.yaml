@@ -53,8 +53,8 @@ output_dir: "data/research/export/" # Directory where research results are writt
 # Vector Store
 # ---------------------------------------------------------------------------
 qdrant_collection:
-  "deep_thought_documents" # Qdrant collection that research embeddings are written to.
-  # All tools default to "deep_thought_documents", which keeps
+  "deep_thought_db" # Qdrant collection that research embeddings are written to.
+  # All tools default to "deep_thought_db", which keeps
   # Reddit, Web, and Research results in a single shared corpus.
   # Set a distinct name (e.g. "research_documents") to isolate
   # research results in their own collection for targeted retrieval.

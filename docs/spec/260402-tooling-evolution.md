@@ -225,7 +225,7 @@ Added embedding support to Reddit, Web, and Research:
 Infrastructure established by the cross-tool-architect:
 
 - Qdrant running as a persistent binary service (`~/bin/qdrant`, storage at `~/qdrant_storage`)
-- Collection: `deep_thought_documents`, 384-dim COSINE, 6 indexed payload fields
+- Collection: `deep_thought_db`, 384-dim COSINE, 6 indexed payload fields
 - Embedding model: `mlx-community/bge-small-en-v1.5-bf16` via `mlx-embeddings` (optional extra)
 - Both `qdrant-client` and `mlx-embeddings` in `[embeddings]` optional extra — install with `uv sync --extra embeddings`
 
@@ -294,6 +294,6 @@ YouTube is a Collector: flat state DB, embeddings TBD based on content type deci
 
 **DB simplification reviewed 2026-04-05 — deferred decision stands.** Verified that Reddit, Web, Gmail, GCal, and Audio all retain the full `created_at` / `updated_at` / `synced_at` timestamp pattern and migration system. No simplification was performed. The deferred recommendation above remains the correct call.
 
-**Embedding integration is complete** for Reddit, Web, and Research. Cross-tool semantic search is now available via `uv sync --extra embeddings`. The Qdrant collection `deep_thought_documents` is running locally.
+**Embedding integration is complete** for Reddit, Web, and Research. Cross-tool semantic search is now available via `uv sync --extra embeddings`. The Qdrant collection `deep_thought_db` is running locally.
 
 **Build all new tools following the updated taxonomy.** The standard outline changes pay off entirely on new builds. Stack Exchange, YouTube, Krea, ElevenLabs, and any future tools get the right architecture from the start without any refactoring cost ever being incurred.

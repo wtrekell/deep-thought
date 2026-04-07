@@ -27,7 +27,7 @@ strip_boilerplate:
   # "Need to tell us more?" + feedback rating widget JSON through the end of the document
   - 'Need to tell us more\?.*'
 
-qdrant_collection: deep_thought_documents
+qdrant_collection: deep_thought_db
 retry_attempts: 2
 retry_delay: 5.0
 changelog_url: null

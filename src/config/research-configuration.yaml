@@ -16,4 +16,4 @@ default_recency:
 output_dir: "data/research/export/" # Directory for research output markdown files
 
 # Qdrant
-qdrant_collection: "deep_thought_documents" # Qdrant collection to write embeddings into
+qdrant_collection: "deep_thought_db" # Qdrant collection to write embeddings into

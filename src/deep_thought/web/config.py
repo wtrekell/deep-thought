@@ -312,7 +312,7 @@ def _parse_crawl_config(raw: dict[str, Any]) -> CrawlConfig:
 
     pagination_wait: float = float(raw.get("pagination_wait", 2.0))
     max_paginations: int = int(raw.get("max_paginations", 10))
-    raw_qdrant_collection = raw.get("qdrant_collection", "deep_thought_documents")
+    raw_qdrant_collection = raw.get("qdrant_collection", "deep_thought_db")
     qdrant_collection: str | None = str(raw_qdrant_collection) if raw_qdrant_collection is not None else None
 
     return CrawlConfig(
