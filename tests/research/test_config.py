@@ -207,24 +207,49 @@ class TestGetApiKey:
     def test_returns_key_when_set(self) -> None:
         """Should return the API key when the env var is populated."""
         config = load_config(FIXTURES_DIR / "test_config.yaml")
-        with patch.dict("os.environ", {"TEST_PERPLEXITY_KEY": "test_key_abc123"}):
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=False),
+            patch.dict("os.environ", {"TEST_PERPLEXITY_KEY": "test_key_abc123"}),
+        ):
             api_key = get_api_key(config)
         assert api_key == "test_key_abc123"
 
-    def test_raises_when_env_var_not_set(self) -> None:
-        """Should raise OSError when the env var is missing from the environment."""
+    def test_returns_key_from_keychain(self) -> None:
+        """Should return the API key from keychain when available."""
         config = load_config(FIXTURES_DIR / "test_config.yaml")
-        with patch.dict("os.environ", {}, clear=True), pytest.raises(OSError, match="Perplexity API key not found"):
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=True),
+            patch("deep_thought.secrets.keyring.get_password", return_value="keychain-key"),
+        ):
+            api_key = get_api_key(config)
+        assert api_key == "keychain-key"
+
+    def test_raises_when_env_var_not_set(self) -> None:
+        """Should raise OSError when neither keychain nor env var have the key."""
+        config = load_config(FIXTURES_DIR / "test_config.yaml")
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=False),
+            patch.dict("os.environ", {}, clear=True),
+            pytest.raises(OSError, match="Secret not found"),
+        ):
             get_api_key(config)
 
     def test_raises_when_env_var_is_empty_string(self) -> None:
         """Should raise OSError when the env var is set but empty."""
         config = load_config(FIXTURES_DIR / "test_config.yaml")
-        with patch.dict("os.environ", {"TEST_PERPLEXITY_KEY": ""}), pytest.raises(OSError, match="TEST_PERPLEXITY_KEY"):
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=False),
+            patch.dict("os.environ", {"TEST_PERPLEXITY_KEY": ""}),
+            pytest.raises(OSError, match="TEST_PERPLEXITY_KEY"),
+        ):
             get_api_key(config)
 
     def test_error_message_includes_env_var_name(self) -> None:
         """The OSError message should name the specific env var that is missing."""
         config = load_config(FIXTURES_DIR / "test_config.yaml")
-        with patch.dict("os.environ", {}, clear=True), pytest.raises(OSError, match="TEST_PERPLEXITY_KEY"):
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=False),
+            patch.dict("os.environ", {}, clear=True),
+            pytest.raises(OSError, match="TEST_PERPLEXITY_KEY"),
+        ):
             get_api_key(config)

@@ -1,5 +1,12 @@
 # GCal Tool — Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Secret retrieval now checks macOS Keychain first, falling back to environment variables. Uses the shared `deep_thought.secrets` module.
+- OAuth token storage now uses macOS Keychain (primary) with file fallback, including auto-migration from file to Keychain on first run.
+
 ## 0.1.2 — 2026-04-02
 
 ### Changed

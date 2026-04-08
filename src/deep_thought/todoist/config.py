@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -222,17 +221,16 @@ def load_config(config_path: Path | None = None) -> TodoistConfig:
 
 
 def get_api_token(config: TodoistConfig) -> str:
-    """Read the API token from the environment variable named in config.api_token_env.
+    """Read the API token from macOS Keychain or the environment variable named in config.
 
-    Raises EnvironmentError if the variable is not set or is empty.
+    Checks Keychain first (service ``deep-thought-todoist``, key ``api-token``),
+    then falls back to the environment variable specified by ``config.api_token_env``.
+
+    Raises OSError if neither source has the token.
     """
-    token = os.environ.get(config.api_token_env)
-    if not token:
-        raise OSError(
-            f"Todoist API token not found. Set the '{config.api_token_env}' environment variable "
-            f"(either in your shell or in a .env file at the project root)."
-        )
-    return token
+    from deep_thought.secrets import get_secret
+
+    return get_secret("todoist", "api-token", env_var=config.api_token_env)
 
 
 _VALID_CONFLICT_RESOLUTION_VALUES = {"prompt", "remote_wins", "local_wins"}

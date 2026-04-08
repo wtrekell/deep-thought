@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -283,7 +282,10 @@ def validate_config(config: RedditConfig) -> list[str]:
 
 
 def get_credentials(config: RedditConfig) -> tuple[str, str, str]:
-    """Read Reddit API credentials from environment variables named in config.
+    """Read Reddit API credentials from macOS Keychain or environment variables.
+
+    Checks Keychain first (service ``deep-thought-reddit``), then falls back
+    to the environment variables specified in config.
 
     Args:
         config: A loaded RedditConfig specifying which env var names to read.
@@ -292,27 +294,12 @@ def get_credentials(config: RedditConfig) -> tuple[str, str, str]:
         A tuple of (client_id, client_secret, user_agent).
 
     Raises:
-        OSError: If any of the required environment variables are not set or empty.
+        OSError: If any of the required credentials are not found.
     """
-    client_id = os.environ.get(config.client_id_env)
-    if not client_id:
-        raise OSError(
-            f"Reddit client ID not found. Set the '{config.client_id_env}' environment variable "
-            "(either in your shell or in a .env file at the project root)."
-        )
+    from deep_thought.secrets import get_secret
 
-    client_secret = os.environ.get(config.client_secret_env)
-    if not client_secret:
-        raise OSError(
-            f"Reddit client secret not found. Set the '{config.client_secret_env}' environment variable "
-            "(either in your shell or in a .env file at the project root)."
-        )
-
-    user_agent = os.environ.get(config.user_agent_env)
-    if not user_agent:
-        raise OSError(
-            f"Reddit user agent not found. Set the '{config.user_agent_env}' environment variable "
-            "(either in your shell or in a .env file at the project root)."
-        )
+    client_id = get_secret("reddit", "client-id", env_var=config.client_id_env)
+    client_secret = get_secret("reddit", "client-secret", env_var=config.client_secret_env)
+    user_agent = get_secret("reddit", "user-agent", env_var=config.user_agent_env)
 
     return client_id, client_secret, user_agent

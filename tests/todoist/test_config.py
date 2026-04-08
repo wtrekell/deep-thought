@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -122,11 +123,23 @@ class TestLoadConfig:
 
 
 class TestGetApiToken:
+    def test_returns_token_from_keychain(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """get_api_token must return the keychain value when available."""
+        monkeypatch.delenv("TEST_TODOIST_API_TOKEN", raising=False)
+        config = load_config(FIXTURES_DIR / "test_config.yaml")
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=True),
+            patch("deep_thought.secrets.keyring.get_password", return_value="keychain-token"),
+        ):
+            token = get_api_token(config)
+        assert token == "keychain-token"
+
     def test_returns_token_when_env_var_is_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """get_api_token must return the token value when the env var is set."""
+        """get_api_token must return the token value when the env var is set (keychain fallback)."""
         monkeypatch.setenv("TEST_TODOIST_API_TOKEN", "secret-token-value")
         config = load_config(FIXTURES_DIR / "test_config.yaml")
-        token = get_api_token(config)
+        with patch("deep_thought.secrets.keychain_available", return_value=False):
+            token = get_api_token(config)
         assert token == "secret-token-value"
 
     @pytest.mark.error_handling
@@ -134,7 +147,7 @@ class TestGetApiToken:
         """get_api_token must raise OSError when the env var is not set."""
         monkeypatch.delenv("TEST_TODOIST_API_TOKEN", raising=False)
         config = load_config(FIXTURES_DIR / "test_config.yaml")
-        with pytest.raises(OSError, match="TEST_TODOIST_API_TOKEN"):
+        with patch("deep_thought.secrets.keychain_available", return_value=False), pytest.raises(OSError):
             get_api_token(config)
 
     @pytest.mark.error_handling
@@ -142,7 +155,7 @@ class TestGetApiToken:
         """get_api_token must raise OSError when the env var is set but empty."""
         monkeypatch.setenv("TEST_TODOIST_API_TOKEN", "")
         config = load_config(FIXTURES_DIR / "test_config.yaml")
-        with pytest.raises(OSError):
+        with patch("deep_thought.secrets.keychain_available", return_value=False), pytest.raises(OSError):
             get_api_token(config)
 
 

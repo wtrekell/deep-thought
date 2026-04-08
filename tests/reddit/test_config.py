@@ -266,25 +266,37 @@ class TestValidateConfig:
 class TestGetCredentials:
     @pytest.mark.error_handling
     def test_raises_os_error_when_client_id_missing(self) -> None:
-        """OSError should be raised when the client ID env var is not set."""
+        """OSError should be raised when the client ID is not found."""
         config = _make_minimal_config()
-        with patch.dict(os.environ, {}, clear=True), pytest.raises(OSError, match="client ID"):
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=False),
+            patch.dict(os.environ, {}, clear=True),
+            pytest.raises(OSError, match="client-id"),
+        ):
             get_credentials(config)
 
     @pytest.mark.error_handling
     def test_raises_os_error_when_client_secret_missing(self) -> None:
-        """OSError should be raised when the client secret env var is not set."""
+        """OSError should be raised when the client secret is not found."""
         config = _make_minimal_config()
         env_vars = {"REDDIT_CLIENT_ID": "test_id"}
-        with patch.dict(os.environ, env_vars, clear=True), pytest.raises(OSError, match="client secret"):
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=False),
+            patch.dict(os.environ, env_vars, clear=True),
+            pytest.raises(OSError, match="client-secret"),
+        ):
             get_credentials(config)
 
     @pytest.mark.error_handling
     def test_raises_os_error_when_user_agent_missing(self) -> None:
-        """OSError should be raised when the user agent env var is not set."""
+        """OSError should be raised when the user agent is not found."""
         config = _make_minimal_config()
         env_vars = {"REDDIT_CLIENT_ID": "test_id", "REDDIT_CLIENT_SECRET": "test_secret"}
-        with patch.dict(os.environ, env_vars, clear=True), pytest.raises(OSError, match="user agent"):
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=False),
+            patch.dict(os.environ, env_vars, clear=True),
+            pytest.raises(OSError, match="user-agent"),
+        ):
             get_credentials(config)
 
     def test_returns_credentials_when_all_vars_set(self) -> None:
@@ -295,7 +307,10 @@ class TestGetCredentials:
             "REDDIT_CLIENT_SECRET": "my_secret",
             "REDDIT_USER_AGENT": "my_agent/1.0",
         }
-        with patch.dict(os.environ, env_vars, clear=True):
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=False),
+            patch.dict(os.environ, env_vars, clear=True),
+        ):
             client_id, client_secret, user_agent = get_credentials(config)
 
         assert client_id == "my_client_id"

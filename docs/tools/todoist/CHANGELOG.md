@@ -2,6 +2,12 @@
 
 All notable changes to the Todoist Tool will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Secret retrieval now checks macOS Keychain first, falling back to environment variables. Uses the shared `deep_thought.secrets` module.
+
 ## 2026-04-05
 
 ### Added

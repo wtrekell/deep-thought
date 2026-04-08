@@ -591,18 +591,20 @@ class TestGeminiExtractorRateLimit:
 
 
 class TestGmailClientAuthenticate:
-    """Tests for GmailClient.authenticate."""
+    """Tests for GmailClient.authenticate.
 
-    def test_loads_valid_token_from_file(self, tmp_path: Path) -> None:
-        """Should load credentials from an existing token file if valid."""
+    After refactoring to use the shared secrets module, authenticate() delegates
+    to gmail._auth.get_credentials() which calls secrets.get_oauth_credentials().
+    Tests patch at the secrets module level.
+    """
+
+    def test_loads_valid_token_from_keychain(self, tmp_path: Path) -> None:
+        """Should build the service when a valid token is in the keychain."""
         from deep_thought.gmail.client import GmailClient
-
-        token_file = tmp_path / "token.json"
-        token_file.write_text("{}", encoding="utf-8")  # Must exist so the loading branch runs
 
         client = GmailClient(
             credentials_path=str(tmp_path / "credentials.json"),
-            token_path=str(token_file),
+            token_path=str(tmp_path / "token.json"),
             scopes=["https://mail.google.com/"],
         )
 
@@ -610,23 +612,21 @@ class TestGmailClientAuthenticate:
         mock_creds.valid = True
 
         with (
-            patch("deep_thought.gmail.client.Credentials.from_authorized_user_file", return_value=mock_creds),
+            patch("deep_thought.secrets.keychain_available", return_value=True),
+            patch("deep_thought.secrets._load_oauth_from_keychain", return_value=mock_creds),
             patch("deep_thought.gmail.client.build") as mock_build,
         ):
             client.authenticate()
 
         mock_build.assert_called_once_with("gmail", "v1", credentials=mock_creds)
 
-    def test_refreshes_expired_token(self, tmp_path: MagicMock) -> None:
-        """Should call credentials.refresh() when the token is expired but has a refresh token."""
+    def test_refreshes_expired_token(self, tmp_path: Path) -> None:
+        """Should refresh expired credentials and re-persist them."""
         from deep_thought.gmail.client import GmailClient
-
-        token_file = tmp_path / "token.json"
-        token_file.write_text("{}", encoding="utf-8")  # Must exist for the token-loading branch
 
         client = GmailClient(
             credentials_path=str(tmp_path / "credentials.json"),
-            token_path=str(token_file),
+            token_path=str(tmp_path / "token.json"),
             scopes=["https://mail.google.com/"],
         )
 
@@ -637,21 +637,22 @@ class TestGmailClientAuthenticate:
         mock_creds.to_json.return_value = "{}"
 
         with (
-            patch("deep_thought.gmail.client.Credentials.from_authorized_user_file", return_value=mock_creds),
-            patch("deep_thought.gmail.client.Request") as mock_request_class,
+            patch("deep_thought.secrets.keychain_available", return_value=True),
+            patch("deep_thought.secrets._load_oauth_from_keychain", return_value=mock_creds),
+            patch("deep_thought.secrets.Request"),
+            patch("deep_thought.secrets._save_oauth_to_keychain"),
             patch("deep_thought.gmail.client.build"),
         ):
             client.authenticate()
 
-        mock_creds.refresh.assert_called_once_with(mock_request_class())
+        mock_creds.refresh.assert_called_once()
 
     def test_runs_browser_flow_when_no_token(self, tmp_path: Path) -> None:
-        """Should run InstalledAppFlow when no valid token file exists."""
+        """Should run InstalledAppFlow when no valid token exists."""
         from deep_thought.gmail.client import GmailClient
 
         credentials_file = tmp_path / "credentials.json"
         credentials_file.write_text("{}", encoding="utf-8")
-        # Deliberately do NOT create the token file — forces the browser flow path
 
         client = GmailClient(
             credentials_path=str(credentials_file),
@@ -659,13 +660,17 @@ class TestGmailClientAuthenticate:
             scopes=["https://mail.google.com/"],
         )
 
-        mock_flow = MagicMock()
         mock_new_creds = MagicMock()
+        mock_new_creds.valid = True
         mock_new_creds.to_json.return_value = "{}"
+        mock_flow = MagicMock()
         mock_flow.run_local_server.return_value = mock_new_creds
 
         with (
-            patch("deep_thought.gmail.client.InstalledAppFlow.from_client_secrets_file", return_value=mock_flow),
+            patch("deep_thought.secrets.keychain_available", return_value=True),
+            patch("deep_thought.secrets._load_oauth_from_keychain", return_value=None),
+            patch("deep_thought.secrets.InstalledAppFlow.from_client_secrets_file", return_value=mock_flow),
+            patch("deep_thought.secrets._save_oauth_to_keychain"),
             patch("deep_thought.gmail.client.build"),
         ):
             client.authenticate()
@@ -682,8 +687,11 @@ class TestGmailClientAuthenticate:
             scopes=["https://mail.google.com/"],
         )
 
-        # No token file exists either — forces the browser flow path
-        with pytest.raises(FileNotFoundError):
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=True),
+            patch("deep_thought.secrets._load_oauth_from_keychain", return_value=None),
+            pytest.raises(FileNotFoundError),
+        ):
             client.authenticate()
 
 

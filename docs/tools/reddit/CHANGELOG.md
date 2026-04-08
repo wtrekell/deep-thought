@@ -4,6 +4,12 @@ All notable changes to the Reddit Tool will be documented in this file.
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- Secret retrieval now checks macOS Keychain first, falling back to environment variables. Uses the shared `deep_thought.secrets` module.
+
 ## [0.1.5] — 2026-04-05
 
 ### Added
