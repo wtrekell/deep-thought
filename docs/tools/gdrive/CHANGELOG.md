@@ -4,6 +4,11 @@ All notable changes to the gdrive tool will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Secret retrieval now checks macOS Keychain first, falling back to environment variables. Uses the shared `deep_thought.secrets` module.
+- OAuth token management refactored to delegate to the shared `deep_thought.secrets` module (behavior unchanged).
+
 ### Added
 
 - `backup.exclude_patterns` config field: an optional list of fnmatch glob patterns for files and directories to skip during backup. Patterns are matched against the entry name and the path relative to `source_dir`. Matching directories are pruned entirely during traversal; matching files are skipped before upload. Defaults to `[]` when omitted from the config.

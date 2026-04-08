@@ -32,6 +32,7 @@ strip_boilerplate:
   # Matches one or more lines of "  * plain text" or "    * plain text" with no "](" in them.
   - '(?:\n[ ]{2,6}\* (?![^\n]*\]\()[^\n]+)+'
 
+qdrant_collection: deep_thought_db
 retry_attempts: 2
 retry_delay: 5.0
 changelog_url: null

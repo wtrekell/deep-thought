@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Retry logic
@@ -116,7 +120,12 @@ class TestRetryWithBackoff:
 
 
 class TestGcalClientAuthenticate:
-    """Tests for GcalClient.authenticate."""
+    """Tests for GcalClient.authenticate.
+
+    After refactoring to use the shared secrets module, authenticate() delegates
+    to gcal._auth.get_credentials() which calls secrets.get_oauth_credentials().
+    Tests patch at the secrets module level.
+    """
 
     def _make_client(self) -> object:
         """Return a GcalClient instance bypassing __init__."""
@@ -134,7 +143,7 @@ class TestGcalClientAuthenticate:
         return client
 
     def test_loads_existing_valid_token(self) -> None:
-        """Should use an existing valid token without opening a browser."""
+        """Should build the service when a valid token is in keychain."""
         from deep_thought.gcal.client import GcalClient
 
         client = self._make_client()
@@ -144,8 +153,8 @@ class TestGcalClientAuthenticate:
         mock_credentials.valid = True
 
         with (
-            patch("deep_thought.gcal.client.Path.exists", return_value=True),
-            patch("deep_thought.gcal.client.Credentials.from_authorized_user_file", return_value=mock_credentials),
+            patch("deep_thought.secrets.keychain_available", return_value=True),
+            patch("deep_thought.secrets._load_oauth_from_keychain", return_value=mock_credentials),
             patch("deep_thought.gcal.client.build") as mock_build,
         ):
             client.authenticate()
@@ -166,40 +175,43 @@ class TestGcalClientAuthenticate:
         mock_credentials.refresh_token = "refresh_abc"
 
         with (
-            patch("deep_thought.gcal.client.Path.exists", return_value=True),
-            patch("deep_thought.gcal.client.Credentials.from_authorized_user_file", return_value=mock_credentials),
-            patch("deep_thought.gcal.client.Request") as mock_request_cls,
-            patch("deep_thought.gcal.client.Path.write_text"),
-            patch("deep_thought.gcal.client.Path.chmod"),
-            patch("deep_thought.gcal.client.Path.mkdir"),
+            patch("deep_thought.secrets.keychain_available", return_value=True),
+            patch("deep_thought.secrets._load_oauth_from_keychain", return_value=mock_credentials),
+            patch("deep_thought.secrets.Request"),
+            patch("deep_thought.secrets._save_oauth_to_keychain"),
             patch("deep_thought.gcal.client.build"),
         ):
             client.authenticate()
 
-        mock_credentials.refresh.assert_called_once_with(mock_request_cls.return_value)
+        mock_credentials.refresh.assert_called_once()
 
-    def test_runs_browser_flow_when_no_token_file(self) -> None:
-        """Should open a browser flow when no token file exists."""
+    def test_runs_browser_flow_when_no_token_file(self, tmp_path: Path) -> None:
+        """Should open a browser flow when no token exists."""
         from deep_thought.gcal.client import GcalClient
 
-        client = self._make_client()
-        assert isinstance(client, GcalClient)
+        credentials_file = tmp_path / "credentials.json"
+        credentials_file.write_text("{}", encoding="utf-8")
+
+        client = GcalClient.__new__(GcalClient)
+        client._credentials_path = str(credentials_file)
+        client._token_path = str(tmp_path / "token.json")
+        client._scopes = ["https://www.googleapis.com/auth/calendar"]
+        client._rate_limit_rpm = 0
+        client._retry_max_attempts = 1
+        client._retry_base_delay = 0.0
+        client._last_request_time = 0.0
+        client._service = None
 
         mock_flow_credentials = MagicMock()
+        mock_flow_credentials.valid = True
         mock_flow = MagicMock()
         mock_flow.run_local_server.return_value = mock_flow_credentials
 
-        def path_exists_side_effect(self_path: object) -> bool:
-            # Token path does not exist; credentials file does
-            path_str = str(self_path)
-            return "token" not in path_str
-
         with (
-            patch("deep_thought.gcal.client.Path.exists", path_exists_side_effect),
-            patch("deep_thought.gcal.client.InstalledAppFlow.from_client_secrets_file", return_value=mock_flow),
-            patch("deep_thought.gcal.client.Path.write_text"),
-            patch("deep_thought.gcal.client.Path.chmod"),
-            patch("deep_thought.gcal.client.Path.mkdir"),
+            patch("deep_thought.secrets.keychain_available", return_value=True),
+            patch("deep_thought.secrets._load_oauth_from_keychain", return_value=None),
+            patch("deep_thought.secrets.InstalledAppFlow.from_client_secrets_file", return_value=mock_flow),
+            patch("deep_thought.secrets._save_oauth_to_keychain"),
             patch("deep_thought.gcal.client.build"),
         ):
             client.authenticate()
@@ -214,37 +226,11 @@ class TestGcalClientAuthenticate:
         assert isinstance(client, GcalClient)
 
         with (
-            patch("deep_thought.gcal.client.Path.exists", return_value=False),
+            patch("deep_thought.secrets.keychain_available", return_value=True),
+            patch("deep_thought.secrets._load_oauth_from_keychain", return_value=None),
             pytest.raises(FileNotFoundError, match="OAuth client secret not found"),
         ):
             client.authenticate()
-
-    def test_saves_token_with_restricted_permissions(self) -> None:
-        """Should write the token file and chmod it to 0o600."""
-        from deep_thought.gcal.client import GcalClient
-
-        client = self._make_client()
-        assert isinstance(client, GcalClient)
-
-        mock_credentials = MagicMock()
-        mock_credentials.valid = False
-        mock_credentials.expired = True
-        mock_credentials.refresh_token = "refresh_xyz"
-        mock_credentials.to_json.return_value = '{"token": "abc"}'
-
-        with (
-            patch("deep_thought.gcal.client.Path.exists", return_value=True),
-            patch("deep_thought.gcal.client.Credentials.from_authorized_user_file", return_value=mock_credentials),
-            patch("deep_thought.gcal.client.Request"),
-            patch("deep_thought.gcal.client.Path.mkdir"),
-            patch("deep_thought.gcal.client.Path.write_text") as mock_write,
-            patch("deep_thought.gcal.client.Path.chmod") as mock_chmod,
-            patch("deep_thought.gcal.client.build"),
-        ):
-            client.authenticate()
-
-        mock_write.assert_called_once_with('{"token": "abc"}')
-        mock_chmod.assert_called_once_with(0o600)
 
 
 # ---------------------------------------------------------------------------

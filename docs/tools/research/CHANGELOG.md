@@ -1,5 +1,11 @@
 # Research Tool — Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Secret retrieval now checks macOS Keychain first, falling back to environment variables. Uses the shared `deep_thought.secrets` module.
+
 ## 0.1.3 — 2026-04-05
 
 ### Added

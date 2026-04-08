@@ -11,12 +11,8 @@ import base64
 import contextlib
 import logging
 import time
-from pathlib import Path
 from typing import Any
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore[import-untyped]
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
 
@@ -142,42 +138,17 @@ class GmailClient:
     def authenticate(self) -> None:
         """Run the OAuth 2.0 flow and build the Gmail API service.
 
-        Loads an existing token from token_path if available. If the token is
-        expired but has a refresh token, refreshes silently. Otherwise, opens
-        a browser for user consent.
+        Delegates to the shared ``deep_thought.secrets`` module for keychain-first
+        token storage with file fallback.  See ``gmail._auth.get_credentials``
+        for the full lifecycle.
 
         Raises:
             FileNotFoundError: If credentials_path does not exist.
             google.auth.exceptions.RefreshError: If token refresh fails.
         """
-        credentials: Credentials | None = None
-        token_path = Path(self._token_path)
+        from deep_thought.gmail._auth import get_credentials
 
-        if token_path.exists():
-            credentials = Credentials.from_authorized_user_file(  # type: ignore[no-untyped-call]
-                str(token_path), self._scopes
-            )
-
-        if credentials is None or not credentials.valid:
-            if credentials and credentials.expired and credentials.refresh_token:
-                logger.debug("Refreshing expired OAuth token.")
-                credentials.refresh(Request())
-            else:
-                credentials_file = Path(self._credentials_path)
-                if not credentials_file.exists():
-                    raise FileNotFoundError(
-                        f"OAuth client secret not found at {self._credentials_path}. "
-                        "Download credentials.json from Google Cloud Console into src/config/gmail/."
-                    )
-                logger.info("Starting OAuth browser flow for user consent.")
-                flow = InstalledAppFlow.from_client_secrets_file(str(credentials_file), self._scopes)
-                credentials = flow.run_local_server(port=0)
-
-            token_path.parent.mkdir(parents=True, exist_ok=True)
-            token_path.write_text(credentials.to_json())
-            token_path.chmod(0o600)
-            logger.debug("OAuth token saved to %s", token_path)
-
+        credentials = get_credentials(self._credentials_path, self._token_path, self._scopes)
         self._service = build("gmail", "v1", credentials=credentials)
         logger.debug("Gmail API service initialised.")
 

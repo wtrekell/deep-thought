@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -190,7 +189,10 @@ def validate_config(config: ResearchConfig) -> list[str]:
 
 
 def get_api_key(config: ResearchConfig) -> str:
-    """Read the Perplexity API key from the environment variable named in config.
+    """Read the Perplexity API key from macOS Keychain or the environment variable named in config.
+
+    Checks Keychain first (service ``deep-thought-research``, key ``api-key``),
+    then falls back to the environment variable specified by ``config.api_key_env``.
 
     Args:
         config: A loaded ResearchConfig specifying which env var holds the API key.
@@ -199,12 +201,8 @@ def get_api_key(config: ResearchConfig) -> str:
         The Perplexity API key string.
 
     Raises:
-        OSError: If the environment variable is not set or empty.
+        OSError: If the API key is not found in Keychain or environment.
     """
-    api_key = os.environ.get(config.api_key_env)
-    if not api_key:
-        raise OSError(
-            f"Perplexity API key not found. Set the '{config.api_key_env}' environment variable "
-            "(either in your shell or in a .env file at the project root)."
-        )
-    return api_key
+    from deep_thought.secrets import get_secret
+
+    return get_secret("research", "api-key", env_var=config.api_key_env)

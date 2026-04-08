@@ -34,6 +34,7 @@ strip_boilerplate:
   # Sidebar table of contents + clone link + GitHub footer — everything after page content ends
   - '\n##  Toggle table of contents.*'
 
+qdrant_collection: deep_thought_db
 retry_attempts: 2
 retry_delay: 5.0
 changelog_url: null

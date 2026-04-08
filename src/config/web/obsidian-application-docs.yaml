@@ -31,6 +31,8 @@ strip_boilerplate:
   # Pages WITHOUT "Links to this page": strip title echo line + Not found ghost block + Interactive graph + On this page TOC + footer
   - '\n\n[^\n]+\n\nNot found\n\nThis page does not exist.*'
 unwrap_tags: []
+
+qdrant_collection: deep_thought_db
 pagination: "none"
 pagination_selector: null
 pagination_wait: 2.0

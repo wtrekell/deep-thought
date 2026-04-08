@@ -11,7 +11,6 @@ load_diarization_pipeline so this module can be imported without it installed.
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path  # noqa: TC003
 from typing import Any
 
@@ -33,9 +32,9 @@ def load_diarization_pipeline(hf_token_env: str = "HF_TOKEN") -> Any:
         OSError: If the HuggingFace token env var is not set.
         ImportError: If pyannote.audio is not installed.
     """
-    token = os.environ.get(hf_token_env)
-    if not token:
-        raise OSError(f"Environment variable {hf_token_env!r} is not set. Required for speaker diarization.")
+    from deep_thought.secrets import get_secret
+
+    token = get_secret("audio", "hf-token", env_var=hf_token_env)
 
     from pyannote.audio import Pipeline  # Lazy import — optional dependency
 

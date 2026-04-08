@@ -44,7 +44,7 @@ changelog_url: null
 strip_path_prefix: null
 strip_domain: true
 output_dir: "00-local/warp/"
-qdrant_collection: null
+qdrant_collection: deep_thought_db
 extract_images: false
 generate_llms_files: true
 llms_lookback_days: 30

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -270,7 +269,10 @@ def validate_config(config: GmailConfig) -> list[str]:
 
 
 def get_gemini_api_key(config: GmailConfig) -> str:
-    """Read the Gemini API key from the environment variable named in config.
+    """Read the Gemini API key from macOS Keychain or the environment variable named in config.
+
+    Checks Keychain first (service ``deep-thought-gmail``, key ``gemini-api-key``),
+    then falls back to the environment variable specified by ``config.gemini_api_key_env``.
 
     Args:
         config: A loaded GmailConfig specifying which env var holds the API key.
@@ -279,12 +281,8 @@ def get_gemini_api_key(config: GmailConfig) -> str:
         The Gemini API key string.
 
     Raises:
-        OSError: If the environment variable is not set or empty.
+        OSError: If the API key is not found in Keychain or environment.
     """
-    api_key = os.environ.get(config.gemini_api_key_env)
-    if not api_key:
-        raise OSError(
-            f"Gemini API key not found. Set the '{config.gemini_api_key_env}' environment variable "
-            "(either in your shell or in a .env file at the project root)."
-        )
-    return api_key
+    from deep_thought.secrets import get_secret
+
+    return get_secret("gmail", "gemini-api-key", env_var=config.gemini_api_key_env)

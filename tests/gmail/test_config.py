@@ -193,16 +193,33 @@ class TestGetGeminiApiKey:
     """Tests for get_gemini_api_key."""
 
     def test_returns_key_when_set(self) -> None:
-        """Should return the API key when the env var is set."""
+        """Should return the API key when the env var is set (keychain fallback)."""
         config = load_config(FIXTURES_DIR / "test_config.yaml")
-        with patch.dict("os.environ", {"GEMINI_API_KEY": "test_key_123"}):
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=False),
+            patch.dict("os.environ", {"GEMINI_API_KEY": "test_key_123"}),
+        ):
             key = get_gemini_api_key(config)
         assert key == "test_key_123"
 
-    def test_raises_when_not_set(self) -> None:
-        """Should raise OSError when the env var is not set."""
+    def test_returns_key_from_keychain(self) -> None:
+        """Should return the API key from keychain when available."""
         config = load_config(FIXTURES_DIR / "test_config.yaml")
-        with patch.dict("os.environ", {}, clear=True), pytest.raises(OSError, match="Gemini API key not found"):
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=True),
+            patch("deep_thought.secrets.keyring.get_password", return_value="keychain-gemini-key"),
+        ):
+            key = get_gemini_api_key(config)
+        assert key == "keychain-gemini-key"
+
+    def test_raises_when_not_set(self) -> None:
+        """Should raise OSError when neither keychain nor env var have the key."""
+        config = load_config(FIXTURES_DIR / "test_config.yaml")
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=False),
+            patch.dict("os.environ", {}, clear=True),
+            pytest.raises(OSError, match="Secret not found"),
+        ):
             get_gemini_api_key(config)
 
 

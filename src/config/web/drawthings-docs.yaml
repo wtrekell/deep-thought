@@ -32,6 +32,7 @@ strip_boilerplate:
 
 unwrap_tags: []
 
+qdrant_collection: deep_thought_db
 retry_attempts: 2
 retry_delay: 5.0
 changelog_url: null

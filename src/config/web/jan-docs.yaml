@@ -25,6 +25,7 @@ strip_boilerplate:
   # Jan.ai footer: horizontal rule + "## Jan" newsletter block through end of document
   - '\n\* \* \*\n\n## Jan\n.*'
 
+qdrant_collection: deep_thought_db
 retry_attempts: 2
 retry_delay: 5.0
 changelog_url: null

@@ -32,6 +32,7 @@ strip_boilerplate:
   # Cookie notice and footer from "This website uses cookies" through end of document
   - '\nThis website uses \[cookies\].*'
 
+qdrant_collection: deep_thought_db
 retry_attempts: 2
 retry_delay: 5.0
 changelog_url: null

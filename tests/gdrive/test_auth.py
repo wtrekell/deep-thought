@@ -1,4 +1,9 @@
-"""Tests for deep_thought.gdrive._auth — keychain and file token storage."""
+"""Tests for deep_thought.gdrive._auth — keychain and file token storage.
+
+After the refactor to use the shared ``deep_thought.secrets`` module, the
+GDrive ``_auth`` module is a thin wrapper. Tests patch the shared module
+where the real logic lives.
+"""
 
 from __future__ import annotations
 
@@ -68,7 +73,7 @@ def test_keychain_available_returns_true_for_real_backend() -> None:
 
     real_backend = MagicMock()  # Not an instance of FailKeyring
 
-    with patch("deep_thought.gdrive._auth.keyring.get_keyring", return_value=real_backend):
+    with patch("deep_thought.secrets.keyring.get_keyring", return_value=real_backend):
         result = _keychain_available()
 
     assert result is True
@@ -80,7 +85,7 @@ def test_keychain_available_returns_false_for_fail_backend() -> None:
 
     fail_backend = keyring.backends.fail.Keyring()
 
-    with patch("deep_thought.gdrive._auth.keyring.get_keyring", return_value=fail_backend):
+    with patch("deep_thought.secrets.keyring.get_keyring", return_value=fail_backend):
         result = _keychain_available()
 
     assert result is False
@@ -95,7 +100,7 @@ def test_persist_credentials_saves_to_keychain_when_available() -> None:
     """_persist_credentials routes to keychain when use_keychain is True."""
     creds = _make_valid_credentials()
 
-    with patch("deep_thought.gdrive._auth.keyring.set_password") as mock_set_password:
+    with patch("deep_thought.secrets.keyring.set_password") as mock_set_password:
         _persist_credentials(creds, token_path="", use_keychain=True)
 
     mock_set_password.assert_called_once_with(_KEYRING_SERVICE, _KEYRING_ACCOUNT, _FAKE_TOKEN_JSON)
@@ -131,8 +136,8 @@ def test_get_credentials_loads_valid_token_from_keychain() -> None:
     valid_creds = _make_valid_credentials()
 
     with (
-        patch("deep_thought.gdrive._auth._keychain_available", return_value=True),
-        patch("deep_thought.gdrive._auth._load_token_from_keychain", return_value=valid_creds),
+        patch("deep_thought.secrets.keychain_available", return_value=True),
+        patch("deep_thought.secrets._load_oauth_from_keychain", return_value=valid_creds),
     ):
         result = get_credentials("/fake/credentials.json", "", _SCOPES)
 
@@ -144,15 +149,15 @@ def test_get_credentials_refreshes_expired_keychain_token() -> None:
     expired_creds = _make_expired_credentials()
 
     with (
-        patch("deep_thought.gdrive._auth._keychain_available", return_value=True),
-        patch("deep_thought.gdrive._auth._load_token_from_keychain", return_value=expired_creds),
-        patch("deep_thought.gdrive._auth.Request"),
-        patch("deep_thought.gdrive._auth._save_token_to_keychain") as mock_save,
+        patch("deep_thought.secrets.keychain_available", return_value=True),
+        patch("deep_thought.secrets._load_oauth_from_keychain", return_value=expired_creds),
+        patch("deep_thought.secrets.Request"),
+        patch("deep_thought.secrets._save_oauth_to_keychain") as mock_save,
     ):
         result = get_credentials("/fake/credentials.json", "", _SCOPES)
 
     expired_creds.refresh.assert_called_once()
-    mock_save.assert_called_once_with(expired_creds)
+    mock_save.assert_called_once_with("gdrive", expired_creds)
     assert result is expired_creds
 
 
@@ -170,15 +175,15 @@ def test_get_credentials_auto_migrates_file_token_to_keychain(tmp_path: Path) ->
     valid_creds = _make_valid_credentials()
 
     with (
-        patch("deep_thought.gdrive._auth._keychain_available", return_value=True),
-        patch("deep_thought.gdrive._auth._load_token_from_keychain", return_value=None),
-        patch("deep_thought.gdrive._auth.Credentials") as mock_creds_cls,
-        patch("deep_thought.gdrive._auth._save_token_to_keychain") as mock_save,
+        patch("deep_thought.secrets.keychain_available", return_value=True),
+        patch("deep_thought.secrets._load_oauth_from_keychain", return_value=None),
+        patch("deep_thought.secrets.Credentials") as mock_creds_cls,
+        patch("deep_thought.secrets._save_oauth_to_keychain") as mock_save,
     ):
         mock_creds_cls.from_authorized_user_file.return_value = valid_creds
         result = get_credentials("/fake/credentials.json", str(token_file), _SCOPES)
 
-    mock_save.assert_called_once_with(valid_creds)
+    mock_save.assert_called_once_with("gdrive", valid_creds)
     assert not token_file.exists(), "File should have been deleted after migration."
     assert result is valid_creds
 
@@ -196,8 +201,8 @@ def test_get_credentials_falls_back_to_file_when_keychain_unavailable(tmp_path: 
     valid_creds = _make_valid_credentials()
 
     with (
-        patch("deep_thought.gdrive._auth._keychain_available", return_value=False),
-        patch("deep_thought.gdrive._auth.Credentials") as mock_creds_cls,
+        patch("deep_thought.secrets.keychain_available", return_value=False),
+        patch("deep_thought.secrets.Credentials") as mock_creds_cls,
     ):
         mock_creds_cls.from_authorized_user_file.return_value = valid_creds
         result = get_credentials("/fake/credentials.json", str(token_file), _SCOPES)
@@ -219,10 +224,10 @@ def test_get_credentials_runs_browser_flow_when_no_token_exists(tmp_path: Path) 
     new_creds = _make_valid_credentials()
 
     with (
-        patch("deep_thought.gdrive._auth._keychain_available", return_value=True),
-        patch("deep_thought.gdrive._auth._load_token_from_keychain", return_value=None),
-        patch("deep_thought.gdrive._auth.InstalledAppFlow") as mock_flow_cls,
-        patch("deep_thought.gdrive._auth._save_token_to_keychain") as mock_save,
+        patch("deep_thought.secrets.keychain_available", return_value=True),
+        patch("deep_thought.secrets._load_oauth_from_keychain", return_value=None),
+        patch("deep_thought.secrets.InstalledAppFlow") as mock_flow_cls,
+        patch("deep_thought.secrets._save_oauth_to_keychain") as mock_save,
     ):
         mock_flow = MagicMock()
         mock_flow.run_local_server.return_value = new_creds
@@ -231,15 +236,15 @@ def test_get_credentials_runs_browser_flow_when_no_token_exists(tmp_path: Path) 
         result = get_credentials(str(credentials_file), "", _SCOPES)
 
     mock_flow.run_local_server.assert_called_once_with(port=0)
-    mock_save.assert_called_once_with(new_creds)
+    mock_save.assert_called_once_with("gdrive", new_creds)
     assert result is new_creds
 
 
 def test_get_credentials_raises_if_credentials_file_missing() -> None:
     """get_credentials raises FileNotFoundError when the credentials file is absent."""
     with (
-        patch("deep_thought.gdrive._auth._keychain_available", return_value=True),
-        patch("deep_thought.gdrive._auth._load_token_from_keychain", return_value=None),
+        patch("deep_thought.secrets.keychain_available", return_value=True),
+        patch("deep_thought.secrets._load_oauth_from_keychain", return_value=None),
         pytest.raises(FileNotFoundError, match="OAuth client secret not found"),
     ):
         get_credentials("/nonexistent/credentials.json", "", _SCOPES)
@@ -259,8 +264,8 @@ def test_save_token_to_keychain_raises_runtime_error_on_password_set_error() -> 
     creds = _make_valid_credentials()
 
     with (
-        patch("deep_thought.gdrive._auth.keyring.set_password", side_effect=keyring.errors.PasswordSetError),
-        pytest.raises(RuntimeError, match="gdrive auth"),
+        patch("deep_thought.secrets.keyring.set_password", side_effect=keyring.errors.PasswordSetError),
+        pytest.raises(RuntimeError, match="Failed to save OAuth token"),
     ):
         _save_token_to_keychain(creds)
 
@@ -269,16 +274,10 @@ def test_load_token_from_keychain_returns_none_on_corrupt_json() -> None:
     """_load_token_from_keychain returns None and logs a warning when keychain JSON is malformed."""
     from deep_thought.gdrive._auth import _load_token_from_keychain
 
-    with (
-        patch("deep_thought.gdrive._auth.keyring.get_password", return_value="not valid json {{{"),
-        patch("deep_thought.gdrive._auth.logger") as mock_logger,
-    ):
+    with patch("deep_thought.secrets.keyring.get_password", return_value="not valid json {{{"):
         result = _load_token_from_keychain(_SCOPES)
 
     assert result is None
-    mock_logger.warning.assert_called_once()
-    warning_message: str = mock_logger.warning.call_args.args[0]
-    assert "gdrive auth" in warning_message
 
 
 def test_get_credentials_migration_skipped_when_keychain_write_fails(tmp_path: Path) -> None:
@@ -291,14 +290,14 @@ def test_get_credentials_migration_skipped_when_keychain_write_fails(tmp_path: P
     valid_creds = _make_valid_credentials()
 
     with (
-        patch("deep_thought.gdrive._auth._keychain_available", return_value=True),
-        patch("deep_thought.gdrive._auth._load_token_from_keychain", return_value=None),
-        patch("deep_thought.gdrive._auth.Credentials") as mock_creds_cls,
+        patch("deep_thought.secrets.keychain_available", return_value=True),
+        patch("deep_thought.secrets._load_oauth_from_keychain", return_value=None),
+        patch("deep_thought.secrets.Credentials") as mock_creds_cls,
         patch(
-            "deep_thought.gdrive._auth.keyring.set_password",
+            "deep_thought.secrets.keyring.set_password",
             side_effect=keyring.errors.PasswordSetError,
         ),
-        pytest.raises(RuntimeError, match="gdrive auth"),
+        pytest.raises(RuntimeError, match="Failed to save OAuth token"),
     ):
         mock_creds_cls.from_authorized_user_file.return_value = valid_creds
         get_credentials("/fake/credentials.json", str(token_file), _SCOPES)

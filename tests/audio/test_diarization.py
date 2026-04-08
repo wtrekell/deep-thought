@@ -84,23 +84,32 @@ class TestLoadDiarizationPipeline:
         mock_pipeline_instance = MagicMock()
         mock_pipeline_class.from_pretrained.return_value = mock_pipeline_instance
 
-        with patch.dict(sys.modules, {"pyannote.audio": mock_pyannote_audio}):
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=False),
+            patch.dict(sys.modules, {"pyannote.audio": mock_pyannote_audio}),
+        ):
             result = load_diarization_pipeline("HF_TOKEN")
 
         assert result is mock_pipeline_instance
 
     def test_raises_os_error_when_env_var_not_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """load_diarization_pipeline must raise OSError when the token env var is missing."""
+        """load_diarization_pipeline must raise OSError when the token is not found."""
         monkeypatch.delenv("HF_TOKEN", raising=False)
 
-        with pytest.raises(OSError, match="HF_TOKEN"):
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=False),
+            pytest.raises(OSError, match="HF_TOKEN"),
+        ):
             load_diarization_pipeline("HF_TOKEN")
 
     def test_raises_os_error_for_custom_env_var_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """load_diarization_pipeline must raise OSError with the custom env var name in the message."""
         monkeypatch.delenv("MY_CUSTOM_TOKEN", raising=False)
 
-        with pytest.raises(OSError, match="MY_CUSTOM_TOKEN"):
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=False),
+            pytest.raises(OSError, match="MY_CUSTOM_TOKEN"),
+        ):
             load_diarization_pipeline("MY_CUSTOM_TOKEN")
 
     def test_passes_correct_auth_token_to_pipeline(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -109,7 +118,10 @@ class TestLoadDiarizationPipeline:
         mock_pyannote_audio, mock_pipeline_class = _make_pyannote_module_mock()
         mock_pipeline_class.from_pretrained.return_value = MagicMock()
 
-        with patch.dict(sys.modules, {"pyannote.audio": mock_pyannote_audio}):
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=False),
+            patch.dict(sys.modules, {"pyannote.audio": mock_pyannote_audio}),
+        ):
             load_diarization_pipeline("HF_TOKEN")
 
         mock_pipeline_class.from_pretrained.assert_called_once_with(
@@ -123,7 +135,10 @@ class TestLoadDiarizationPipeline:
         mock_pyannote_audio, mock_pipeline_class = _make_pyannote_module_mock()
         mock_pipeline_class.from_pretrained.return_value = MagicMock()
 
-        with patch.dict(sys.modules, {"pyannote.audio": mock_pyannote_audio}):
+        with (
+            patch("deep_thought.secrets.keychain_available", return_value=False),
+            patch.dict(sys.modules, {"pyannote.audio": mock_pyannote_audio}),
+        ):
             load_diarization_pipeline("HF_TOKEN")
 
         call_args = mock_pipeline_class.from_pretrained.call_args[0]

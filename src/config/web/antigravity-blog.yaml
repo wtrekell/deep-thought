@@ -1,0 +1,49 @@
+mode: "blog"
+input_url: "https://antigravityide.org/blog/"
+index_depth: 1
+min_article_words: 200
+max_pages: 100
+js_wait: 1.5
+browser_channel: null
+headless: true
+stealth: false
+
+# Scope to the /blog/ path to avoid collecting marketing/product pages.
+include_patterns:
+  - 'https://antigravityide\.org/blog/.*'
+
+exclude_patterns:
+  - '.*\?.*'
+  - ".*#.*"
+  - ".*login.*"
+  - '.*\.pdf$'
+  - ".*/tag/.*"
+  - ".*/category/.*"
+  - '.*/page/\d+'
+  - ".*/author/.*"
+  # Exclude localized versions — /zh/ and /ja/ are duplicates of English content
+  - 'https://antigravityide\.org/(zh|ja)/.*'
+
+strip_boilerplate:
+  # Top nav block: appears twice per page (desktop + mobile nav), includes logo link,
+  # nav links, language switcher, and "Download Now" CTA. Ends just before the article heading.
+  - '^\[\]\(https://antigravityide\.org/\).*?EN \n\n\[Features\].*?\[ Download Now \]\(https://antigravityide\.org/download\)\n\n'
+  # Post-article share block and everything after: "Share this post / Shares / Pin / Share / Post"
+  # followed by prev/next nav, related posts, duplicate ToC, site footer, and zooblocks spam.
+  - '\n###  Share this post \n.*'
+
+unwrap_tags: []
+
+retry_attempts: 2
+retry_delay: 5.0
+output_dir: "00-local/antigravity/"
+strip_path_prefix: null
+strip_domain: true
+extract_images: false
+generate_llms_files: true
+llms_lookback_days: 30
+pagination: "none"
+pagination_selector: null
+pagination_wait: 2.0
+max_paginations: 10
+qdrant_collection: deep_thought_db
