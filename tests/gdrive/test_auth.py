@@ -281,7 +281,7 @@ def test_load_token_from_keychain_returns_none_on_corrupt_json() -> None:
 
 
 def test_get_credentials_migration_skipped_when_keychain_write_fails(tmp_path: Path) -> None:
-    """If keychain write fails during migration, the file is preserved and the error propagates."""
+    """If keychain write fails during migration, the file is preserved and fallback to file is used."""
     import keyring.errors
 
     token_file = tmp_path / "token.json"
@@ -297,10 +297,10 @@ def test_get_credentials_migration_skipped_when_keychain_write_fails(tmp_path: P
             "deep_thought.secrets.keyring.set_password",
             side_effect=keyring.errors.PasswordSetError,
         ),
-        pytest.raises(RuntimeError, match="Failed to save OAuth token"),
     ):
         mock_creds_cls.from_authorized_user_file.return_value = valid_creds
-        get_credentials("/fake/credentials.json", str(token_file), _SCOPES)
+        result = get_credentials("/fake/credentials.json", str(token_file), _SCOPES)
 
-    # File must still exist — keychain write failed before unlink() was reached.
+    # File must still exist — keychain write failed, so file token is kept.
     assert token_file.exists(), "Token file should be preserved when keychain write fails."
+    assert result is valid_creds
