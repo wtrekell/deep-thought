@@ -384,11 +384,17 @@ class TestCmdInit:
 class TestMain:
     """Tests for the main() entry point."""
 
-    def test_no_args_prints_help(self) -> None:
-        """Should print help and exit 0 when invoked with no arguments."""
-        with patch("sys.argv", ["gmail"]), pytest.raises(SystemExit) as exit_info:
+    def test_no_args_runs_default_collect(self) -> None:
+        """No-arg invocation must dispatch to cmd_collect, not print help."""
+        with (
+            patch("sys.argv", ["gmail"]),
+            patch("deep_thought.gmail.cli._run_command") as mock_run,
+            patch("deep_thought.gmail.cli.load_dotenv"),
+        ):
             main()
-        assert exit_info.value.code == 0
+            mock_run.assert_called_once()
+            handler_arg = mock_run.call_args[0][0]
+            assert handler_arg is cmd_collect
 
     def test_dispatches_to_config_handler(self) -> None:
         """Should dispatch 'config' subcommand to cmd_config."""

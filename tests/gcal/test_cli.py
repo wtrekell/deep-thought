@@ -315,11 +315,17 @@ class TestHandleSaveConfig:
 class TestMainEntryPoint:
     """Tests for the main() entry point."""
 
-    def test_no_args_prints_help(self) -> None:
-        """Should print help and exit 0 when invoked with no arguments."""
-        with patch("sys.argv", ["gcal"]), pytest.raises(SystemExit) as exit_info:
+    def test_no_args_runs_default_pull(self) -> None:
+        """No-arg invocation must dispatch to cmd_pull, not print help."""
+        with (
+            patch("sys.argv", ["gcal"]),
+            patch("deep_thought.gcal.cli._run_command") as mock_run,
+            patch("deep_thought.gcal.cli.load_dotenv"),
+        ):
             main()
-        assert exit_info.value.code == 0
+            mock_run.assert_called_once()
+            handler_arg = mock_run.call_args[0][0]
+            assert handler_arg is cmd_pull
 
     def test_version_flag_exits_zero(self) -> None:
         """Should print version and exit 0 when --version is given."""
