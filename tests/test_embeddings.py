@@ -39,7 +39,7 @@ def _make_qdrant_client(
 
 class TestEnsureCollection:
     def test_new_collection_creates_collection_and_all_indexes(self) -> None:
-        """A collection that does not exist is created and all 7 payload indexes are added."""
+        """A collection that does not exist is created and all 6 payload indexes are added."""
         mock_client = _make_qdrant_client(existing_collections=[])
 
         ensure_collection(mock_client, "my_collection")

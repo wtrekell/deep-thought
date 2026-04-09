@@ -103,11 +103,11 @@ def strip_frontmatter(markdown_text: str) -> str:
     if not markdown_text.startswith("---"):
         return markdown_text
 
-    closing_delimiter_position = markdown_text.find("---", 3)
+    closing_delimiter_position = markdown_text.find("\n---", 3)
     if closing_delimiter_position == -1:
         return markdown_text
 
-    end_of_frontmatter = closing_delimiter_position + 3
+    end_of_frontmatter = closing_delimiter_position + 4
     remaining_content = markdown_text[end_of_frontmatter:]
     return remaining_content.lstrip("\n")
 
