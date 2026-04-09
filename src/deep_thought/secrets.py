@@ -98,7 +98,11 @@ def get_secret(service: str, key_name: str, *, env_var: str | None = None) -> st
                 logger.debug("Loaded secret from keychain (service=%s, key=%s).", full_service, key_name)
                 return value
         except keyring.errors.KeyringLocked:
-            logger.warning("Keychain access denied (service=%s, key=%s). Falling back to environment.", full_service, key_name)
+            logger.warning(
+                "Keychain access denied (service=%s, key=%s). Falling back to environment.",
+                full_service,
+                key_name,
+            )
 
     if env_var:
         value = os.environ.get(env_var)
@@ -323,7 +327,12 @@ def get_oauth_credentials(
             existing_credentials = None
 
         # Auto-migrate: file token present but keychain is empty → move it over.
-        if use_keychain and existing_credentials is None and resolved_token_path is not None and resolved_token_path.exists():
+        if (
+            use_keychain
+            and existing_credentials is None
+            and resolved_token_path is not None
+            and resolved_token_path.exists()
+        ):
             logger.info("Migrating OAuth token from file to keychain (service=%s): %s", service, resolved_token_path)
             existing_credentials = Credentials.from_authorized_user_file(  # type: ignore[no-untyped-call]
                 str(resolved_token_path), scopes
