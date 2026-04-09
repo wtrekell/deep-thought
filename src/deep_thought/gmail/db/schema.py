@@ -10,6 +10,7 @@ Responsibilities:
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 from pathlib import Path
 
@@ -138,6 +139,28 @@ def _set_schema_version(conn: sqlite3.Connection, version: int) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _split_sql_statements(migration_sql: str) -> list[str]:
+    """Split a multi-statement SQL string into individual executable statements.
+
+    Strips single-line comments (-- ...) and splits on semicolons, discarding
+    any blank statements that result. This approach is safe for our migration
+    files, which contain only DDL and DML — no string literals with embedded
+    semicolons or comment markers.
+
+    Args:
+        migration_sql: Raw SQL text from a migration file.
+
+    Returns:
+        A list of non-empty SQL statement strings, each without a trailing
+        semicolon.
+    """
+    # Remove single-line comments so that semicolons inside comment text are
+    # never treated as statement terminators.
+    comment_stripped_sql = re.sub(r"--[^\n]*", "", migration_sql)
+    raw_statements = comment_stripped_sql.split(";")
+    return [statement.strip() for statement in raw_statements if statement.strip()]
+
+
 def run_migrations(conn: sqlite3.Connection, migrations_dir: Path) -> None:
     """Apply all unapplied .sql migration files in ascending numeric order.
 
@@ -146,10 +169,12 @@ def run_migrations(conn: sqlite3.Connection, migrations_dir: Path) -> None:
     sorted lexicographically, which keeps them in numeric order as long as
     the prefix width is consistent.
 
-    Each migration is applied atomically via conn.executescript(), which runs
-    the entire file in a single implicit transaction. If a migration fails,
-    the error is re-raised and the database is left in the last successfully
-    applied state.
+    Each migration — including the schema version update — is applied inside a
+    single transaction using conn.execute() for every statement. Unlike
+    executescript(), conn.execute() does NOT issue an implicit COMMIT before
+    running, so the migration SQL and the version update are atomic: if either
+    fails, the whole transaction rolls back and the database is left in the
+    last successfully applied state.
 
     Args:
         conn: An open SQLite connection.
@@ -180,17 +205,28 @@ def run_migrations(conn: sqlite3.Connection, migrations_dir: Path) -> None:
             continue
 
         migration_sql = migration_file.read_text(encoding="utf-8")
+        individual_statements = _split_sql_statements(migration_sql)
 
+        # To make DDL transactional we must switch to manual transaction
+        # control.  Python's sqlite3 module (with its default isolation_level)
+        # issues an implicit COMMIT before any DDL statement — exactly the
+        # same behaviour as executescript().  Setting isolation_level to None
+        # (autocommit) and issuing an explicit BEGIN lets us wrap the entire
+        # migration — DDL + version update — in a single transaction that
+        # can be rolled back atomically if anything fails.
+        original_isolation_level = conn.isolation_level
+        conn.isolation_level = None  # switch to manual transaction control
         try:
-            # executescript() runs the SQL in a single implicit transaction and
-            # handles multi-statement files correctly without manual splitting.
-            conn.executescript(migration_sql)
-            # Record the applied version inside its own transaction
+            conn.execute("BEGIN")
+            for sql_statement in individual_statements:
+                conn.execute(sql_statement)
             _set_schema_version(conn, migration_number)
-            conn.commit()
+            conn.execute("COMMIT")
         except sqlite3.Error as database_error:
-            conn.rollback()
+            conn.execute("ROLLBACK")
             raise sqlite3.Error(f"Migration {migration_file.name} failed: {database_error}") from database_error
+        finally:
+            conn.isolation_level = original_isolation_level
 
 
 # ---------------------------------------------------------------------------
