@@ -32,6 +32,8 @@ def slugify(text: str, max_length: int = 80, empty_fallback: str = "") -> str:
         lowercase alphanumerics and hyphens, or ``empty_fallback`` when the
         result would otherwise be empty.
     """
+    if max_length < 1:
+        raise ValueError("max_length must be >= 1")
     lowercased = text.lower()
     non_alnum_replaced = re.sub(r"[^a-z0-9]+", "-", lowercased)
     stripped = non_alnum_replaced.strip("-")
