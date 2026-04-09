@@ -90,9 +90,7 @@ def url_to_output_path(
     resolved_output_path = output_path.resolve()
     resolved_output_root = output_root.resolve()
     if not resolved_output_path.is_relative_to(resolved_output_root):
-        raise ValueError(
-            f"Resolved output path {resolved_output_path!r} escapes output root {resolved_output_root!r}"
-        )
+        raise ValueError(f"Resolved output path {resolved_output_path!r} escapes output root {resolved_output_root!r}")
 
     return output_path
 

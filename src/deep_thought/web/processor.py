@@ -495,9 +495,7 @@ def run_blog_mode(
             failed_count += 1
 
     total_count = succeeded_count + failed_count + skipped_count
-    crawl_result = CrawlResult(
-        total=total_count, succeeded=succeeded_count, failed=failed_count, skipped=skipped_count
-    )
+    crawl_result = CrawlResult(total=total_count, succeeded=succeeded_count, failed=failed_count, skipped=skipped_count)
     return crawl_result, summaries
 
 
@@ -669,9 +667,7 @@ def run_documentation_mode(
                 bfs_progress.advance(bfs_task_id)
 
     total_count = succeeded_count + failed_count + skipped_count
-    crawl_result = CrawlResult(
-        total=total_count, succeeded=succeeded_count, failed=failed_count, skipped=skipped_count
-    )
+    crawl_result = CrawlResult(total=total_count, succeeded=succeeded_count, failed=failed_count, skipped=skipped_count)
     return crawl_result, summaries
 
 
@@ -822,9 +818,7 @@ def run_direct_mode(
             failed_count += 1
 
     total_count = succeeded_count + failed_count + skipped_count
-    crawl_result = CrawlResult(
-        total=total_count, succeeded=succeeded_count, failed=failed_count, skipped=skipped_count
-    )
+    crawl_result = CrawlResult(total=total_count, succeeded=succeeded_count, failed=failed_count, skipped=skipped_count)
     return crawl_result, summaries
 
 

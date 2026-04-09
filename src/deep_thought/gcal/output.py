@@ -35,7 +35,8 @@ def _escape_yaml_value(value: str) -> str:
     Returns:
         The escaped string (backslashes and double quotes escaped).
     """
-    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return escaped.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
 
 
 def _build_event_frontmatter(event: EventLocal) -> str:

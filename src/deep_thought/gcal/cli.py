@@ -655,7 +655,10 @@ def _handle_save_config(destination_path_str: str) -> None:
         with destination_path.open("xb") as destination_file:
             destination_file.write(source_path.read_bytes())
     except FileExistsError:
-        print(f"ERROR: File already exists at {destination_path}. Remove it manually before re-running.", file=sys.stderr)
+        print(
+            f"ERROR: File already exists at {destination_path}. Remove it manually before re-running.",
+            file=sys.stderr,
+        )
         sys.exit(1)
     print(f"Default configuration written to: {destination_path}")
 

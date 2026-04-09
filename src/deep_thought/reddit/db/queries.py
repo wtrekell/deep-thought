@@ -202,7 +202,6 @@ def get_all_collected_posts(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return _rows_to_dicts(cursor.fetchall())
 
 
-
 def delete_all_posts(conn: sqlite3.Connection) -> int:
     """Delete all rows from collected_posts. Used by the --force flag.
 
