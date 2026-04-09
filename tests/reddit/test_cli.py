@@ -459,14 +459,17 @@ class TestCmdConfig:
 
 
 class TestMain:
-    def test_no_args_prints_help_and_exits_zero(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """Calling main with no arguments must print help and exit 0."""
+    def test_no_args_runs_default_collect(self) -> None:
+        """Calling main with no arguments must dispatch to cmd_collect."""
         with (
             patch("sys.argv", ["reddit"]),
-            pytest.raises(SystemExit) as exc_info,
+            patch("deep_thought.reddit.cli._run_command") as mock_run,
+            patch("deep_thought.reddit.cli.load_dotenv"),
         ):
             main()
-        assert exc_info.value.code == 0
+            mock_run.assert_called_once()
+            handler_arg = mock_run.call_args[0][0]
+            assert handler_arg is cmd_collect
 
     def test_dispatches_init_to_cmd_init(self, minimal_config: RedditConfig) -> None:
         """main must dispatch the 'init' subcommand to cmd_init."""

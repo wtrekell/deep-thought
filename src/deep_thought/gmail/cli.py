@@ -457,10 +457,6 @@ def main() -> None:
         return
 
     if args.subcommand is None:
-        # No subcommand → default collect operation
-        if len(sys.argv) == 1:
-            argument_parser.print_help()
-            sys.exit(0)
         _run_command(cmd_collect, args)
         return
 
