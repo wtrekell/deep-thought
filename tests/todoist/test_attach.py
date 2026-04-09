@@ -164,6 +164,36 @@ class TestAttachFile:
         stored_attachment = json.loads(row["attachment_json"])
         assert stored_attachment["file_name"] == "notes.txt"
 
+    def test_poster_id_from_sdk_is_stored_in_db(self, memory_conn: sqlite3.Connection, tmp_path: Path) -> None:
+        """The poster_id from the SDK comment response must be stored, not hardcoded None."""
+        _insert_task(memory_conn, "task1", "Do something")
+        test_file = tmp_path / "doc.pdf"
+        test_file.write_bytes(b"data")
+
+        attachment_dict = {
+            "file_name": "doc.pdf",
+            "file_size": 4,
+            "file_type": "application/pdf",
+            "file_url": "https://todoist.com/uploads/doc.pdf",
+            "resource_type": "file",
+            "upload_state": "completed",
+        }
+        mock_comment = MagicMock()
+        mock_comment.id = "comment-poster-test"
+        mock_comment.posted_at = "2026-04-05T10:00:00"
+        mock_comment.poster_id = "user-abc-123"
+
+        client = MagicMock()
+        client.upload_attachment.return_value = attachment_dict
+        client.add_comment_with_attachment.return_value = mock_comment
+
+        attach_file(client, memory_conn, "task1", test_file)
+
+        cursor = memory_conn.execute("SELECT poster_id FROM comments WHERE id = 'comment-poster-test';")
+        row = cursor.fetchone()
+        assert row is not None
+        assert row["poster_id"] == "user-abc-123"
+
     def test_custom_message_is_used(self, memory_conn: sqlite3.Connection, tmp_path: Path) -> None:
         _insert_task(memory_conn, "task1", "Do something")
         test_file = tmp_path / "file.txt"

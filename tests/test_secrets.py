@@ -440,29 +440,25 @@ def test_get_secret_keyring_locked_falls_back_to_env_var() -> None:
     assert result == "env-fallback-value"
 
 
-def test_get_oauth_credentials_keyring_locked_sets_use_keychain_false(tmp_path: Path) -> None:
-    """When _load_oauth_from_keychain raises KeyringLocked, use_keychain is flipped to False.
-
-    After the flip, no valid token exists (existing_credentials stays None), so the
-    function falls through toward the browser flow. With DEEP_THOUGHT_NO_KEYCHAIN=1
-    set (which is the realistic non-interactive scenario), it raises RuntimeError.
-    This verifies the branch is taken correctly rather than an uncaught exception.
-    """
+def test_get_oauth_credentials_keyring_locked_falls_back_to_file_token(tmp_path: Path) -> None:
+    """When keychain is locked, get_oauth_credentials flips use_keychain to False and loads from file."""
     import keyring.errors
 
-    credentials_file = tmp_path / "credentials.json"
-    credentials_file.write_text('{"installed": {}}')
+    token_file = tmp_path / "token.json"
+    token_file.write_text(_FAKE_TOKEN_JSON)
+
+    valid_creds = _make_valid_credentials()
 
     with (
-        patch.dict("os.environ", {"DEEP_THOUGHT_NO_KEYCHAIN": "1"}),
         patch("deep_thought.secrets.keychain_available", return_value=True),
-        patch(
-            "deep_thought.secrets._load_oauth_from_keychain",
-            side_effect=keyring.errors.KeyringLocked,
-        ),
-        pytest.raises(RuntimeError, match="interactive browser auth is disabled"),
+        patch("deep_thought.secrets.keyring.get_password", side_effect=keyring.errors.KeyringLocked),
+        patch("deep_thought.secrets.Credentials") as mock_creds_cls,
     ):
-        get_oauth_credentials("gcal", str(credentials_file), "", _SCOPES)
+        mock_creds_cls.from_authorized_user_file.return_value = valid_creds
+        result = get_oauth_credentials("gcal", "/fake/creds.json", str(token_file), _SCOPES)
+
+    assert result is valid_creds
+    mock_creds_cls.from_authorized_user_file.assert_called_once_with(str(token_file), _SCOPES)
 
 
 def test_persist_oauth_keychain_locked_falls_back_to_file(tmp_path: Path) -> None:
