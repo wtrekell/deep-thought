@@ -1,7 +1,7 @@
 # OAuth credentials
 auth:
   credentials_file: "files/tools/google/client_secret_2_770894559256-m7f602spn8c8upeh7tdvodhtotlc1jqa.apps.googleusercontent.com.json"
-  token_file: "src/config/gdrive/token.json"
+  token_file: "files/tools/google/gdrive-token.json"
   scopes:
     - "https://www.googleapis.com/auth/drive.file"
 

@@ -51,7 +51,11 @@ def keychain_available() -> bool:
 
     Returns False when ``keyring`` resolves to the no-op fail backend, which
     happens in headless environments without a configured secrets store.
+    Also returns False when ``DEEP_THOUGHT_NO_KEYCHAIN=1`` is set, which
+    suppresses macOS keychain prompts in non-interactive contexts like git hooks.
     """
+    if os.environ.get("DEEP_THOUGHT_NO_KEYCHAIN") == "1":
+        return False
     return not isinstance(keyring.get_keyring(), keyring.backends.fail.Keyring)
 
 
@@ -88,10 +92,13 @@ def get_secret(service: str, key_name: str, *, env_var: str | None = None) -> st
     full_service = _service_name(service)
 
     if keychain_available():
-        value = keyring.get_password(full_service, key_name)
-        if value:
-            logger.debug("Loaded secret from keychain (service=%s, key=%s).", full_service, key_name)
-            return value
+        try:
+            value = keyring.get_password(full_service, key_name)
+            if value:
+                logger.debug("Loaded secret from keychain (service=%s, key=%s).", full_service, key_name)
+                return value
+        except keyring.errors.KeyringLocked:
+            logger.warning("Keychain access denied (service=%s, key=%s). Falling back to environment.", full_service, key_name)
 
     if env_var:
         value = os.environ.get(env_var)
@@ -125,7 +132,7 @@ def set_secret(service: str, key_name: str, value: str) -> None:
     full_service = _service_name(service)
     try:
         keyring.set_password(full_service, key_name, value)
-    except keyring.errors.PasswordSetError as exc:
+    except (keyring.errors.PasswordSetError, keyring.errors.KeyringLocked) as exc:
         raise RuntimeError(
             f"Failed to save secret to keychain ({full_service}/{key_name}): {exc}. Your keychain may be locked."
         ) from exc
@@ -234,8 +241,12 @@ def _persist_oauth(service: str, credentials: Credentials, token_path: str, use_
         RuntimeError: If keychain is unavailable and no token_path is set.
     """
     if use_keychain:
-        _save_oauth_to_keychain(service, credentials)
-    elif token_path:
+        try:
+            _save_oauth_to_keychain(service, credentials)
+            return
+        except (keyring.errors.KeyringLocked, RuntimeError):
+            logger.warning("Keychain write denied (service=%s). Falling back to file-based token.", service)
+    if token_path:
         _save_oauth_to_file(credentials, Path(token_path))
     else:
         raise RuntimeError(
@@ -291,21 +302,30 @@ def get_oauth_credentials(
     resolved_token_path = Path(token_path) if token_path else None
 
     if use_keychain:
-        existing_credentials = _load_oauth_from_keychain(service, scopes)
+        try:
+            existing_credentials = _load_oauth_from_keychain(service, scopes)
+        except keyring.errors.KeyringLocked:
+            logger.warning("Keychain access denied (service=%s). Falling back to file-based token.", service)
+            use_keychain = False
+            existing_credentials = None
 
         # Auto-migrate: file token present but keychain is empty → move it over.
-        if existing_credentials is None and resolved_token_path is not None and resolved_token_path.exists():
+        if use_keychain and existing_credentials is None and resolved_token_path is not None and resolved_token_path.exists():
             logger.info("Migrating OAuth token from file to keychain (service=%s): %s", service, resolved_token_path)
             existing_credentials = Credentials.from_authorized_user_file(  # type: ignore[no-untyped-call]
                 str(resolved_token_path), scopes
             )
             if existing_credentials is not None:
-                _save_oauth_to_keychain(service, existing_credentials)
-                # Keychain write succeeded — delete the file. If the process is
-                # interrupted here, the file is left as an orphan, but the keychain
-                # already holds the current token so there is no data loss.
-                resolved_token_path.unlink()
-                logger.info("Token migrated to keychain. File deleted: %s", resolved_token_path)
+                try:
+                    _save_oauth_to_keychain(service, existing_credentials)
+                    # Keychain write succeeded — delete the file. If the process is
+                    # interrupted here, the file is left as an orphan, but the keychain
+                    # already holds the current token so there is no data loss.
+                    resolved_token_path.unlink()
+                    logger.info("Token migrated to keychain. File deleted: %s", resolved_token_path)
+                except (keyring.errors.KeyringLocked, RuntimeError):
+                    logger.warning("Keychain write denied during migration (service=%s). Keeping file token.", service)
+                    use_keychain = False
     else:
         if resolved_token_path is not None and resolved_token_path.exists():
             existing_credentials = Credentials.from_authorized_user_file(  # type: ignore[no-untyped-call]
