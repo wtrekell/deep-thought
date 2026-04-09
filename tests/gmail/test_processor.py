@@ -621,6 +621,147 @@ class TestProcessRule:
         assert "archive" in result.actions_taken
         assert result.actions_taken["archive"] == 1
 
+    def test_skipped_emails_do_not_count_toward_max_cap(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        basic_rule: RuleConfig,
+        tmp_path: Path,
+    ) -> None:
+        """Emails already in the DB (skipped) must not consume the max_emails cap.
+
+        With max_emails_per_run=10 and 10 already-processed emails in the DB,
+        a new email should still be processed — skipped emails do not count.
+        """
+        from deep_thought.gmail.db.queries import upsert_processed_email
+
+        # Pre-populate DB with 10 already-processed emails
+        for skip_index in range(10):
+            upsert_processed_email(
+                in_memory_db,
+                {
+                    "message_id": f"skip_cap_msg_{skip_index}",
+                    "rule_name": "test_rule",
+                    "subject": f"Old Email {skip_index}",
+                    "from_address": "sender@example.com",
+                    "output_path": f"/path/{skip_index}.md",
+                    "actions_taken": "[]",
+                    "status": "ok",
+                    "created_at": "2026-03-20T00:00:00+00:00",
+                    "updated_at": "2026-03-20T00:00:00+00:00",
+                    "synced_at": "2026-03-20T00:00:00+00:00",
+                },
+            )
+
+        new_message = make_mock_message(message_id="new_cap_msg")
+        # Return the 10 skipped IDs plus 1 new one
+        all_message_stubs = [{"id": f"skip_cap_msg_{i}"} for i in range(10)] + [{"id": "new_cap_msg"}]
+        mock_gmail_client.list_messages.return_value = all_message_stubs
+        mock_gmail_client.get_message.return_value = new_message
+
+        result = process_rule(
+            gmail_client=mock_gmail_client,
+            rule_config=basic_rule,
+            db_conn=in_memory_db,
+            extractor=None,
+            output_dir=tmp_path,
+            dry_run=False,
+            force=False,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+            global_email_count=0,
+            max_emails_per_run=10,
+        )
+
+        # All 10 already-processed emails were skipped; the 1 new email was processed
+        assert result.skipped == 10
+        assert result.processed == 1
+
+    def test_processed_emails_do_count_toward_max_cap(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        basic_rule: RuleConfig,
+        tmp_path: Path,
+    ) -> None:
+        """Successfully processed emails must count toward the max_emails cap."""
+        messages = [make_mock_message(message_id=f"proc_cap_{i}") for i in range(5)]
+        mock_gmail_client.list_messages.return_value = [{"id": f"proc_cap_{i}"} for i in range(5)]
+        mock_gmail_client.get_message.side_effect = messages
+
+        result = process_rule(
+            gmail_client=mock_gmail_client,
+            rule_config=basic_rule,
+            db_conn=in_memory_db,
+            extractor=None,
+            output_dir=tmp_path,
+            dry_run=False,
+            force=False,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+            global_email_count=0,
+            max_emails_per_run=3,
+        )
+
+        # Only 3 should have been processed before the cap was hit
+        assert result.processed <= 3
+
+    def test_fifty_skipped_plus_five_new_all_processed_within_cap(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        basic_rule: RuleConfig,
+        tmp_path: Path,
+    ) -> None:
+        """50 already-collected emails + 5 new emails with max_emails=10.
+
+        All 5 new emails should be processed. Skipped emails must not consume
+        any of the budget, so the cap of 10 is more than enough for 5 new emails.
+        """
+        from deep_thought.gmail.db.queries import upsert_processed_email
+
+        # Pre-populate DB with 50 already-processed emails
+        for skip_index in range(50):
+            upsert_processed_email(
+                in_memory_db,
+                {
+                    "message_id": f"old_msg_{skip_index}",
+                    "rule_name": "test_rule",
+                    "subject": f"Old Email {skip_index}",
+                    "from_address": "sender@example.com",
+                    "output_path": f"/path/{skip_index}.md",
+                    "actions_taken": "[]",
+                    "status": "ok",
+                    "created_at": "2026-03-20T00:00:00+00:00",
+                    "updated_at": "2026-03-20T00:00:00+00:00",
+                    "synced_at": "2026-03-20T00:00:00+00:00",
+                },
+            )
+
+        new_messages = [make_mock_message(message_id=f"new_msg_{i}") for i in range(5)]
+        skipped_stubs = [{"id": f"old_msg_{i}"} for i in range(50)]
+        new_stubs = [{"id": f"new_msg_{i}"} for i in range(5)]
+        mock_gmail_client.list_messages.return_value = skipped_stubs + new_stubs
+        mock_gmail_client.get_message.side_effect = new_messages
+
+        result = process_rule(
+            gmail_client=mock_gmail_client,
+            rule_config=basic_rule,
+            db_conn=in_memory_db,
+            extractor=None,
+            output_dir=tmp_path,
+            dry_run=False,
+            force=False,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+            global_email_count=0,
+            max_emails_per_run=10,
+        )
+
+        # All 5 new emails processed; none blocked by the 50 skipped ones
+        assert result.skipped == 50
+        assert result.processed == 5
+
 
 # ---------------------------------------------------------------------------
 # run_collection
@@ -758,6 +899,86 @@ class TestRunCollection:
 
         assert override_dir.exists()
         assert any(override_dir.rglob("*.md"))
+
+    def test_skipped_emails_in_rule_one_do_not_reduce_budget_for_rule_two(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        tmp_path: Path,
+    ) -> None:
+        """Skipped emails from rule 1 must not reduce the remaining cap for rule 2.
+
+        With max_emails_per_run=5 and 5 already-collected emails in rule 1,
+        rule 2 should still have a full budget of 5 new emails available.
+        """
+        from deep_thought.gmail.db.queries import upsert_processed_email
+
+        rule_one = RuleConfig(
+            name="rule_with_skips",
+            query="from:skipped@test.com",
+            ai_instructions=None,
+            actions=[],
+            append_mode=False,
+        )
+        rule_two = RuleConfig(
+            name="rule_needing_budget",
+            query="from:new@test.com",
+            ai_instructions=None,
+            actions=[],
+            append_mode=False,
+        )
+
+        config = GmailConfig(
+            credentials_path="creds.json",
+            token_path="token.json",
+            scopes=["https://mail.google.com/"],
+            gemini_api_key_env="GEMINI_API_KEY",
+            gemini_model="gemini-2.5-flash",
+            gemini_rate_limit_rpm=15,
+            gmail_rate_limit_rpm=250,
+            retry_max_attempts=3,
+            retry_base_delay_seconds=1,
+            max_emails_per_run=5,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+            output_dir=str(tmp_path),
+            rules=[rule_one, rule_two],
+        )
+
+        # Pre-populate 5 rule_one emails as already processed (so they'll be skipped)
+        for skip_index in range(5):
+            upsert_processed_email(
+                in_memory_db,
+                {
+                    "message_id": f"cross_rule_skip_{skip_index}",
+                    "rule_name": "rule_with_skips",
+                    "subject": f"Already Seen {skip_index}",
+                    "from_address": "skipped@test.com",
+                    "output_path": f"/path/{skip_index}.md",
+                    "actions_taken": "[]",
+                    "status": "ok",
+                    "created_at": "2026-03-20T00:00:00+00:00",
+                    "updated_at": "2026-03-20T00:00:00+00:00",
+                    "synced_at": "2026-03-20T00:00:00+00:00",
+                },
+            )
+
+        rule_one_stubs = [{"id": f"cross_rule_skip_{i}"} for i in range(5)]
+        rule_two_messages = [make_mock_message(message_id=f"cross_rule_new_{i}") for i in range(3)]
+        rule_two_stubs = [{"id": f"cross_rule_new_{i}"} for i in range(3)]
+
+        mock_gmail_client.list_messages.side_effect = [rule_one_stubs, rule_two_stubs]
+        mock_gmail_client.get_message.side_effect = rule_two_messages
+
+        result = run_collection(
+            gmail_client=mock_gmail_client,
+            config=config,
+            db_conn=in_memory_db,
+        )
+
+        # 5 skipped from rule 1; 3 new processed from rule 2
+        assert result.skipped == 5
+        assert result.processed == 3
 
 
 # ---------------------------------------------------------------------------

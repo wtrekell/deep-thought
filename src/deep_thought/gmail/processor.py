@@ -338,7 +338,7 @@ def process_rule(
     logger.info("Rule '%s': found %d messages", rule_config.name, len(message_stubs))
 
     for message_stub in track_items(message_stubs, description=f"Rule: {rule_config.name}"):
-        if not is_within_max_emails(global_email_count + result.processed + result.skipped, max_emails_per_run):
+        if not is_within_max_emails(global_email_count + result.processed, max_emails_per_run):
             break
 
         message_id = message_stub.get("id", "")
@@ -432,7 +432,7 @@ def run_collection(
         for action, count in rule_result.actions_taken.items():
             total_result.actions_taken[action] = total_result.actions_taken.get(action, 0) + count
 
-        global_email_count += rule_result.processed + rule_result.skipped
+        global_email_count += rule_result.processed
 
     return total_result
 
