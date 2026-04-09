@@ -22,7 +22,7 @@ Todoist API → Local Models → Filters → SQLite DB → Markdown Export
    TODOIST_API_TOKEN=your_token_here
    ```
 
-2. Configure which projects to sync in `src/config/todoist_configuration.yaml`.
+2. Configure which projects to sync in `src/config/todoist-configuration.yaml`.
 
 3. Initialize the database:
 
@@ -38,7 +38,7 @@ Todoist API → Local Models → Filters → SQLite DB → Markdown Export
 
 ## Configuration
 
-Configuration lives at `src/config/todoist_configuration.yaml`. Key settings:
+Configuration lives at `src/config/todoist-configuration.yaml`. Key settings:
 
 - **projects** — Opt-in list of Todoist project names to sync
 - **filters.pull** — Rules for which tasks to include/exclude during pull (by label, section, assignee, due date)

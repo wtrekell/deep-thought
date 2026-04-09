@@ -66,7 +66,7 @@ class TodoistConfig:
 
 _PACKAGE_DIR = Path(__file__).resolve().parent
 _BUNDLED_DEFAULT_CONFIG = _PACKAGE_DIR / "default-config.yaml"
-_PROJECT_CONFIG_RELATIVE_PATH = Path("src") / "config" / "todoist_configuration.yaml"
+_PROJECT_CONFIG_RELATIVE_PATH = Path("src") / "config" / "todoist-configuration.yaml"
 
 
 def get_bundled_config_path() -> Path:
@@ -88,7 +88,7 @@ def get_default_config_path() -> Path:
     *calling repo* (e.g., magrathea), not the source repo (deep-thought).
 
     Returns:
-        Absolute path to src/config/todoist_configuration.yaml in the calling repo.
+        Absolute path to src/config/todoist-configuration.yaml in the calling repo.
     """
     return Path.cwd() / _PROJECT_CONFIG_RELATIVE_PATH
 
@@ -180,7 +180,7 @@ def _parse_projects(raw_projects: list[dict[str, Any]] | None) -> list[str]:
 def load_config(config_path: Path | None = None) -> TodoistConfig:
     """Load the YAML configuration, integrate .env variables, and return a typed config.
 
-    If config_path is None the default path is used (configuration/todoist_configuration.yaml
+    If config_path is None the default path is used (configuration/todoist-configuration.yaml
     relative to the project root).
     """
     load_dotenv()

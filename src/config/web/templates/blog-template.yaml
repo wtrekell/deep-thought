@@ -42,6 +42,7 @@ strip_boilerplate: []
 
 retry_attempts: 2
 retry_delay: 5.0
+qdrant_collection: deep_thought_db
 output_dir: "output/web/"
 extract_images: false
 generate_llms_files: true

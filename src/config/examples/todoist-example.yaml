@@ -1,7 +1,7 @@
 # =============================================================================
 # Todoist Tool — Example Configuration
 # All settings shown with every valid option documented.
-# Copy to src/config/todoist_configuration.yaml and customize.
+# Copy to src/config/todoist-configuration.yaml and customize.
 # =============================================================================
 
 # ---------------------------------------------------------------------------

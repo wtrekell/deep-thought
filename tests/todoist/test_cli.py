@@ -248,7 +248,7 @@ class TestCmdInit:
         ):
             cmd_init(args_base)
 
-        project_config = tmp_path / "src" / "config" / "todoist_configuration.yaml"
+        project_config = tmp_path / "src" / "config" / "todoist-configuration.yaml"
         assert project_config.exists()
         assert project_config.read_text() == "# bundled default\napi_token_env: TODOIST_API_TOKEN\n"
 
@@ -264,7 +264,7 @@ class TestCmdInit:
         bundled = tmp_path / "bundled.yaml"
         bundled.write_text("# new content\n", encoding="utf-8")
 
-        project_config = tmp_path / "src" / "config" / "todoist_configuration.yaml"
+        project_config = tmp_path / "src" / "config" / "todoist-configuration.yaml"
         project_config.parent.mkdir(parents=True)
         project_config.write_text("# existing content\n", encoding="utf-8")
 
