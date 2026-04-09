@@ -178,7 +178,10 @@ def test_get_secret_error_message_includes_env_var_name() -> None:
 
 def test_set_secret_writes_to_keychain() -> None:
     """set_secret calls keyring.set_password with the correct service name."""
-    with patch("deep_thought.secrets.keyring.set_password") as mock_set:
+    with (
+        patch("deep_thought.secrets.keychain_available", return_value=True),
+        patch("deep_thought.secrets.keyring.set_password") as mock_set,
+    ):
         set_secret("todoist", "api-token", "my-secret-value")
 
     mock_set.assert_called_once_with(f"{_KEYRING_SERVICE_PREFIX}todoist", "api-token", "my-secret-value")
@@ -189,6 +192,7 @@ def test_set_secret_raises_runtime_error_on_failure() -> None:
     import keyring.errors
 
     with (
+        patch("deep_thought.secrets.keychain_available", return_value=True),
         patch("deep_thought.secrets.keyring.set_password", side_effect=keyring.errors.PasswordSetError),
         pytest.raises(RuntimeError, match="Failed to save secret"),
     ):
@@ -202,7 +206,10 @@ def test_set_secret_raises_runtime_error_on_failure() -> None:
 
 def test_delete_secret_removes_from_keychain() -> None:
     """delete_secret calls keyring.delete_password."""
-    with patch("deep_thought.secrets.keyring.delete_password") as mock_del:
+    with (
+        patch("deep_thought.secrets.keychain_available", return_value=True),
+        patch("deep_thought.secrets.keyring.delete_password") as mock_del,
+    ):
         delete_secret("todoist", "api-token")
 
     mock_del.assert_called_once_with(f"{_KEYRING_SERVICE_PREFIX}todoist", "api-token")
@@ -212,9 +219,12 @@ def test_delete_secret_does_not_raise_when_missing() -> None:
     """delete_secret silently ignores PasswordDeleteError."""
     import keyring.errors
 
-    with patch(
-        "deep_thought.secrets.keyring.delete_password",
-        side_effect=keyring.errors.PasswordDeleteError,
+    with (
+        patch("deep_thought.secrets.keychain_available", return_value=True),
+        patch(
+            "deep_thought.secrets.keyring.delete_password",
+            side_effect=keyring.errors.PasswordDeleteError,
+        ),
     ):
         delete_secret("todoist", "api-token")  # Should not raise
 

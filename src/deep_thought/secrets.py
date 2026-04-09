@@ -169,7 +169,7 @@ def delete_secret(service: str, key_name: str) -> None:
     try:
         keyring.delete_password(full_service, key_name)
         logger.debug("Secret deleted from keychain (service=%s, key=%s).", full_service, key_name)
-    except keyring.errors.PasswordDeleteError:
+    except (keyring.errors.PasswordDeleteError, keyring.errors.KeyringLocked):
         logger.debug("No secret to delete in keychain (service=%s, key=%s).", full_service, key_name)
 
 
@@ -189,7 +189,11 @@ def _load_oauth_from_keychain(service: str, scopes: list[str]) -> Credentials | 
         A Credentials object if a token is found, or None.
     """
     full_service = _service_name(service)
-    token_json = keyring.get_password(full_service, _OAUTH_ACCOUNT)
+    try:
+        token_json = keyring.get_password(full_service, _OAUTH_ACCOUNT)
+    except keyring.errors.KeyringLocked:
+        logger.warning("Keychain access denied loading OAuth token (service=%s).", full_service)
+        return None
     if token_json is None:
         logger.debug("No OAuth token found in keychain (service=%s).", full_service)
         return None
@@ -221,7 +225,7 @@ def _save_oauth_to_keychain(service: str, credentials: Credentials) -> None:
     full_service = _service_name(service)
     try:
         keyring.set_password(full_service, _OAUTH_ACCOUNT, credentials.to_json())  # type: ignore[no-untyped-call]
-    except keyring.errors.PasswordSetError as exc:
+    except (keyring.errors.PasswordSetError, keyring.errors.KeyringLocked) as exc:
         raise RuntimeError(
             f"Failed to save OAuth token to keychain ({full_service}): {exc}. "
             "Your keychain may be locked. Unlock it and run the tool's auth command to re-authorize."
@@ -317,6 +321,7 @@ def get_oauth_credentials(
 
     existing_credentials: Credentials | None = None
     resolved_token_path = Path(token_path) if token_path else None
+    migrated_file_to_delete: Path | None = None  # Set during auto-migration; deleted after validation.
 
     if use_keychain:
         try:
@@ -334,17 +339,23 @@ def get_oauth_credentials(
             and resolved_token_path.exists()
         ):
             logger.info("Migrating OAuth token from file to keychain (service=%s): %s", service, resolved_token_path)
-            existing_credentials = Credentials.from_authorized_user_file(  # type: ignore[no-untyped-call]
-                str(resolved_token_path), scopes
-            )
+            try:
+                existing_credentials = Credentials.from_authorized_user_file(  # type: ignore[no-untyped-call]
+                    str(resolved_token_path), scopes
+                )
+            except (ValueError, json.JSONDecodeError):
+                logger.warning(
+                    "Token file is corrupt (service=%s, path=%s). Ignoring file.",
+                    service,
+                    resolved_token_path,
+                )
+                existing_credentials = None
             if existing_credentials is not None:
                 try:
                     _save_oauth_to_keychain(service, existing_credentials)
-                    # Keychain write succeeded — delete the file. If the process is
-                    # interrupted here, the file is left as an orphan, but the keychain
-                    # already holds the current token so there is no data loss.
-                    resolved_token_path.unlink()
-                    logger.info("Token migrated to keychain. File deleted: %s", resolved_token_path)
+                    # Defer file deletion until after credential validation succeeds.
+                    migrated_file_to_delete = resolved_token_path
+                    logger.info("Token migrated to keychain (service=%s).", service)
                 except (keyring.errors.KeyringLocked, RuntimeError):
                     logger.warning("Keychain write denied during migration (service=%s). Keeping file token.", service)
                     use_keychain = False
@@ -356,12 +367,18 @@ def get_oauth_credentials(
             logger.debug("Loaded existing OAuth token from %s", resolved_token_path)
 
     if existing_credentials is not None and existing_credentials.valid:
+        if migrated_file_to_delete is not None:
+            migrated_file_to_delete.unlink(missing_ok=True)
+            logger.info("Migrated token file deleted: %s", migrated_file_to_delete)
         return existing_credentials
 
     if existing_credentials is not None and existing_credentials.expired and existing_credentials.refresh_token:
         logger.debug("Refreshing expired OAuth token (service=%s).", service)
         existing_credentials.refresh(Request())
         _persist_oauth(service, existing_credentials, token_path, use_keychain)
+        if migrated_file_to_delete is not None:
+            migrated_file_to_delete.unlink(missing_ok=True)
+            logger.info("Migrated token file deleted: %s", migrated_file_to_delete)
         return existing_credentials
 
     # No valid token — run the interactive browser consent flow.
