@@ -11,9 +11,11 @@ import pytest
 from deep_thought.file_txt.cli import (
     _build_config_with_overrides,
     _resolve_output_root,
+    _result_to_document_summary,
     cmd_config,
     cmd_convert,
     cmd_init,
+    main,
 )
 from deep_thought.file_txt.config import (
     EmailConfig,
@@ -515,3 +517,180 @@ class TestGetVersion:
             version_string = cli._get_version()
 
         assert version_string == "0.1.0"
+
+
+# ---------------------------------------------------------------------------
+# TestMainDispatch
+# ---------------------------------------------------------------------------
+
+
+class TestMainDispatch:
+    def test_main_dispatches_to_config_subcommand(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """main() with the 'config' subcommand must invoke cmd_config."""
+        mock_cmd_config = MagicMock()
+        with (
+            patch("sys.argv", ["file-txt", "config"]),
+            patch.dict("deep_thought.file_txt.cli._COMMAND_HANDLERS", {"config": mock_cmd_config}),
+        ):
+            main()
+
+        mock_cmd_config.assert_called_once()
+
+    def test_main_dispatches_to_convert_via_fallback_path(self, tmp_path: Path) -> None:
+        """main() with no subcommand must re-parse as conversion and invoke cmd_convert."""
+        dummy_pdf = tmp_path / "document.pdf"
+        dummy_pdf.write_bytes(b"fake pdf")
+
+        mock_cmd_convert = MagicMock()
+
+        # Simulate the fallback: parse_known_args returns subcommand=None, then the
+        # fallback parser is used. We feed the path via the fallback parser namespace.
+        fallback_namespace = argparse.Namespace(
+            path=str(dummy_pdf),
+            output=None,
+            config=None,
+            verbose=False,
+            dry_run=False,
+            nuke=False,
+            llm=False,
+            include_page_numbers=None,
+            extract_images=None,
+            prefer_html=None,
+            full_headers=None,
+            include_attachments=None,
+            subcommand="convert",
+        )
+
+        mock_fallback_parser = MagicMock()
+        mock_fallback_parser.parse_args.return_value = fallback_namespace
+
+        fallback_patch_target = "deep_thought.file_txt.cli._build_root_parser_with_convert_defaults"
+        with (
+            patch("sys.argv", ["file-txt"]),
+            patch(fallback_patch_target, return_value=mock_fallback_parser),
+            patch.dict("deep_thought.file_txt.cli._COMMAND_HANDLERS", {"convert": mock_cmd_convert}),
+        ):
+            main()
+
+        mock_cmd_convert.assert_called_once()
+
+    def test_main_exits_1_on_file_not_found_error(self) -> None:
+        """main() must exit with code 1 when the handler raises FileNotFoundError."""
+        failing_handler = MagicMock(side_effect=FileNotFoundError("config missing"))
+        with (
+            patch("sys.argv", ["file-txt", "config"]),
+            patch.dict("deep_thought.file_txt.cli._COMMAND_HANDLERS", {"config": failing_handler}),
+            pytest.raises(SystemExit) as exit_info,
+        ):
+            main()
+
+        assert exit_info.value.code == 1
+
+    def test_main_exits_1_on_value_error(self) -> None:
+        """main() must exit with code 1 when the handler raises ValueError."""
+        failing_handler = MagicMock(side_effect=ValueError("bad config"))
+        with (
+            patch("sys.argv", ["file-txt", "config"]),
+            patch.dict("deep_thought.file_txt.cli._COMMAND_HANDLERS", {"config": failing_handler}),
+            pytest.raises(SystemExit) as exit_info,
+        ):
+            main()
+
+        assert exit_info.value.code == 1
+
+    def test_main_exits_1_on_unexpected_error(self) -> None:
+        """main() must exit with code 1 when an unexpected Exception is raised."""
+        failing_handler = MagicMock(side_effect=RuntimeError("something broke"))
+        with (
+            patch("sys.argv", ["file-txt", "config"]),
+            patch.dict("deep_thought.file_txt.cli._COMMAND_HANDLERS", {"config": failing_handler}),
+            pytest.raises(SystemExit) as exit_info,
+        ):
+            main()
+
+        assert exit_info.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# TestResultToDocumentSummary
+# ---------------------------------------------------------------------------
+
+
+class TestResultToDocumentSummary:
+    def test_returns_none_when_output_path_is_none(self, tmp_path: Path) -> None:
+        """_result_to_document_summary must return None when result.output_path is None."""
+        from deep_thought.file_txt.convert import ConvertResult
+
+        result_without_output = ConvertResult(
+            source_path=tmp_path / "doc.pdf",
+            output_path=None,
+            file_type="pdf",
+            word_count=0,
+            page_count=None,
+            has_images=False,
+            skipped=True,
+            skip_reason="already processed",
+        )
+
+        summary = _result_to_document_summary(result_without_output, tmp_path)
+
+        assert summary is None
+
+    def test_returns_document_summary_with_correct_fields(self, tmp_path: Path) -> None:
+        """_result_to_document_summary must populate DocumentSummary fields from the result."""
+        from deep_thought.file_txt.convert import ConvertResult
+
+        output_dir = tmp_path / "report"
+        output_dir.mkdir()
+        markdown_file = output_dir / "report.md"
+        markdown_file.write_text(
+            "---\ntool: file-txt\nsource_file: report.pdf\n---\n\n# Report Body\n\nSome content here.",
+            encoding="utf-8",
+        )
+
+        convert_result = ConvertResult(
+            source_path=tmp_path / "report.pdf",
+            output_path=markdown_file,
+            file_type="pdf",
+            word_count=4,
+            page_count=2,
+            has_images=False,
+            skipped=False,
+            skip_reason="",
+        )
+
+        summary = _result_to_document_summary(convert_result, tmp_path)
+
+        assert summary is not None
+        assert summary.name == "report"
+        assert summary.source_file == "report.pdf"
+        assert summary.file_type == "pdf"
+        assert summary.word_count == 4
+        assert "Report Body" in summary.content
+        # Frontmatter must be stripped from content
+        assert "tool: file-txt" not in summary.content
+
+    def test_relative_path_computed_from_output_root(self, tmp_path: Path) -> None:
+        """md_relative_path in the summary must be relative to output_root."""
+        from deep_thought.file_txt.convert import ConvertResult
+
+        output_dir = tmp_path / "subdir" / "doc"
+        output_dir.mkdir(parents=True)
+        markdown_file = output_dir / "doc.md"
+        markdown_file.write_text("# Content", encoding="utf-8")
+
+        convert_result = ConvertResult(
+            source_path=tmp_path / "doc.pdf",
+            output_path=markdown_file,
+            file_type="pdf",
+            word_count=1,
+            page_count=None,
+            has_images=False,
+            skipped=False,
+            skip_reason="",
+        )
+
+        summary = _result_to_document_summary(convert_result, tmp_path)
+
+        assert summary is not None
+        assert summary.md_relative_path == "subdir/doc/doc.md"

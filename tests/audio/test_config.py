@@ -192,6 +192,14 @@ class TestValidateConfig:
         issues = validate_config(config)
         assert len(issues) >= 3
 
+    def test_invalid_model_name_is_flagged(self, tmp_path: Path) -> None:
+        """An unrecognised model name must appear in the issues list."""
+        yaml_file = tmp_path / "config.yaml"
+        yaml_file.write_text(_VALID_YAML.replace("model: 'small'", "model: 'nonexistent-model'"), encoding="utf-8")
+        config = load_config(yaml_file)
+        issues = validate_config(config)
+        assert any("model" in issue for issue in issues)
+
     def test_zero_pause_threshold_is_flagged(self, tmp_path: Path) -> None:
         """A pause_threshold of 0 must appear in the issues list."""
         yaml_file = tmp_path / "config.yaml"

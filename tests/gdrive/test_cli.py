@@ -208,3 +208,115 @@ def test_cmd_backup_force_flag_is_passed_through(monkeypatch: pytest.MonkeyPatch
         main()
 
     assert captured_kwargs.get("force") is True
+
+
+# ---------------------------------------------------------------------------
+# Subcommand dispatch via main()
+# ---------------------------------------------------------------------------
+
+
+def _patch_subcommand_infrastructure(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Patch the infrastructure that every subcommand or default backup run touches.
+
+    Patches load_dotenv, open_database, load_config, and _make_client_from_config
+    so that subcommand handlers can reach their dispatch point without hitting
+    the filesystem or network.
+    """
+    from deep_thought.gdrive.config import GDriveConfig
+
+    mock_config = GDriveConfig(
+        credentials_file=str(tmp_path / "credentials.json"),
+        token_file=str(tmp_path / "token.json"),
+        scopes=["https://www.googleapis.com/auth/drive.file"],
+        source_dir=str(tmp_path / "source"),
+        drive_folder_id="root-folder-id",
+        exclude_patterns=[],
+        api_rate_limit_rpm=0,
+        retry_max_attempts=1,
+        retry_base_delay_seconds=0.0,
+    )
+
+    monkeypatch.setattr("deep_thought.gdrive.cli.load_dotenv", lambda: None)
+    monkeypatch.setattr("deep_thought.gdrive.cli.load_config", lambda _path: mock_config)
+    monkeypatch.setattr("deep_thought.gdrive.cli.open_database", lambda: MagicMock())
+    monkeypatch.setattr("deep_thought.gdrive.cli._make_client_from_config", lambda _cfg: MagicMock())
+
+
+def test_main_dispatches_to_cmd_status(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """main() with 'status' subcommand dispatches to cmd_status via _run_command."""
+    _patch_subcommand_infrastructure(monkeypatch, tmp_path)
+
+    dispatched_handlers: list[str] = []
+
+    def capture_run_command(handler: object, args: object) -> None:
+        import deep_thought.gdrive.cli as cli_module
+
+        if handler is cli_module.cmd_status:
+            dispatched_handlers.append("cmd_status")
+
+    monkeypatch.setattr("deep_thought.gdrive.cli._run_command", capture_run_command)
+
+    sys.argv = ["gdrive", "status"]
+    main()
+
+    assert "cmd_status" in dispatched_handlers
+
+
+def test_main_dispatches_to_cmd_init(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """main() with 'init' subcommand dispatches to cmd_init via _run_command."""
+    _patch_subcommand_infrastructure(monkeypatch, tmp_path)
+
+    dispatched_handlers: list[str] = []
+
+    def capture_run_command(handler: object, args: object) -> None:
+        import deep_thought.gdrive.cli as cli_module
+
+        if handler is cli_module.cmd_init:
+            dispatched_handlers.append("cmd_init")
+
+    monkeypatch.setattr("deep_thought.gdrive.cli._run_command", capture_run_command)
+
+    sys.argv = ["gdrive", "init"]
+    main()
+
+    assert "cmd_init" in dispatched_handlers
+
+
+def test_main_with_prune_flag_calls_run_prune(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """main() with --prune flag calls run_prune instead of run_backup."""
+    from deep_thought.gdrive.models import PruneResult
+
+    _patch_subcommand_infrastructure(monkeypatch, tmp_path)
+
+    prune_was_called = False
+
+    def fake_run_prune(**kwargs: object) -> PruneResult:
+        nonlocal prune_was_called
+        prune_was_called = True
+        return PruneResult(deleted=0)
+
+    monkeypatch.setattr("deep_thought.gdrive.cli.run_prune", fake_run_prune)
+
+    sys.argv = ["gdrive", "--prune"]
+    with contextlib.suppress(SystemExit):
+        main()
+
+    assert prune_was_called, "run_prune should have been called when --prune flag is set"
+
+
+def test_main_save_config_calls_handle_save_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """main() with --save-config PATH calls _handle_save_config with the given path."""
+    _patch_subcommand_infrastructure(monkeypatch, tmp_path)
+
+    captured_paths: list[str] = []
+
+    def fake_handle_save_config(destination_path_str: str) -> None:
+        captured_paths.append(destination_path_str)
+
+    monkeypatch.setattr("deep_thought.gdrive.cli._handle_save_config", fake_handle_save_config)
+
+    target_path = str(tmp_path / "output.yaml")
+    sys.argv = ["gdrive", "--save-config", target_path]
+    main()
+
+    assert captured_paths == [target_path]

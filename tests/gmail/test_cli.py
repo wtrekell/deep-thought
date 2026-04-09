@@ -16,6 +16,7 @@ from deep_thought.gmail.cli import (
     _handle_save_config,
     _run_command,
     _setup_logging,
+    cmd_auth,
     cmd_collect,
     cmd_config,
     cmd_init,
@@ -452,3 +453,205 @@ class TestMain:
             main()
             handler_arg = mock_run.call_args[0][0]
             assert handler_arg is cmd_send
+
+
+# ---------------------------------------------------------------------------
+# cmd_auth direct invocation
+# ---------------------------------------------------------------------------
+
+
+class TestCmdAuth:
+    """Tests for cmd_auth direct invocation."""
+
+    def test_calls_make_client_from_config(self) -> None:
+        """Should load config from args and create an authenticated client."""
+        mock_config = MagicMock()
+        mock_client = MagicMock()
+        args = argparse.Namespace(config=None)
+
+        with (
+            patch("deep_thought.gmail.cli._load_config_from_args", return_value=mock_config) as mock_load,
+            patch("deep_thought.gmail.cli._make_client_from_config", return_value=mock_client) as mock_make,
+        ):
+            cmd_auth(args)
+
+        mock_load.assert_called_once_with(args)
+        mock_make.assert_called_once_with(mock_config)
+
+    def test_prints_success_message(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Should print authentication success to stdout."""
+        args = argparse.Namespace(config=None)
+
+        with (
+            patch("deep_thought.gmail.cli._load_config_from_args", return_value=MagicMock()),
+            patch("deep_thought.gmail.cli._make_client_from_config", return_value=MagicMock()),
+        ):
+            cmd_auth(args)
+
+        captured = capsys.readouterr()
+        assert "Authentication successful" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# cmd_config direct invocation
+# ---------------------------------------------------------------------------
+
+
+class TestCmdConfig:
+    """Tests for cmd_config direct invocation."""
+
+    def test_prints_key_config_field_names(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Should print all key configuration field names to stdout."""
+        from deep_thought.gmail.config import GmailConfig, RuleConfig
+
+        sample_rule = RuleConfig(
+            name="receipts",
+            query="from:store@example.com",
+            ai_instructions=None,
+            actions=["archive"],
+            append_mode=False,
+        )
+        sample_config = GmailConfig(
+            credentials_path="src/config/gmail/credentials.json",
+            token_path="data/gmail/token.json",
+            scopes=["https://mail.google.com/"],
+            gemini_api_key_env="GEMINI_API_KEY",
+            gemini_model="gemini-2.5-flash",
+            gemini_rate_limit_rpm=15,
+            gmail_rate_limit_rpm=250,
+            retry_max_attempts=3,
+            retry_base_delay_seconds=1,
+            max_emails_per_run=100,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+            output_dir="data/gmail/export/",
+            rules=[sample_rule],
+        )
+        args = argparse.Namespace(config=None)
+
+        with patch("deep_thought.gmail.cli._load_config_from_args", return_value=sample_config):
+            cmd_config(args)
+
+        captured = capsys.readouterr()
+        assert "credentials_path" in captured.out
+        assert "token_path" in captured.out
+        assert "gemini_model" in captured.out
+        assert "gmail_rate_limit_rpm" in captured.out
+        assert "max_emails_per_run" in captured.out
+        assert "clean_newsletters" in captured.out
+        assert "output_dir" in captured.out
+
+    def test_prints_rule_summary(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Should print rule count and individual rule names."""
+        from deep_thought.gmail.config import GmailConfig, RuleConfig
+
+        sample_rule = RuleConfig(
+            name="invoices",
+            query="from:billing@example.com",
+            ai_instructions=None,
+            actions=[],
+            append_mode=False,
+        )
+        sample_config = GmailConfig(
+            credentials_path="src/config/gmail/credentials.json",
+            token_path="data/gmail/token.json",
+            scopes=["https://mail.google.com/"],
+            gemini_api_key_env="GEMINI_API_KEY",
+            gemini_model="gemini-2.5-flash",
+            gemini_rate_limit_rpm=15,
+            gmail_rate_limit_rpm=250,
+            retry_max_attempts=3,
+            retry_base_delay_seconds=1,
+            max_emails_per_run=100,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+            output_dir="data/gmail/export/",
+            rules=[sample_rule],
+        )
+        args = argparse.Namespace(config=None)
+
+        with patch("deep_thought.gmail.cli._load_config_from_args", return_value=sample_config):
+            cmd_config(args)
+
+        captured = capsys.readouterr()
+        assert "rules" in captured.out
+        assert "invoices" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# cmd_collect exit codes
+# ---------------------------------------------------------------------------
+
+
+class TestCmdCollectExitCodes:
+    """Tests for cmd_collect exit code behaviour."""
+
+    def _make_collect_args(self) -> argparse.Namespace:
+        """Return a minimal argparse Namespace for cmd_collect."""
+        return argparse.Namespace(
+            config=None,
+            output=None,
+            max_emails=None,
+            dry_run=False,
+            verbose=False,
+            force=False,
+            rule=None,
+        )
+
+    def test_exits_zero_when_all_processed_successfully(self) -> None:
+        """Should not raise SystemExit when all emails processed without errors."""
+        from deep_thought.gmail.models import CollectResult
+
+        successful_result = CollectResult(processed=5, skipped=0, errors=0)
+        args = self._make_collect_args()
+        mock_connection = MagicMock()
+
+        with (
+            patch("deep_thought.gmail.cli._load_config_from_args", return_value=MagicMock()),
+            patch("deep_thought.gmail.cli._make_client_from_config", return_value=MagicMock()),
+            patch("deep_thought.gmail.cli.initialize_database", return_value=mock_connection),
+            patch("deep_thought.gmail.db.queries.delete_expired_cache", return_value=0),
+            patch("deep_thought.gmail.processor.run_collection", return_value=successful_result),
+        ):
+            # Should complete without raising SystemExit
+            cmd_collect(args)
+
+    def test_exits_two_when_some_errored_and_some_processed(self) -> None:
+        """Should exit with code 2 when some emails errored and some were processed."""
+        from deep_thought.gmail.models import CollectResult
+
+        partial_error_result = CollectResult(processed=3, skipped=0, errors=2)
+        args = self._make_collect_args()
+        mock_connection = MagicMock()
+
+        with (
+            patch("deep_thought.gmail.cli._load_config_from_args", return_value=MagicMock()),
+            patch("deep_thought.gmail.cli._make_client_from_config", return_value=MagicMock()),
+            patch("deep_thought.gmail.cli.initialize_database", return_value=mock_connection),
+            patch("deep_thought.gmail.db.queries.delete_expired_cache", return_value=0),
+            patch("deep_thought.gmail.processor.run_collection", return_value=partial_error_result),
+            pytest.raises(SystemExit) as exit_info,
+        ):
+            cmd_collect(args)
+
+        assert exit_info.value.code == 2
+
+    def test_exits_one_when_all_errored(self) -> None:
+        """Should exit with code 1 when all emails errored and none were processed."""
+        from deep_thought.gmail.models import CollectResult
+
+        all_error_result = CollectResult(processed=0, skipped=0, errors=4)
+        args = self._make_collect_args()
+        mock_connection = MagicMock()
+
+        with (
+            patch("deep_thought.gmail.cli._load_config_from_args", return_value=MagicMock()),
+            patch("deep_thought.gmail.cli._make_client_from_config", return_value=MagicMock()),
+            patch("deep_thought.gmail.cli.initialize_database", return_value=mock_connection),
+            patch("deep_thought.gmail.db.queries.delete_expired_cache", return_value=0),
+            patch("deep_thought.gmail.processor.run_collection", return_value=all_error_result),
+            pytest.raises(SystemExit) as exit_info,
+        ):
+            cmd_collect(args)
+
+        assert exit_info.value.code == 1

@@ -342,6 +342,66 @@ class TestResearch:
 
 
 # ---------------------------------------------------------------------------
+# TestResearchErrorHandling
+# ---------------------------------------------------------------------------
+
+
+class TestResearchErrorHandling:
+    """Tests for error paths in PerplexityClient.research."""
+
+    @pytest.mark.error_handling
+    def test_submit_response_missing_id_raises_value_error(self, sample_config: ResearchConfig) -> None:
+        """Should raise ValueError when the async submit response has no 'id' key."""
+        # A response body without the required 'id' field triggers the guard in research().
+        submit_body_without_id = {"status": "pending"}
+        mock_submit_response = _make_mock_response(200, submit_body_without_id)
+
+        client = _make_client(sample_config)
+        client._client = MagicMock()
+        client._client.request.return_value = mock_submit_response
+
+        with pytest.raises(ValueError, match="no job ID"):
+            client.research("Deep question?")
+
+    @pytest.mark.error_handling
+    def test_failed_poll_status_raises_runtime_error(self, sample_config: ResearchConfig) -> None:
+        """Should raise RuntimeError when the poll response returns status 'FAILED'."""
+        submit_body = make_async_submit_response(job_id="job_fail_test")
+        failed_poll_body = {"id": "job_fail_test", "status": "FAILED", "error": "something broke"}
+
+        mock_submit_response = _make_mock_response(200, submit_body)
+        mock_failed_poll_response = _make_mock_response(200, failed_poll_body)
+
+        client = _make_client(sample_config)
+        client._client = MagicMock()
+        client._client.request.side_effect = [mock_submit_response, mock_failed_poll_response]
+
+        with (
+            patch("time.sleep"),
+            pytest.raises(RuntimeError, match="something broke"),
+        ):
+            client.research("Will this fail?")
+
+    @pytest.mark.error_handling
+    def test_429_retry_after_header_is_honoured(self, sample_config: ResearchConfig) -> None:
+        """A 429 with Retry-After: 5 must sleep for 5 seconds before retrying."""
+        rate_limit_response = _make_mock_response(429, {}, headers={"Retry-After": "5"})
+        rate_limit_response.is_client_error = False  # 429 is retryable, not permanent
+        success_response = _make_mock_response(200, make_search_response())
+
+        client = _make_client(sample_config)
+        client._client = MagicMock()
+        client._client.request.side_effect = [rate_limit_response, success_response]
+
+        with patch("time.sleep") as mock_sleep:
+            client._execute_with_retry("POST", "/chat/completions", json={})
+
+        # The Retry-After header value (5) must be used as the sleep duration.
+        mock_sleep.assert_called_once_with(5.0)
+        assert client._client.request.call_count == 2
+
+
+# ---------------------------------------------------------------------------
 # TestRetryWithBackoff
 # ---------------------------------------------------------------------------
 

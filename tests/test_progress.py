@@ -88,14 +88,29 @@ class TestSpinnerContext:
         assert executed
 
     def test_non_tty_prints_description(self) -> None:
-        """When stderr is not a TTY, should print description and yield."""
-        with patch("deep_thought.progress.sys.stderr") as mock_stderr:
+        """When stderr is not a TTY, should print the description string to stderr."""
+        with (
+            patch("deep_thought.progress.sys.stderr") as mock_stderr,
+            patch("deep_thought.progress.print") as mock_print,
+        ):
             mock_stderr.isatty.return_value = False
-            mock_stderr.write = lambda x: None  # Absorb print output
             executed = False
             with spinner_context("Searching"):
                 executed = True
         assert executed
+        mock_print.assert_called_once_with("Searching", file=mock_stderr)
+
+    def test_non_tty_yields_inside_spinner_context(self) -> None:
+        """When stderr is not a TTY, spinner_context yields and the body executes."""
+        with (
+            patch("deep_thought.progress.sys.stderr") as mock_stderr,
+            patch("deep_thought.progress.print"),
+        ):
+            mock_stderr.isatty.return_value = False
+            body_executed = False
+            with spinner_context("Processing"):
+                body_executed = True
+        assert body_executed
 
 
 # ---------------------------------------------------------------------------

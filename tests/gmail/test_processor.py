@@ -1082,3 +1082,272 @@ class TestCollectionIntegration:
         # No DB records
         all_emails = get_all_processed_emails(in_memory_db)
         assert all_emails == []
+
+
+# ---------------------------------------------------------------------------
+# _process_single_email — AI extraction path
+# ---------------------------------------------------------------------------
+
+
+class TestProcessSingleEmailAiExtraction:
+    """Tests for the AI extractor path in _process_single_email."""
+
+    def test_ai_extractor_is_called_when_rule_has_instructions(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        tmp_path: Path,
+    ) -> None:
+        """Should call extractor.extract when rule has ai_instructions."""
+        from unittest.mock import MagicMock as _MagicMock
+
+        ai_rule = RuleConfig(
+            name="ai_rule",
+            query="from:ai@example.com",
+            ai_instructions="Extract the key action items from this email.",
+            actions=[],
+            append_mode=False,
+        )
+        message = make_mock_message(
+            message_id="ai_msg_1",
+            subject="Action Items",
+            body_text="Please review and approve the budget by Friday.",
+        )
+        mock_gmail_client.get_message.return_value = message
+
+        mock_extractor = _MagicMock()
+        extracted_text = "Key action: approve budget by Friday"
+        mock_extractor.extract.return_value = extracted_text
+
+        status, _actions = _process_single_email(
+            gmail_client=mock_gmail_client,
+            message_stub={"id": "ai_msg_1"},
+            rule_config=ai_rule,
+            db_conn=in_memory_db,
+            extractor=mock_extractor,
+            output_dir=tmp_path,
+            dry_run=False,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+        )
+
+        assert status == "ok"
+        mock_extractor.extract.assert_called_once()
+
+    def test_ai_extractor_result_is_written_to_output_file(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        tmp_path: Path,
+    ) -> None:
+        """Output file should contain the extracted text returned by the extractor."""
+        from unittest.mock import MagicMock as _MagicMock
+
+        ai_rule = RuleConfig(
+            name="ai_rule_output",
+            query="from:ai@example.com",
+            ai_instructions="Summarise this email.",
+            actions=[],
+            append_mode=False,
+        )
+        message = make_mock_message(
+            message_id="ai_msg_2",
+            subject="Summary Target",
+            body_text="Long email body with many details.",
+        )
+        mock_gmail_client.get_message.return_value = message
+
+        extracted_text = "Concise AI summary of the email."
+        mock_extractor = _MagicMock()
+        mock_extractor.extract.return_value = extracted_text
+
+        _process_single_email(
+            gmail_client=mock_gmail_client,
+            message_stub={"id": "ai_msg_2"},
+            rule_config=ai_rule,
+            db_conn=in_memory_db,
+            extractor=mock_extractor,
+            output_dir=tmp_path,
+            dry_run=False,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+        )
+
+        rule_dir = tmp_path / "ai_rule_output"
+        markdown_files = list(rule_dir.glob("*.md"))
+        assert len(markdown_files) == 1
+        file_content = markdown_files[0].read_text(encoding="utf-8")
+        assert extracted_text in file_content
+
+    def test_extractor_not_called_without_ai_instructions(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        tmp_path: Path,
+    ) -> None:
+        """Should not call extractor when rule has no ai_instructions."""
+        from unittest.mock import MagicMock as _MagicMock
+
+        no_ai_rule = RuleConfig(
+            name="no_ai_rule",
+            query="from:plain@example.com",
+            ai_instructions=None,
+            actions=[],
+            append_mode=False,
+        )
+        message = make_mock_message(message_id="no_ai_msg", body_text="Plain email body.")
+        mock_gmail_client.get_message.return_value = message
+
+        mock_extractor = _MagicMock()
+
+        _process_single_email(
+            gmail_client=mock_gmail_client,
+            message_stub={"id": "no_ai_msg"},
+            rule_config=no_ai_rule,
+            db_conn=in_memory_db,
+            extractor=mock_extractor,
+            output_dir=tmp_path,
+            dry_run=False,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+        )
+
+        mock_extractor.extract.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _process_single_email — HTML cleaning path
+# ---------------------------------------------------------------------------
+
+
+class TestProcessSingleEmailHtmlCleaning:
+    """Tests for the HTML cleaning path in _process_single_email."""
+
+    def test_clean_newsletters_calls_clean_newsletter_html(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        tmp_path: Path,
+    ) -> None:
+        """Should call clean_newsletter_html when clean_newsletters is True and HTML is present."""
+        from unittest.mock import patch as _patch
+
+        html_rule = RuleConfig(
+            name="html_rule",
+            query="label:newsletter",
+            ai_instructions=None,
+            actions=[],
+            append_mode=False,
+        )
+        html_body = "<html><body><h1>Newsletter</h1><p>Article content here.</p></body></html>"
+        message = make_mock_message(
+            message_id="html_msg_1",
+            subject="Weekly Newsletter",
+            body_text="Plain text fallback.",
+            body_html=html_body,
+        )
+        mock_gmail_client.get_message.return_value = message
+
+        cleaned_text = "Newsletter: Article content here."
+
+        with _patch("deep_thought.gmail.processor.clean_newsletter_html", return_value=cleaned_text) as mock_cleaner:
+            status, _actions = _process_single_email(
+                gmail_client=mock_gmail_client,
+                message_stub={"id": "html_msg_1"},
+                rule_config=html_rule,
+                db_conn=in_memory_db,
+                extractor=None,
+                output_dir=tmp_path,
+                dry_run=False,
+                clean_newsletters=True,
+                decision_cache_ttl=3600,
+            )
+
+        assert status == "ok"
+        mock_cleaner.assert_called_once()
+
+    def test_cleaned_text_appears_in_output_file(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        tmp_path: Path,
+    ) -> None:
+        """The cleaned body text should be written into the output markdown file."""
+        from unittest.mock import patch as _patch
+
+        html_rule = RuleConfig(
+            name="html_rule_output",
+            query="label:newsletter",
+            ai_instructions=None,
+            actions=[],
+            append_mode=False,
+        )
+        html_body = "<html><body><p>Raw HTML content.</p></body></html>"
+        message = make_mock_message(
+            message_id="html_msg_2",
+            subject="HTML Output Test",
+            body_text="",
+            body_html=html_body,
+        )
+        mock_gmail_client.get_message.return_value = message
+
+        cleaned_text = "Cleaned newsletter text for output."
+
+        with _patch("deep_thought.gmail.processor.clean_newsletter_html", return_value=cleaned_text):
+            _process_single_email(
+                gmail_client=mock_gmail_client,
+                message_stub={"id": "html_msg_2"},
+                rule_config=html_rule,
+                db_conn=in_memory_db,
+                extractor=None,
+                output_dir=tmp_path,
+                dry_run=False,
+                clean_newsletters=True,
+                decision_cache_ttl=3600,
+            )
+
+        rule_dir = tmp_path / "html_rule_output"
+        markdown_files = list(rule_dir.glob("*.md"))
+        assert len(markdown_files) == 1
+        file_content = markdown_files[0].read_text(encoding="utf-8")
+        assert cleaned_text in file_content
+
+    def test_html_cleaning_skipped_when_disabled(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        tmp_path: Path,
+    ) -> None:
+        """Should not call clean_newsletter_html when clean_newsletters is False."""
+        from unittest.mock import patch as _patch
+
+        html_rule = RuleConfig(
+            name="no_clean_rule",
+            query="label:newsletter",
+            ai_instructions=None,
+            actions=[],
+            append_mode=False,
+        )
+        html_body = "<html><body><p>HTML body content.</p></body></html>"
+        message = make_mock_message(
+            message_id="html_msg_3",
+            subject="No Clean Test",
+            body_text="Plain text body.",
+            body_html=html_body,
+        )
+        mock_gmail_client.get_message.return_value = message
+
+        with _patch("deep_thought.gmail.processor.clean_newsletter_html") as mock_cleaner:
+            _process_single_email(
+                gmail_client=mock_gmail_client,
+                message_stub={"id": "html_msg_3"},
+                rule_config=html_rule,
+                db_conn=in_memory_db,
+                extractor=None,
+                output_dir=tmp_path,
+                dry_run=False,
+                clean_newsletters=False,
+                decision_cache_ttl=3600,
+            )
+
+        mock_cleaner.assert_not_called()

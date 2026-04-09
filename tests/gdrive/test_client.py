@@ -218,6 +218,22 @@ def test_ensure_folder_creates_folder_when_not_found() -> None:
     mock_service.files.return_value.create.assert_called_once()
 
 
+def test_delete_file_calls_drive_api_delete() -> None:
+    """delete_file calls files().delete() with the correct fileId."""
+    client = _make_client()
+    mock_service = MagicMock()
+    client._service = mock_service  # type: ignore[attr-defined]
+
+    mock_delete_request = MagicMock()
+    mock_delete_request.execute.return_value = None
+    mock_service.files.return_value.delete.return_value = mock_delete_request
+
+    client.delete_file("file-to-delete-id")
+
+    mock_service.files.return_value.delete.assert_called_once_with(fileId="file-to-delete-id")
+    mock_delete_request.execute.assert_called_once()
+
+
 def test_rate_limiting_sleeps_between_calls(tmp_path: Path) -> None:
     """DriveClient sleeps to respect the configured rate limit."""
     test_file = tmp_path / "file.txt"

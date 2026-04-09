@@ -315,6 +315,43 @@ class TestSyncSingleCalendar:
         mock_delete_db.assert_called_once()
         assert result.cancelled == 1
 
+    def test_tombstone_event_deletes_local_record_and_file(
+        self, seeded_db: sqlite3.Connection, mock_gcal_client: MagicMock, tmp_path: Path
+    ) -> None:
+        """A tombstone event (cancelled with no start/end fields) should delete DB record and file.
+
+        The Google Calendar incremental sync API returns tombstone entries for deleted
+        events: only 'id', 'status: "cancelled"', and 'updated' are present — no 'start'
+        or 'end' fields. The pull logic must handle this without crashing.
+        """
+        # Build a tombstone dict manually — no start/end fields at all.
+        tombstone_event: dict[str, Any] = {
+            "id": "evt_timed_1",
+            "status": "cancelled",
+            "updated": "2026-04-09T10:00:00.000Z",
+        }
+        mock_gcal_client.list_events.return_value = ([tombstone_event], None)
+        config = _make_config(include_cancelled=False, single_events=True)
+
+        with (
+            patch("deep_thought.gcal.pull.delete_event_file") as mock_delete_file,
+            patch("deep_thought.gcal.pull.delete_event") as mock_delete_db,
+        ):
+            result = _sync_single_calendar(
+                mock_gcal_client,
+                "primary",
+                "Personal",
+                config,
+                seeded_db,
+                tmp_path,
+                dry_run=False,
+                force=False,
+            )
+
+        mock_delete_file.assert_called_once()
+        mock_delete_db.assert_called_once()
+        assert result.cancelled == 1
+
     def test_unchanged_event_is_skipped(
         self, seeded_db: sqlite3.Connection, mock_gcal_client: MagicMock, tmp_path: Path
     ) -> None:

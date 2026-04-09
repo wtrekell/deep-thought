@@ -27,7 +27,7 @@ from deep_thought.todoist.config import (
     TodoistConfig,
 )
 from deep_thought.todoist.db.schema import initialize_database
-from deep_thought.todoist.pull import _filter_api_projects_to_configured, pull
+from deep_thought.todoist.pull import _filter_api_projects_to_configured, _prune_old_snapshots, pull
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -315,3 +315,106 @@ class TestPull:
         result = pull(mock_client, config_with_label_filter, memory_conn, dry_run=True)
         assert result.tasks_synced == 1
         assert result.tasks_filtered_out == 1
+
+
+# ---------------------------------------------------------------------------
+# TestPruneOldSnapshots
+# ---------------------------------------------------------------------------
+
+
+class TestPruneOldSnapshots:
+    """Tests for _prune_old_snapshots.
+
+    Files are sorted lexicographically — since filenames use ISO-8601 timestamps
+    this is equivalent to chronological order. The function deletes all but the
+    most-recent keep_count .json files.
+    """
+
+    def _create_snapshot_files(self, directory: Path, names: list[str]) -> list[Path]:
+        """Write empty .json files with the given names and return their paths."""
+        created_paths: list[Path] = []
+        for snapshot_name in names:
+            snapshot_file = directory / snapshot_name
+            snapshot_file.write_text("{}", encoding="utf-8")
+            created_paths.append(snapshot_file)
+        return created_paths
+
+    def test_keep_count_zero_retains_all_files(self, tmp_path: Path) -> None:
+        """keep_count=0 must leave all files in place (nothing to delete)."""
+        self._create_snapshot_files(
+            tmp_path,
+            [
+                "2026-04-01T120000.json",
+                "2026-04-02T120000.json",
+                "2026-04-03T120000.json",
+            ],
+        )
+
+        _prune_old_snapshots(tmp_path, keep_count=0)
+
+        remaining_json_files = list(tmp_path.glob("*.json"))
+        assert len(remaining_json_files) == 3
+
+    def test_keep_count_one_retains_only_newest(self, tmp_path: Path) -> None:
+        """keep_count=1 must delete all but the lexicographically last file."""
+        snapshot_names = [
+            "2026-04-01T120000.json",
+            "2026-04-02T120000.json",
+            "2026-04-03T120000.json",
+        ]
+        self._create_snapshot_files(tmp_path, snapshot_names)
+
+        _prune_old_snapshots(tmp_path, keep_count=1)
+
+        remaining_json_files = sorted(tmp_path.glob("*.json"))
+        assert len(remaining_json_files) == 1
+        assert remaining_json_files[0].name == "2026-04-03T120000.json"
+
+    def test_keep_count_three_retains_three_newest(self, tmp_path: Path) -> None:
+        """keep_count=3 must retain exactly the three most-recent files."""
+        snapshot_names = [
+            "2026-03-28T120000.json",
+            "2026-03-29T120000.json",
+            "2026-03-30T120000.json",
+            "2026-03-31T120000.json",
+            "2026-04-01T120000.json",
+        ]
+        self._create_snapshot_files(tmp_path, snapshot_names)
+
+        _prune_old_snapshots(tmp_path, keep_count=3)
+
+        remaining_names = sorted(path.name for path in tmp_path.glob("*.json"))
+        assert len(remaining_names) == 3
+        assert "2026-03-30T120000.json" in remaining_names
+        assert "2026-03-31T120000.json" in remaining_names
+        assert "2026-04-01T120000.json" in remaining_names
+        # The two oldest must be gone.
+        assert "2026-03-28T120000.json" not in remaining_names
+        assert "2026-03-29T120000.json" not in remaining_names
+
+    def test_empty_directory_does_not_crash(self, tmp_path: Path) -> None:
+        """Calling _prune_old_snapshots on an empty directory must not raise."""
+        _prune_old_snapshots(tmp_path, keep_count=5)
+        assert list(tmp_path.glob("*.json")) == []
+
+    def test_non_json_files_are_ignored(self, tmp_path: Path) -> None:
+        """Non-.json files must not be counted towards keep_count or deleted."""
+        self._create_snapshot_files(
+            tmp_path,
+            ["2026-04-01T120000.json", "2026-04-02T120000.json"],
+        )
+        readme_file = tmp_path / "README.txt"
+        readme_file.write_text("not a snapshot\n", encoding="utf-8")
+        log_file = tmp_path / "debug.log"
+        log_file.write_text("log output\n", encoding="utf-8")
+
+        # With keep_count=1, only the oldest .json should be deleted.
+        _prune_old_snapshots(tmp_path, keep_count=1)
+
+        remaining_json_files = list(tmp_path.glob("*.json"))
+        assert len(remaining_json_files) == 1
+        assert remaining_json_files[0].name == "2026-04-02T120000.json"
+
+        # Non-.json files must survive untouched.
+        assert readme_file.exists()
+        assert log_file.exists()

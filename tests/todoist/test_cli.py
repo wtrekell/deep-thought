@@ -881,3 +881,17 @@ class TestMain:
             main()
         assert exc_info.value.code == 1
         assert "unexpected error" in capsys.readouterr().err.lower()
+
+    def test_dispatches_to_attach_handler(self) -> None:
+        """main must dispatch the 'attach' subcommand to cmd_attach.
+
+        The dispatch dict (_COMMAND_HANDLERS) holds references captured at import
+        time, so we patch the dict entry rather than the module-level attribute.
+        """
+        mock_handler = MagicMock()
+        with (
+            patch("sys.argv", ["todoist", "attach", "task-42", "/tmp/report.pdf"]),
+            patch.dict("deep_thought.todoist.cli._COMMAND_HANDLERS", {"attach": mock_handler}),
+        ):
+            main()
+            mock_handler.assert_called_once()

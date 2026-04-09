@@ -608,6 +608,21 @@ class TestGetAudioDuration:
 
         assert isinstance(result, float)
 
+    @pytest.mark.error_handling
+    def test_raises_runtime_error_when_ffprobe_not_found(self, tmp_path: Path) -> None:
+        """_get_audio_duration must raise RuntimeError when ffprobe is not on PATH."""
+        audio_file = tmp_path / "audio.wav"
+        audio_file.touch()
+
+        with (
+            patch(
+                "deep_thought.audio.engines.mlx_whisper_engine.subprocess.run",
+                side_effect=FileNotFoundError("ffprobe: No such file or directory"),
+            ),
+            pytest.raises(RuntimeError, match="ffprobe"),
+        ):
+            _get_audio_duration(audio_file)
+
 
 # ---------------------------------------------------------------------------
 # Test _split_audio

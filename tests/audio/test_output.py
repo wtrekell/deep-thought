@@ -436,6 +436,24 @@ class TestWriteTranscript:
         )
         assert output_path.exists()
 
+    @pytest.mark.error_handling
+    def test_unknown_output_mode_raises_value_error(self, tmp_path: Path) -> None:
+        """write_transcript must raise ValueError when output_mode is not recognised."""
+        segments = [_make_segment(text="Test.")]
+        source_path = Path("/audio/sample.mp3")
+        with pytest.raises(ValueError, match="Unknown output_mode"):
+            write_transcript(
+                segments,
+                source_path,
+                tmp_path,
+                engine="mlx",
+                model="small",
+                language="en",
+                duration_seconds=1.0,
+                speaker_count=0,
+                output_mode="invalid",
+            )
+
     @pytest.mark.parametrize("output_mode", ["paragraph", "segment", "timestamp"])
     def test_all_output_modes_produce_valid_file(self, tmp_path: Path, output_mode: str) -> None:
         """Every output mode must produce a non-empty file without error."""

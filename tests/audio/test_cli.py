@@ -328,6 +328,37 @@ class TestCommandHandlers:
         # Original content must be preserved — not overwritten
         assert project_config.read_text(encoding="utf-8") == "engine: whisper\n"
 
+    def test_cmd_transcribe_dry_run_prints_preview_without_processing(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """cmd_transcribe with dry_run=True must print a preview and skip all processing."""
+        audio_file_one = tmp_path / "recording.wav"
+        audio_file_two = tmp_path / "interview.mp3"
+        audio_file_one.write_bytes(b"wav data")
+        audio_file_two.write_bytes(b"mp3 data")
+
+        args = _make_transcribe_args(dry_run=True, input=str(tmp_path))
+        mock_config = _make_config()
+
+        with (
+            patch("deep_thought.audio.cli.load_config", return_value=mock_config),
+            patch("deep_thought.audio.cli.validate_config", return_value=[]),
+            patch("deep_thought.audio.filters.collect_input_files", return_value=[audio_file_one, audio_file_two]),
+            patch("deep_thought.audio.db.schema.initialize_database") as mock_init_db,
+            patch("deep_thought.audio.engines.create_engine") as mock_create_engine,
+            patch("deep_thought.audio.processor.process_batch") as mock_process_batch,
+        ):
+            cmd_transcribe(args)
+
+        # DB initialization and engine creation must not happen during a dry run
+        mock_init_db.assert_not_called()
+        mock_create_engine.assert_not_called()
+        mock_process_batch.assert_not_called()
+
+        captured = capsys.readouterr()
+        assert "[dry-run]" in captured.out
+        assert "2" in captured.out  # file count
+
     def test_cmd_transcribe_calls_process_batch_with_correct_args(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
