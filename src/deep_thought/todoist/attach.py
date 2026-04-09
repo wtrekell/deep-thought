@@ -116,7 +116,7 @@ def attach_file(
         "project_id": None,
         "content": message,
         "posted_at": comment.posted_at,
-        "poster_id": None,
+        "poster_id": comment.poster_id,
         "attachment_json": json.dumps(attachment),
     }
     upsert_comment(conn, comment_data)

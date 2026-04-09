@@ -202,34 +202,6 @@ def get_all_collected_posts(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     return _rows_to_dicts(cursor.fetchall())
 
 
-def get_posts_needing_update(conn: sqlite3.Connection, rule_name: str) -> list[dict[str, Any]]:
-    """Return all posts for a rule that may have new comment activity since last sync.
-
-    Returns every post collected by the given rule that has a status of 'ok'.
-    The application layer is responsible for comparing the stored comment_count
-    against the live Reddit API count to determine which posts actually have
-    new activity. All 'ok' posts are returned so the caller has full latitude
-    to decide the update strategy (e.g., only re-fetch posts older than N hours,
-    or posts above a score threshold).
-
-    Args:
-        conn: An open SQLite connection.
-        rule_name: The name of the collection rule to filter on.
-
-    Returns:
-        List of post dicts where status = 'ok', ordered by synced_at ascending
-        (oldest synced first, so the most stale posts are prioritized).
-    """
-    cursor = conn.execute(
-        """
-        SELECT * FROM collected_posts
-        WHERE rule_name = ? AND status = 'ok'
-        ORDER BY synced_at ASC;
-        """,
-        (rule_name,),
-    )
-    return _rows_to_dicts(cursor.fetchall())
-
 
 def delete_all_posts(conn: sqlite3.Connection) -> int:
     """Delete all rows from collected_posts. Used by the --force flag.

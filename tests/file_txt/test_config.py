@@ -14,7 +14,6 @@ from deep_thought.file_txt.config import (
     _parse_output_config,
     _parse_pdf_config,
     load_config,
-    save_default_config,
     validate_config,
 )
 
@@ -285,40 +284,6 @@ class TestParseFilterConfigFileTxt:
         result = _parse_filter_config({})
         assert result.allowed_extensions == []
         assert result.exclude_patterns == []
-
-
-# ---------------------------------------------------------------------------
-# _parse_email_config (internal helper)
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# save_default_config
-# ---------------------------------------------------------------------------
-
-
-class TestSaveDefaultConfig:
-    def test_writes_config_to_destination(self, tmp_path: Path) -> None:
-        """save_default_config must write the bundled config to the given path."""
-        destination_file = tmp_path / "config.yaml"
-        save_default_config(destination_file)
-        assert destination_file.exists()
-        written_content = destination_file.read_text(encoding="utf-8")
-        assert "output_dir" in written_content
-
-    @pytest.mark.error_handling
-    def test_raises_if_file_exists(self, tmp_path: Path) -> None:
-        """save_default_config must raise FileExistsError if destination exists."""
-        destination_file = tmp_path / "config.yaml"
-        destination_file.write_text("existing content", encoding="utf-8")
-        with pytest.raises(FileExistsError):
-            save_default_config(destination_file)
-
-    def test_creates_parent_directories(self, tmp_path: Path) -> None:
-        """save_default_config must create parent dirs if they don't exist."""
-        destination_file = tmp_path / "nested" / "deep" / "config.yaml"
-        save_default_config(destination_file)
-        assert destination_file.exists()
 
 
 # ---------------------------------------------------------------------------

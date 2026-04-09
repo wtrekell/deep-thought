@@ -14,12 +14,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from deep_thought.gdrive._auth import (
-    _KEYRING_ACCOUNT,
-    _KEYRING_SERVICE,
     _keychain_available,
     _persist_credentials,
     get_credentials,
 )
+from deep_thought.secrets import _KEYRING_SERVICE_PREFIX, _OAUTH_ACCOUNT
+
+_KEYRING_SERVICE = f"{_KEYRING_SERVICE_PREFIX}gdrive"
+_KEYRING_ACCOUNT = _OAUTH_ACCOUNT
 
 if TYPE_CHECKING:
     from pathlib import Path

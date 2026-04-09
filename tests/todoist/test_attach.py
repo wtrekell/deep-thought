@@ -116,6 +116,7 @@ class TestAttachFile:
         mock_comment = MagicMock()
         mock_comment.id = "comment-abc"
         mock_comment.posted_at = "2026-04-05T10:00:00"
+        mock_comment.poster_id = None
 
         client = MagicMock()
         client.upload_attachment.return_value = attachment_dict
@@ -147,6 +148,7 @@ class TestAttachFile:
         mock_comment = MagicMock()
         mock_comment.id = "comment-xyz"
         mock_comment.posted_at = "2026-04-05T10:00:00"
+        mock_comment.poster_id = None
 
         client = MagicMock()
         client.upload_attachment.return_value = attachment_dict
@@ -178,6 +180,7 @@ class TestAttachFile:
         mock_comment = MagicMock()
         mock_comment.id = "c1"
         mock_comment.posted_at = "2026-04-05T10:00:00"
+        mock_comment.poster_id = None
 
         client = MagicMock()
         client.upload_attachment.return_value = attachment_dict

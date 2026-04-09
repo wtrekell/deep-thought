@@ -34,9 +34,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_KEYRING_SERVICE = "deep-thought-gdrive"
-_KEYRING_ACCOUNT = "oauth-token"
-
 _GDRIVE_SERVICE = "gdrive"
 
 

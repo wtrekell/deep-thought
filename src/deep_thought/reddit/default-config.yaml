@@ -10,6 +10,7 @@ max_posts_per_run: 500 # Global cap across all rules per invocation
 
 # Output
 output_dir: "data/reddit/export/"
+qdrant_collection: "deep_thought_db"
 
 rules:
   - name: "python_top_week"

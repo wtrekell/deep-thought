@@ -12,7 +12,7 @@ handled by ``output.py``.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
@@ -184,44 +184,3 @@ class ResearchResult:
             processed_date=processed_timestamp,
         )
 
-
-# ---------------------------------------------------------------------------
-# Result dataclasses
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class SearchCommandResult:
-    """Summary of a completed search command invocation."""
-
-    output_path: str = ""
-    """Path where the markdown output file was written, or empty for stdout."""
-
-    query: str = ""
-    """The research question that was submitted."""
-
-    source_count: int = 0
-    """Number of source citations returned."""
-
-    cost_usd: float = 0.0
-    """Total API cost in USD."""
-
-
-@dataclass
-class ResearchCommandResult:
-    """Summary of a completed research command invocation."""
-
-    output_path: str = ""
-    """Path where the markdown output file was written, or empty for stdout."""
-
-    query: str = ""
-    """The research question that was submitted."""
-
-    source_count: int = 0
-    """Number of source citations returned."""
-
-    cost_usd: float = 0.0
-    """Total API cost in USD."""
-
-    context_file_count: int = field(default=0)
-    """Number of context files included in the query."""

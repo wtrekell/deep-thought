@@ -130,7 +130,7 @@ def _get_poster_name(poster_id: str) -> str:
     return poster_id
 
 
-def _render_comment_line(conn: sqlite3.Connection, comment: dict[str, Any], include_attachments: bool) -> str:
+def _render_comment_line(comment: dict[str, Any], include_attachments: bool) -> str:
     """Render a single comment as a markdown list entry.
 
     Format: [YYYY-MM-DD poster-name] Comment text
@@ -144,7 +144,6 @@ def _render_comment_line(conn: sqlite3.Connection, comment: dict[str, Any], incl
     the flat list format parseable.
 
     Args:
-        conn: An open SQLite connection (for poster name lookup).
         comment: A comment dict from get_comments_for_task().
         include_attachments: When True, append attachment metadata if present.
 
@@ -259,7 +258,7 @@ def _render_task_block(
         if comments:
             lines.append(f"{indent}  - comments:")
             for comment in comments:
-                comment_line = _render_comment_line(conn, comment, config.comments.include_attachments)
+                comment_line = _render_comment_line(comment, config.comments.include_attachments)
                 lines.append(f"{indent}    - {comment_line}")
 
     # Subtasks (one level of indentation added)
