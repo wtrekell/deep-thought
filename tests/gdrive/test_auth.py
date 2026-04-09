@@ -250,6 +250,18 @@ def test_get_credentials_raises_if_credentials_file_missing() -> None:
         get_credentials("/nonexistent/credentials.json", "", _SCOPES)
 
 
+def test_get_credentials_raises_when_no_keychain_and_no_token(tmp_path: Path) -> None:
+    """In non-interactive mode, get_credentials raises instead of opening a browser."""
+    with (
+        patch.dict("os.environ", {"DEEP_THOUGHT_NO_KEYCHAIN": "1"}),
+        patch("deep_thought.secrets.InstalledAppFlow") as mock_flow_cls,
+        pytest.raises(RuntimeError, match="interactive browser auth is disabled"),
+    ):
+        get_credentials("/fake/credentials.json", str(tmp_path / "missing-token.json"), _SCOPES)
+
+    mock_flow_cls.from_client_secrets_file.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Error paths
 # ---------------------------------------------------------------------------

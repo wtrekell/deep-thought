@@ -127,8 +127,13 @@ def set_secret(service: str, key_name: str, value: str) -> None:
         value: The secret value to store.
 
     Raises:
-        RuntimeError: If the keychain write fails (e.g., keychain is locked).
+        RuntimeError: If the keychain is unavailable or the write fails.
     """
+    if not keychain_available():
+        raise RuntimeError(
+            "Keychain is not available (no backend or DEEP_THOUGHT_NO_KEYCHAIN=1). "
+            "Cannot store secrets without a keychain."
+        )
     full_service = _service_name(service)
     try:
         keyring.set_password(full_service, key_name, value)
@@ -147,7 +152,15 @@ def delete_secret(service: str, key_name: str) -> None:
     Args:
         service: Short tool identifier (e.g., ``"todoist"``).
         key_name: Account / key name within the service.
+
+    Raises:
+        RuntimeError: If the keychain is not available.
     """
+    if not keychain_available():
+        raise RuntimeError(
+            "Keychain is not available (no backend or DEEP_THOUGHT_NO_KEYCHAIN=1). "
+            "Cannot delete secrets without a keychain."
+        )
     full_service = _service_name(service)
     try:
         keyring.delete_password(full_service, key_name)
@@ -343,6 +356,13 @@ def get_oauth_credentials(
         return existing_credentials
 
     # No valid token — run the interactive browser consent flow.
+    if os.environ.get("DEEP_THOUGHT_NO_KEYCHAIN") == "1":
+        raise RuntimeError(
+            f"No valid OAuth token available for service '{service}' and interactive browser "
+            "auth is disabled (DEEP_THOUGHT_NO_KEYCHAIN=1). "
+            "Run the tool's auth command interactively first to obtain a token."
+        )
+
     resolved_credentials_path = Path(credentials_path)
     if not resolved_credentials_path.exists():
         raise FileNotFoundError(
