@@ -165,8 +165,10 @@ def _parse_claude_config(raw_claude: dict[str, Any]) -> ClaudeConfig:
     )
 
 
-def _parse_projects(raw_projects: list[dict[str, Any]]) -> list[str]:
+def _parse_projects(raw_projects: list[dict[str, Any]] | None) -> list[str]:
     """Extract project names from the projects list."""
+    if not raw_projects:
+        return []
     return [entry["name"] for entry in raw_projects if "name" in entry]
 
 
@@ -194,20 +196,20 @@ def load_config(config_path: Path | None = None) -> TodoistConfig:
     if not isinstance(raw, dict):
         raise ValueError(f"Configuration file must contain a YAML mapping, got: {type(raw).__name__}")
 
-    raw_todoist: dict[str, Any] = raw.get("todoist", {})
+    raw_todoist: dict[str, Any] = raw.get("todoist") or {}
     api_token_env: str = raw_todoist.get("api_token_env", "TODOIST_API_TOKEN")
 
-    raw_projects: list[dict[str, Any]] = raw.get("projects", [])
+    raw_projects: list[dict[str, Any]] = raw.get("projects") or []
     project_names = _parse_projects(raw_projects)
 
-    raw_filters: dict[str, Any] = raw.get("filters", {})
+    raw_filters: dict[str, Any] = raw.get("filters") or {}
     pull_filters = _parse_pull_filters(raw_filters)
     push_filters = _parse_push_filters(raw_filters)
 
-    raw_comments: dict[str, Any] = raw.get("comments", {})
+    raw_comments: dict[str, Any] = raw.get("comments") or {}
     comment_config = _parse_comment_config(raw_comments)
 
-    raw_claude: dict[str, Any] = raw.get("claude", {})
+    raw_claude: dict[str, Any] = raw.get("claude") or {}
     claude_config = _parse_claude_config(raw_claude)
 
     return TodoistConfig(
