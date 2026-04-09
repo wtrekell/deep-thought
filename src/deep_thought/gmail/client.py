@@ -354,6 +354,38 @@ class GmailClient:
     # Label management
     # -----------------------------------------------------------------------
 
+    def get_label(self, label_name: str) -> str | None:
+        """Get the label ID for a name without creating it if missing.
+
+        Results are served from the same cache used by get_or_create_label.
+        Returns None if the label does not exist in Gmail.
+
+        Args:
+            label_name: The human-readable label name.
+
+        Returns:
+            The Gmail label ID string, or None if the label does not exist.
+        """
+        # Invalidate the entire cache if it has aged past the TTL
+        cache_age = time.time() - self._label_cache_populated_at
+        if cache_age >= _LABEL_CACHE_TTL_SECONDS:
+            self._label_cache = {}
+
+        if label_name in self._label_cache:
+            return self._label_cache[label_name]
+
+        # Search existing labels — do NOT create if missing
+        request = self._service.users().labels().list(userId="me")
+        response = self._execute(request)
+        for label in response.get("labels", []):
+            if label.get("name") == label_name:
+                label_id: str = label["id"]
+                self._label_cache[label_name] = label_id
+                self._label_cache_populated_at = time.time()
+                return label_id
+
+        return None
+
     def get_or_create_label(self, label_name: str) -> str:
         """Get the label ID for a name, creating the label if needed.
 

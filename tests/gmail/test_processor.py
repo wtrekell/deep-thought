@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -16,7 +16,6 @@ from deep_thought.gmail.processor import (
     _apply_actions,
     _forward_message,
     _process_single_email,
-    _write_snapshot,
     process_rule,
     run_collection,
     run_send,
@@ -58,43 +57,8 @@ def basic_config(basic_rule: RuleConfig) -> GmailConfig:
         clean_newsletters=False,
         decision_cache_ttl=3600,
         output_dir="data/gmail/export/",
-        generate_llms_files=False,
-        flat_output=False,
         rules=[basic_rule],
     )
-
-
-# ---------------------------------------------------------------------------
-# _write_snapshot
-# ---------------------------------------------------------------------------
-
-
-class TestWriteSnapshot:
-    """Tests for _write_snapshot."""
-
-    def test_creates_snapshot_file(self, tmp_path: Path) -> None:
-        """Should create a JSON snapshot file in the snapshots directory."""
-        messages = [{"id": "msg1"}, {"id": "msg2"}]
-        snapshot_path = _write_snapshot(messages, tmp_path)
-        assert snapshot_path.exists()
-        assert snapshot_path.suffix == ".json"
-        assert snapshot_path.parent.name == "snapshots"
-
-    def test_snapshot_contains_messages(self, tmp_path: Path) -> None:
-        """Should write the message data as JSON."""
-        import json
-
-        messages = [{"id": "msg1", "snippet": "Hello"}]
-        snapshot_path = _write_snapshot(messages, tmp_path)
-        loaded = json.loads(snapshot_path.read_text())
-        assert loaded == messages
-
-    def test_creates_snapshots_directory(self, tmp_path: Path) -> None:
-        """Should create the snapshots subdirectory if missing."""
-        data_dir = tmp_path / "data" / "gmail"
-        messages: list[dict[str, Any]] = []
-        snapshot_path = _write_snapshot(messages, data_dir)
-        assert snapshot_path.parent.exists()
 
 
 # ---------------------------------------------------------------------------
@@ -137,11 +101,20 @@ class TestApplyActions:
         assert applied == ["label:Processed"]
 
     def test_remove_label_action(self, mock_gmail_client: MagicMock) -> None:
-        """Should look up label and remove it."""
+        """Should look up existing label and remove it without creating it."""
         applied = _apply_actions(mock_gmail_client, "msg1", ["remove_label:OldLabel"], dry_run=False)
-        mock_gmail_client.get_or_create_label.assert_called_once_with("OldLabel")
+        mock_gmail_client.get_label.assert_called_once_with("OldLabel")
+        mock_gmail_client.get_or_create_label.assert_not_called()
         mock_gmail_client.modify_message.assert_called_once_with("msg1", remove_labels=["Label_123"])
         assert applied == ["remove_label:OldLabel"]
+
+    def test_remove_label_skips_when_label_not_found(self, mock_gmail_client: MagicMock) -> None:
+        """Should skip removal and not call modify_message when label does not exist."""
+        mock_gmail_client.get_label.return_value = None
+        applied = _apply_actions(mock_gmail_client, "msg1", ["remove_label:NonExistent"], dry_run=False)
+        mock_gmail_client.get_label.assert_called_once_with("NonExistent")
+        mock_gmail_client.modify_message.assert_not_called()
+        assert applied == []
 
     def test_dry_run_skips_execution(self, mock_gmail_client: MagicMock) -> None:
         """Should not call any client methods in dry-run mode."""
@@ -693,8 +666,7 @@ class TestRunCollection:
             clean_newsletters=False,
             decision_cache_ttl=3600,
             output_dir=str(tmp_path),
-            generate_llms_files=False,
-            flat_output=False,
+
             rules=[rule_one, rule_two],
         )
 
@@ -747,8 +719,7 @@ class TestRunCollection:
             clean_newsletters=False,
             decision_cache_ttl=3600,
             output_dir=str(tmp_path),
-            generate_llms_files=False,
-            flat_output=False,
+
             rules=[rule_one, rule_two],
         )
 
@@ -903,8 +874,7 @@ class TestCollectionIntegration:
             clean_newsletters=False,
             decision_cache_ttl=3600,
             output_dir=str(tmp_path),
-            generate_llms_files=False,
-            flat_output=False,
+
             rules=[rule],
         )
 
@@ -973,8 +943,7 @@ class TestCollectionIntegration:
             clean_newsletters=False,
             decision_cache_ttl=3600,
             output_dir=str(tmp_path),
-            generate_llms_files=False,
-            flat_output=False,
+
             rules=[rule],
         )
 
@@ -1046,8 +1015,7 @@ class TestCollectionIntegration:
             clean_newsletters=False,
             decision_cache_ttl=3600,
             output_dir=str(tmp_path),
-            generate_llms_files=False,
-            flat_output=False,
+
             rules=[rule],
         )
 
@@ -1099,8 +1067,7 @@ class TestCollectionIntegration:
             clean_newsletters=False,
             decision_cache_ttl=3600,
             output_dir=str(tmp_path),
-            generate_llms_files=False,
-            flat_output=False,
+
             rules=[rule],
         )
 

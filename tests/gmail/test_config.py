@@ -74,8 +74,6 @@ class TestLoadConfig:
         assert config.clean_newsletters is True
         assert config.decision_cache_ttl == 3600
         assert config.output_dir == "data/gmail/export/"
-        assert config.generate_llms_files is False
-        assert config.flat_output is False
 
     def test_raises_for_missing_file(self, tmp_path: Path) -> None:
         """Should raise FileNotFoundError when the config file is missing."""

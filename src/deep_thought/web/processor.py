@@ -400,6 +400,7 @@ def run_blog_mode(
     output_root: Path,
     dry_run: bool,
     force: bool,
+    rule_name: str | None = None,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
     qdrant_collection: str | None = None,
@@ -419,6 +420,7 @@ def run_blog_mode(
         output_root: Root directory for output files.
         dry_run: If True, skip writing files to disk.
         force: If True, re-crawl URLs that were previously crawled successfully.
+        rule_name: Optional batch rule name that triggered this crawl.
         embedding_model: Optional MLX embedding model. Threaded to ``_process_page``
             so each page is embedded after writing.
         embedding_qdrant_client: Optional Qdrant client. Threaded to
@@ -468,7 +470,7 @@ def run_blog_mode(
                 page_result=page_result,
                 config=config,
                 output_root=output_root,
-                rule_name=None,
+                rule_name=rule_name,
                 dry_run=dry_run,
                 embedding_model=embedding_model,
                 embedding_qdrant_client=embedding_qdrant_client,
@@ -485,15 +487,17 @@ def run_blog_mode(
                     summaries.append(page_summary)
 
         except (PlaywrightError, ConnectionError) as fetch_error:
-            _record_error_page(page_url, None, fetch_error, conn)
+            _record_error_page(page_url, rule_name, fetch_error, conn)
             failed_count += 1
         except Exception as unexpected_error:
             logger.error("Unexpected error processing %s: %s", page_url, unexpected_error)
-            _record_error_page(page_url, None, unexpected_error, conn)
+            _record_error_page(page_url, rule_name, unexpected_error, conn)
             failed_count += 1
 
     total_count = succeeded_count + failed_count + skipped_count
-    crawl_result = CrawlResult(total=total_count, succeeded=succeeded_count, failed=failed_count, skipped=skipped_count)
+    crawl_result = CrawlResult(
+        total=total_count, succeeded=succeeded_count, failed=failed_count, skipped=skipped_count
+    )
     return crawl_result, summaries
 
 
@@ -527,6 +531,7 @@ def run_documentation_mode(
     output_root: Path,
     dry_run: bool,
     force: bool,
+    rule_name: str | None = None,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
     qdrant_collection: str | None = None,
@@ -549,6 +554,7 @@ def run_documentation_mode(
         output_root: Root directory for output files.
         dry_run: If True, skip writing files to disk.
         force: If True, re-crawl URLs that were previously crawled successfully.
+        rule_name: Optional batch rule name that triggered this crawl.
         embedding_model: Optional MLX embedding model. Threaded to ``_process_page``
             so each page is embedded after writing.
         embedding_qdrant_client: Optional Qdrant client. Threaded to
@@ -621,7 +627,7 @@ def run_documentation_mode(
                     page_result=page_result,
                     config=config,
                     output_root=output_root,
-                    rule_name=None,
+                    rule_name=rule_name,
                     dry_run=dry_run,
                     embedding_model=embedding_model,
                     embedding_qdrant_client=embedding_qdrant_client,
@@ -652,18 +658,20 @@ def run_documentation_mode(
                             url_queue.append((child_url, current_depth + 1))
 
             except (PlaywrightError, ConnectionError) as fetch_error:
-                _record_error_page(current_url, None, fetch_error, conn)
+                _record_error_page(current_url, rule_name, fetch_error, conn)
                 failed_count += 1
             except Exception as unexpected_error:
                 logger.error("Unexpected error processing %s: %s", current_url, unexpected_error)
-                _record_error_page(current_url, None, unexpected_error, conn)
+                _record_error_page(current_url, rule_name, unexpected_error, conn)
                 failed_count += 1
 
             if bfs_progress is not None and bfs_task_id is not None:
                 bfs_progress.advance(bfs_task_id)
 
     total_count = succeeded_count + failed_count + skipped_count
-    crawl_result = CrawlResult(total=total_count, succeeded=succeeded_count, failed=failed_count, skipped=skipped_count)
+    crawl_result = CrawlResult(
+        total=total_count, succeeded=succeeded_count, failed=failed_count, skipped=skipped_count
+    )
     return crawl_result, summaries
 
 
@@ -728,6 +736,7 @@ def run_direct_mode(
     output_root: Path,
     dry_run: bool,
     force: bool,
+    rule_name: str | None = None,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
     qdrant_collection: str | None = None,
@@ -745,6 +754,7 @@ def run_direct_mode(
         output_root: Root directory for output files.
         dry_run: If True, skip writing files to disk.
         force: If True, re-crawl URLs that were previously crawled successfully.
+        rule_name: Optional batch rule name that triggered this crawl.
         embedding_model: Optional MLX embedding model. Threaded to ``_process_page``
             so each page is embedded after writing.
         embedding_qdrant_client: Optional Qdrant client. Threaded to
@@ -787,7 +797,7 @@ def run_direct_mode(
                 page_result=page_result,
                 config=config,
                 output_root=output_root,
-                rule_name=None,
+                rule_name=rule_name,
                 dry_run=dry_run,
                 embedding_model=embedding_model,
                 embedding_qdrant_client=embedding_qdrant_client,
@@ -804,15 +814,17 @@ def run_direct_mode(
                     summaries.append(page_summary)
 
         except (PlaywrightError, ConnectionError) as fetch_error:
-            _record_error_page(page_url, None, fetch_error, conn)
+            _record_error_page(page_url, rule_name, fetch_error, conn)
             failed_count += 1
         except Exception as unexpected_error:
             logger.error("Unexpected error processing %s: %s", page_url, unexpected_error)
-            _record_error_page(page_url, None, unexpected_error, conn)
+            _record_error_page(page_url, rule_name, unexpected_error, conn)
             failed_count += 1
 
     total_count = succeeded_count + failed_count + skipped_count
-    crawl_result = CrawlResult(total=total_count, succeeded=succeeded_count, failed=failed_count, skipped=skipped_count)
+    crawl_result = CrawlResult(
+        total=total_count, succeeded=succeeded_count, failed=failed_count, skipped=skipped_count
+    )
     return crawl_result, summaries
 
 
@@ -951,6 +963,7 @@ def process(
                 output_root=output_root,
                 dry_run=dry_run,
                 force=force,
+                rule_name=rule_name,
                 embedding_model=embedding_model,
                 embedding_qdrant_client=embedding_qdrant_client,
                 qdrant_collection=qdrant_collection,
@@ -966,6 +979,7 @@ def process(
                 output_root=output_root,
                 dry_run=dry_run,
                 force=force,
+                rule_name=rule_name,
                 embedding_model=embedding_model,
                 embedding_qdrant_client=embedding_qdrant_client,
                 qdrant_collection=qdrant_collection,
@@ -981,6 +995,7 @@ def process(
                 output_root=output_root,
                 dry_run=dry_run,
                 force=force,
+                rule_name=rule_name,
                 embedding_model=embedding_model,
                 embedding_qdrant_client=embedding_qdrant_client,
                 qdrant_collection=qdrant_collection,
