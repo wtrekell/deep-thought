@@ -752,3 +752,101 @@ class TestCmdCrawlBatch:
         called_collections = [call.args[1] for call in mock_ensure.call_args_list]
         assert "research_db" in called_collections
         assert "magrathea_db" in called_collections
+
+
+# ---------------------------------------------------------------------------
+# TestCmdCrawlDryRun
+# ---------------------------------------------------------------------------
+
+
+class TestCmdCrawlDryRun:
+    """Tests that dry-run mode never initializes the embedding model."""
+
+    def _make_dry_run_args(self, minimal_web_config: WebConfig) -> argparse.Namespace:
+        """Return a Namespace configured for a minimal dry-run crawl."""
+        return argparse.Namespace(
+            dry_run=True,
+            force=False,
+            verbose=False,
+            config=None,
+            input="https://example.com",
+            input_file=None,
+            batch=False,
+            output=None,
+            mode=None,
+            max_depth=None,
+            max_pages=None,
+            js_wait=None,
+            browser_channel=None,
+            stealth=None,
+            include_patterns=None,
+            exclude_patterns=None,
+            retry_attempts=None,
+            retry_delay=None,
+            extract_images=None,
+            save_config=None,
+            subcommand="crawl",
+        )
+
+    def test_dry_run_succeeds_when_embedding_import_fails(
+        self,
+        minimal_web_config: WebConfig,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """cmd_crawl --dry-run must complete without error even if the embedding
+        module is not importable.
+
+        In dry-run mode the embedding initialisation block is skipped entirely,
+        so an ImportError from mlx-embeddings or qdrant-client must not abort
+        the command.
+        """
+        from deep_thought.web.processor import CrawlResult
+
+        mock_process_result = MagicMock(spec=CrawlResult)
+        mock_process_result.succeeded = 0
+        mock_process_result.failed = 0
+        mock_process_result.skipped = 1
+
+        with (
+            patch("deep_thought.web.cli.load_config", return_value=minimal_web_config),
+            patch("deep_thought.web.cli.validate_config", return_value=[]),
+            patch("deep_thought.web.cli.initialize_database"),
+            patch("deep_thought.web.cli.process", return_value=mock_process_result),
+            # Simulate the embedding module being unavailable
+            patch("deep_thought.web.cli._check_playwright_driver"),
+            patch.dict("sys.modules", {"deep_thought.embeddings": None}),
+        ):
+            from deep_thought.web.cli import cmd_crawl
+
+            cmd_crawl(self._make_dry_run_args(minimal_web_config))
+
+        captured_output = capsys.readouterr().out
+        assert "[dry-run]" in captured_output
+
+    def test_dry_run_does_not_call_create_embedding_model(
+        self,
+        minimal_web_config: WebConfig,
+    ) -> None:
+        """create_embedding_model must never be called in dry-run mode."""
+        from deep_thought.web.processor import CrawlResult
+
+        mock_process_result = MagicMock(spec=CrawlResult)
+        mock_process_result.succeeded = 0
+        mock_process_result.failed = 0
+        mock_process_result.skipped = 0
+
+        mock_create_embedding = MagicMock()
+
+        with (
+            patch("deep_thought.web.cli.load_config", return_value=minimal_web_config),
+            patch("deep_thought.web.cli.validate_config", return_value=[]),
+            patch("deep_thought.web.cli.initialize_database"),
+            patch("deep_thought.web.cli.process", return_value=mock_process_result),
+            patch("deep_thought.web.cli._check_playwright_driver"),
+            patch("deep_thought.embeddings.create_embedding_model", mock_create_embedding),
+        ):
+            from deep_thought.web.cli import cmd_crawl
+
+            cmd_crawl(self._make_dry_run_args(minimal_web_config))
+
+        mock_create_embedding.assert_not_called()

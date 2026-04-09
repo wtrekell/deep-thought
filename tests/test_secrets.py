@@ -342,6 +342,55 @@ def test_oauth_runs_browser_flow_when_no_token_exists(tmp_path: Path) -> None:
     assert result is new_creds
 
 
+def test_oauth_browser_flow_cleans_up_migrated_file(tmp_path: Path) -> None:
+    """After browser re-auth, the migrated token file is deleted even when the credential had no refresh token."""
+    token_file = tmp_path / "token.json"
+    # Write a token that will load successfully from file but has no refresh token,
+    # so it is invalid and cannot be refreshed — forcing the browser flow.
+    invalid_token_json = json.dumps(
+        {
+            "token": "stale-access-token",
+            "refresh_token": None,
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "client_id": "fake-client-id",
+            "client_secret": "fake-client-secret",
+            "scopes": _SCOPES,
+        }
+    )
+    token_file.write_text(invalid_token_json)
+
+    credentials_file = tmp_path / "credentials.json"
+    credentials_file.write_text('{"installed": {}}')
+
+    # The credential loaded from the file: keychain is empty so file is read and
+    # migrated to keychain — but the migrated cred has no refresh token so it is
+    # not valid and cannot be refreshed.
+    invalid_creds = MagicMock()
+    invalid_creds.valid = False
+    invalid_creds.expired = True
+    invalid_creds.refresh_token = None  # No refresh token → browser flow is required.
+    invalid_creds.to_json.return_value = invalid_token_json
+
+    new_creds = _make_valid_credentials()
+
+    with (
+        patch("deep_thought.secrets.keychain_available", return_value=True),
+        patch("deep_thought.secrets._load_oauth_from_keychain", return_value=None),
+        patch("deep_thought.secrets.Credentials") as mock_creds_cls,
+        patch("deep_thought.secrets._save_oauth_to_keychain"),
+        patch("deep_thought.secrets.InstalledAppFlow") as mock_flow_cls,
+    ):
+        mock_creds_cls.from_authorized_user_file.return_value = invalid_creds
+        mock_flow = MagicMock()
+        mock_flow.run_local_server.return_value = new_creds
+        mock_flow_cls.from_client_secrets_file.return_value = mock_flow
+
+        result = get_oauth_credentials("gcal", str(credentials_file), str(token_file), _SCOPES)
+
+    assert result is new_creds
+    assert not token_file.exists(), "Migrated token file must be deleted after browser re-auth completes."
+
+
 def test_oauth_raises_if_credentials_file_missing() -> None:
     """get_oauth_credentials raises FileNotFoundError when credentials file is absent."""
     with (

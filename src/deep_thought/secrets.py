@@ -410,4 +410,7 @@ def get_oauth_credentials(
     new_credentials: Credentials = flow.run_local_server(port=0)
 
     _persist_oauth(service, new_credentials, token_path, use_keychain)
+    if migrated_file_to_delete is not None:
+        migrated_file_to_delete.unlink(missing_ok=True)
+        logger.info("Migrated token file deleted after browser re-auth: %s", migrated_file_to_delete)
     return new_credentials

@@ -713,6 +713,82 @@ class TestCmdCollect:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# TestCmdCollectDryRunEmbedding
+# ---------------------------------------------------------------------------
+
+
+class TestCmdCollectDryRunEmbedding:
+    """Tests that dry-run mode never initializes the embedding model."""
+
+    def _make_collect_args(self, dry_run: bool = True) -> argparse.Namespace:
+        """Return a Namespace for cmd_collect with dry-run configured."""
+        return argparse.Namespace(
+            dry_run=dry_run,
+            force=False,
+            rule=None,
+            output=None,
+            config=None,
+            verbose=False,
+            save_config=None,
+            subcommand=None,
+        )
+
+    def test_dry_run_succeeds_when_embedding_import_fails(
+        self,
+        minimal_config: RedditConfig,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """cmd_collect --dry-run must complete without error even if the embedding
+        module is not importable.
+
+        In dry-run mode the embedding initialisation block is skipped entirely,
+        so an ImportError from mlx-embeddings or qdrant-client must not abort
+        the command.
+        """
+        from deep_thought.reddit.processor import CollectionResult
+
+        mock_result = CollectionResult(posts_collected=0)
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.reddit.cli.load_config", return_value=minimal_config),
+            patch("deep_thought.reddit.cli.validate_config", return_value=[]),
+            patch("deep_thought.reddit.cli._make_client_from_config"),
+            patch("deep_thought.reddit.cli.initialize_database", return_value=mock_conn),
+            patch("deep_thought.reddit.cli.run_collection", return_value=mock_result),
+            # Simulate the embedding module being unavailable
+            patch.dict("sys.modules", {"deep_thought.embeddings": None}),
+        ):
+            cmd_collect(self._make_collect_args(dry_run=True))
+
+        captured_output = capsys.readouterr().out
+        assert "[dry-run]" in captured_output
+
+    def test_dry_run_does_not_call_create_embedding_model(
+        self,
+        minimal_config: RedditConfig,
+    ) -> None:
+        """create_embedding_model must never be called in dry-run mode."""
+        from deep_thought.reddit.processor import CollectionResult
+
+        mock_result = CollectionResult(posts_collected=0)
+        mock_conn = MagicMock()
+        mock_create_embedding = MagicMock()
+
+        with (
+            patch("deep_thought.reddit.cli.load_config", return_value=minimal_config),
+            patch("deep_thought.reddit.cli.validate_config", return_value=[]),
+            patch("deep_thought.reddit.cli._make_client_from_config"),
+            patch("deep_thought.reddit.cli.initialize_database", return_value=mock_conn),
+            patch("deep_thought.reddit.cli.run_collection", return_value=mock_result),
+            patch("deep_thought.embeddings.create_embedding_model", mock_create_embedding),
+        ):
+            cmd_collect(self._make_collect_args(dry_run=True))
+
+        mock_create_embedding.assert_not_called()
+
+
 class TestMainOutputFlag:
     def test_output_flag_is_threaded_to_cmd_collect(self) -> None:
         """main() must dispatch to cmd_collect with args.output set to the provided path."""

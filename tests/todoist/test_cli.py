@@ -726,6 +726,46 @@ class TestCmdCreate:
 
         assert exc_info.value.code == 1
 
+    def test_dry_run_does_not_read_api_token(
+        self,
+        args_base: argparse.Namespace,
+        minimal_config: TodoistConfig,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """create --dry-run must not attempt to read TODOIST_API_TOKEN.
+
+        When the token is absent from the environment, a live run would raise
+        OSError. In dry-run mode the client is never constructed, so the command
+        must complete without error even with no token available.
+        """
+        args_base.dry_run = True
+        args_base.project = "Work"
+        args_base.content = "Dry-run task"
+        args_base.description = None
+        args_base.due = None
+        args_base.priority = None
+        args_base.label = None
+        args_base.section = None
+
+        # Remove the token from the environment entirely
+        monkeypatch.delenv("TODOIST_API_TOKEN", raising=False)
+
+        fake_result = CreateResult(task_id="", task_content="Dry-run task", created=False, dry_run=True)
+        mock_conn = MagicMock()
+
+        with (
+            patch("deep_thought.todoist.cli.load_config", return_value=minimal_config),
+            patch("deep_thought.todoist.cli.initialize_database", return_value=mock_conn),
+            patch("deep_thought.todoist.cli.create_task", return_value=fake_result),
+        ):
+            # Must not raise OSError even though the token is missing
+            cmd_create(args_base)
+
+        captured_output = capsys.readouterr().out
+        assert "[dry-run]" in captured_output
+        mock_conn.close.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # cmd_complete

@@ -177,6 +177,26 @@ class TestGenerateEventMarkdown:
         result = generate_event_markdown(event)
         assert '    display_name: "Head: Marketing"' in result
 
+    def test_attendee_colon_in_display_name_produces_parseable_yaml(self) -> None:
+        """Frontmatter with a colon-containing display_name must parse as valid YAML without error."""
+        import json
+
+        import yaml
+
+        event = _make_test_event(
+            attendees=json.dumps([{"email": "head@example.com", "displayName": "Head: Marketing"}])
+        )
+        markdown_output = generate_event_markdown(event)
+        # Extract only the YAML frontmatter block (between the --- delimiters).
+        frontmatter_lines = markdown_output.split("---")
+        raw_frontmatter = frontmatter_lines[1]
+        # yaml.safe_load must not raise — if display_name is unquoted, this would throw.
+        parsed_frontmatter = yaml.safe_load(raw_frontmatter)
+        assert parsed_frontmatter is not None
+        attendee_list = parsed_frontmatter.get("attendees", [])
+        assert len(attendee_list) == 1
+        assert attendee_list[0]["display_name"] == "Head: Marketing"
+
     def test_attendee_email_is_always_quoted(self) -> None:
         """Email values must always be double-quoted for consistent YAML output."""
         import json
