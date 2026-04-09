@@ -18,8 +18,6 @@ from deep_thought.gcal.output import generate_event_markdown, write_event_file
 # Validation helpers
 # ---------------------------------------------------------------------------
 
-_DATETIME_COMPARISON_STRIP_TZ_RE = re.compile(r"[+-]\d{2}:\d{2}$|Z$")
-
 logger = logging.getLogger(__name__)
 
 

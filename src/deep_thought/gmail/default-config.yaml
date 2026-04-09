@@ -24,8 +24,6 @@ decision_cache_ttl: 3600 # Seconds to cache AI extraction decisions
 
 # Output
 output_dir: "data/gmail/export/"
-generate_llms_files: false # Set true to generate .llms.txt / .llms-full.txt files
-flat_output: false # true = all files in one directory
 
 rules:
   - name: "newsletters"

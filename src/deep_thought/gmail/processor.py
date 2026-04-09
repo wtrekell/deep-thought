@@ -9,7 +9,6 @@ failing email never aborts the rest of the collection run.
 from __future__ import annotations
 
 import email
-import json
 import logging
 import sqlite3  # noqa: TC003
 from datetime import UTC, datetime
@@ -57,29 +56,6 @@ def _utc_now_iso() -> str:
         Current UTC datetime as an ISO 8601 string (e.g., "2026-03-30T12:00:00+00:00").
     """
     return datetime.now(tz=UTC).isoformat()
-
-
-# ---------------------------------------------------------------------------
-# Snapshot
-# ---------------------------------------------------------------------------
-
-
-def _write_snapshot(messages: list[dict[str, Any]], data_dir: Path) -> Path:
-    """Write raw message data to a JSON snapshot file.
-
-    Args:
-        messages: List of message dicts from the Gmail API.
-        data_dir: The base data directory (e.g., data/gmail/).
-
-    Returns:
-        Path to the snapshot file.
-    """
-    snapshots_dir = data_dir / "snapshots"
-    snapshots_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(tz=UTC).strftime("%Y-%m-%dT%H%M%S")
-    snapshot_path = snapshots_dir / f"{timestamp}.json"
-    snapshot_path.write_text(json.dumps(messages, indent=2), encoding="utf-8")
-    return snapshot_path
 
 
 # ---------------------------------------------------------------------------
@@ -131,8 +107,15 @@ def _apply_actions(
                 gmail_client.modify_message(message_id, add_labels=[label_id])
             elif action.startswith("remove_label:"):
                 label_name = action[13:]
-                label_id = gmail_client.get_or_create_label(label_name)
-                gmail_client.modify_message(message_id, remove_labels=[label_id])
+                existing_label_id = gmail_client.get_label(label_name)
+                if existing_label_id is None:
+                    logger.debug(
+                        "remove_label: label '%s' does not exist in Gmail — skipping removal for %s",
+                        label_name,
+                        message_id,
+                    )
+                    continue
+                gmail_client.modify_message(message_id, remove_labels=[existing_label_id])
             elif action.startswith("forward:"):
                 forward_address = action[8:]
                 _forward_message(gmail_client, message_id, forward_address)

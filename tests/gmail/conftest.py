@@ -132,6 +132,7 @@ def mock_gmail_client() -> MagicMock:
     client.modify_message.return_value = {}
     client.delete_message.return_value = None
     client.trash_message.return_value = None
+    client.get_label.return_value = "Label_123"
     client.get_or_create_label.return_value = "Label_123"
     return client
 

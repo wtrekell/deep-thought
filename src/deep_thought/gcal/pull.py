@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3  # noqa: TC003 — sqlite3.Connection is used at runtime in function signatures
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -204,7 +205,7 @@ def _sync_single_calendar(
     # Python's sqlite3 module may have already implicitly started a transaction
     # (e.g. from the clear_sync_token call above), and nested BEGIN would error.
     # SAVEPOINT/RELEASE/ROLLBACK TO works at any nesting level.
-    savepoint_name = f"sp_sync_{calendar_id.replace('@', '_').replace('.', '_')}"
+    savepoint_name = f"sp_sync_{re.sub(r'[^a-zA-Z0-9_]', '_', calendar_id)}"
 
     try:
         db_conn.execute(f"SAVEPOINT {savepoint_name};")
@@ -221,7 +222,27 @@ def _sync_single_calendar(
                 if event_status == "cancelled":
                     existing_row = get_event(db_conn, event_id, calendar_id)
                     if existing_row is not None:
-                        cancelled_event_local = EventLocal.from_api_response(api_event, calendar_id)
+                        # Tombstone events from the API only carry id/status/updated —
+                        # no start/end fields. Reconstruct from the local DB record
+                        # so we can resolve the correct markdown file path to delete.
+                        cancelled_event_local = EventLocal(
+                            event_id=existing_row["event_id"],
+                            calendar_id=existing_row["calendar_id"],
+                            summary=existing_row["summary"],
+                            description=existing_row.get("description"),
+                            location=existing_row.get("location"),
+                            start_time=existing_row["start_time"],
+                            end_time=existing_row["end_time"],
+                            all_day=bool(existing_row["all_day"]),
+                            status=existing_row["status"],
+                            organizer=existing_row.get("organizer"),
+                            attendees=existing_row.get("attendees"),
+                            recurrence=existing_row.get("recurrence"),
+                            html_link=existing_row.get("html_link"),
+                            created_at=existing_row["created_at"],
+                            updated_at=existing_row["updated_at"],
+                            synced_at=existing_row["synced_at"],
+                        )
                         if not dry_run:
                             delete_event_file(
                                 output_dir,

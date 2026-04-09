@@ -17,8 +17,6 @@ clean_newsletters: true
 decision_cache_ttl: 3600
 
 output_dir: "data/gmail/export/"
-generate_llms_files: false
-flat_output: false
 
 rules:
   - name: "test_rule"

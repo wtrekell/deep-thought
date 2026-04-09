@@ -42,8 +42,6 @@ class GmailConfig:
     clean_newsletters: bool
     decision_cache_ttl: int
     output_dir: str
-    generate_llms_files: bool
-    flat_output: bool
     rules: list[RuleConfig]
 
 
@@ -211,8 +209,6 @@ def load_config(config_path: Path | None = None) -> GmailConfig:
         clean_newsletters=bool(raw_dict.get("clean_newsletters", True)),
         decision_cache_ttl=int(raw_dict.get("decision_cache_ttl", 3600)),
         output_dir=str(raw_dict.get("output_dir", "data/gmail/export/")),
-        generate_llms_files=bool(raw_dict.get("generate_llms_files", False)),
-        flat_output=bool(raw_dict.get("flat_output", False)),
         rules=rules,
     )
 
