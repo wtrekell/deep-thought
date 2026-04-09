@@ -666,7 +666,6 @@ class TestRunCollection:
             clean_newsletters=False,
             decision_cache_ttl=3600,
             output_dir=str(tmp_path),
-
             rules=[rule_one, rule_two],
         )
 
@@ -719,7 +718,6 @@ class TestRunCollection:
             clean_newsletters=False,
             decision_cache_ttl=3600,
             output_dir=str(tmp_path),
-
             rules=[rule_one, rule_two],
         )
 
@@ -874,7 +872,6 @@ class TestCollectionIntegration:
             clean_newsletters=False,
             decision_cache_ttl=3600,
             output_dir=str(tmp_path),
-
             rules=[rule],
         )
 
@@ -943,7 +940,6 @@ class TestCollectionIntegration:
             clean_newsletters=False,
             decision_cache_ttl=3600,
             output_dir=str(tmp_path),
-
             rules=[rule],
         )
 
@@ -1015,7 +1011,6 @@ class TestCollectionIntegration:
             clean_newsletters=False,
             decision_cache_ttl=3600,
             output_dir=str(tmp_path),
-
             rules=[rule],
         )
 
@@ -1067,7 +1062,6 @@ class TestCollectionIntegration:
             clean_newsletters=False,
             decision_cache_ttl=3600,
             output_dir=str(tmp_path),
-
             rules=[rule],
         )
 

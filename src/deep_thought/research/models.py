@@ -183,4 +183,3 @@ class ResearchResult:
             cost_usd=total_cost,
             processed_date=processed_timestamp,
         )
-

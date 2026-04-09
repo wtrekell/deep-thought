@@ -283,5 +283,3 @@ def validate_config(config: FileTxtConfig) -> list[str]:
         )
 
     return issues
-
-
