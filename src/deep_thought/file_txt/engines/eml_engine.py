@@ -26,8 +26,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_KEY_HEADERS = ("From", "To", "Cc", "Subject", "Date")
-
 
 def convert_eml(
     source_path: Path,

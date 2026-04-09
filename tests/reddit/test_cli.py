@@ -475,11 +475,13 @@ class TestMain:
         """main must dispatch the 'init' subcommand to cmd_init."""
         with (
             patch("sys.argv", ["reddit", "init"]),
-            patch.dict("deep_thought.reddit.cli._COMMAND_HANDLERS", {"init": MagicMock()}),
+            patch("deep_thought.reddit.cli._run_command") as mock_run_command,
+            patch("deep_thought.reddit.cli.load_dotenv"),
         ):
             main()
-            # The handler dict was patched — verify the entry is there
-            # (we don't capture the call since we patched the dict)
+            mock_run_command.assert_called_once()
+            handler_arg = mock_run_command.call_args[0][0]
+            assert handler_arg is cmd_init
 
     @pytest.mark.error_handling
     def test_file_not_found_exits_with_code_1(self, capsys: pytest.CaptureFixture[str]) -> None:

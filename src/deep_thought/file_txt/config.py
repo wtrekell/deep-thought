@@ -285,23 +285,3 @@ def validate_config(config: FileTxtConfig) -> list[str]:
     return issues
 
 
-def save_default_config(destination_path: Path) -> None:
-    """Write the bundled default configuration YAML to destination_path.
-
-    Creates parent directories as needed.
-
-    Args:
-        destination_path: Where to write the default config file.
-
-    Raises:
-        FileExistsError: If a file already exists at destination_path.
-    """
-    if destination_path.exists():
-        raise FileExistsError(f"Configuration file already exists: {destination_path}")
-
-    source_path = get_bundled_config_path()
-    if not source_path.exists():
-        raise FileNotFoundError(f"Bundled default config not found: {source_path}")
-
-    destination_path.parent.mkdir(parents=True, exist_ok=True)
-    destination_path.write_bytes(source_path.read_bytes())

@@ -14,21 +14,15 @@ Audio File → Transcription Engine → Diarization → Hallucination Check → 
 
 ## Setup
 
-1. Add your Whisper API key (if using OpenAI) to `.env` at the project root:
+1. Configure which audio files to process in `src/config/audio-configuration.yaml`.
 
-   ```
-   WHISPER_API_KEY=your_key_here
-   ```
-
-2. Configure which audio files to process in `src/config/audio-configuration.yaml`.
-
-3. Initialize the database:
+2. Initialize the database:
 
    ```bash
    audio init
    ```
 
-4. Run transcription on a directory or file:
+3. Run transcription on a directory or file:
 
    ```bash
    audio --input /path/to/audio/files
@@ -72,4 +66,4 @@ All paths are rooted at `data/audio/` by default. Set `DEEP_THOUGHT_DATA_DIR` to
 - **Apple Silicon optimized:** MLX-Whisper runs natively on M-series chips without GPU overhead; requires `mlx` and `mlx-whisper` extras
 - **Diarization:** Requires `pyannote.audio` (specify in config; handles speaker boundaries within transcripts)
 - **Hallucination detection:** Scores repeated or incoherent segments; threshold is configurable
-- **Rate limiting:** OpenAI API respects per-minute token limits; backoff applied automatically
+- **Rate limiting:** Local Whisper runs fully offline; no API rate limits apply

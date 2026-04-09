@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from deep_thought.reddit.utils import get_author_name, slugify_title  # noqa: F401 — re-exported for callers
+from deep_thought.reddit.utils import get_author_name
 
 # ---------------------------------------------------------------------------
 # CollectedPostLocal

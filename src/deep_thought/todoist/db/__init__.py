@@ -19,11 +19,13 @@ from deep_thought.todoist.db.queries import (
     get_labels_for_task,
     get_modified_tasks,
     get_project_by_id,
+    get_project_ids_by_name,
     get_sections_by_project,
     get_sync_value,
     get_task_by_id,
     get_tasks_by_project,
     get_tasks_by_section,
+    mark_task_completed,
     mark_task_synced,
     set_sync_value,
     set_task_labels,
@@ -32,6 +34,7 @@ from deep_thought.todoist.db.queries import (
     upsert_project,
     upsert_section,
     upsert_task,
+    upsert_task_with_labels,
 )
 from deep_thought.todoist.db.schema import (
     get_connection,
@@ -56,11 +59,14 @@ __all__ = [
     # Tasks
     "delete_task",
     "get_modified_tasks",
+    "get_project_ids_by_name",
     "get_task_by_id",
     "get_tasks_by_project",
     "get_tasks_by_section",
+    "mark_task_completed",
     "mark_task_synced",
     "upsert_task",
+    "upsert_task_with_labels",
     # Labels
     "get_all_labels",
     "upsert_label",

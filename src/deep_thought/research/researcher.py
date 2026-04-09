@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -195,6 +196,11 @@ class PerplexityClient:
                 completed_response = poll_response.get("response", poll_response)
                 break
 
+            terminal_failures = {"FAILED", "CANCELLED", "ERROR"}
+            if poll_response.get("status") in terminal_failures:
+                error_detail = poll_response.get("error", poll_response.get("status"))
+                raise RuntimeError(f"Deep research job failed with status: {error_detail}")
+
             time.sleep(_ASYNC_POLL_INTERVAL_SECONDS)
 
         return ResearchResult.from_api_response(
@@ -250,8 +256,6 @@ class PerplexityClient:
 
         file_sections: list[str] = []
         for file_path_string in context_files:
-            from pathlib import Path
-
             file_path = Path(file_path_string)
             if not file_path.exists():
                 raise FileNotFoundError(

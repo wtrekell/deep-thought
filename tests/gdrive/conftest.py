@@ -84,6 +84,7 @@ def sample_config(tmp_path: Path) -> GDriveConfig:
         scopes=["https://www.googleapis.com/auth/drive.file"],
         source_dir=str(tmp_path / "source"),
         drive_folder_id="test-root-folder-id",
+        exclude_patterns=[],
         api_rate_limit_rpm=100,
         retry_max_attempts=3,
         retry_base_delay_seconds=2.0,

@@ -171,17 +171,17 @@ def _insert_comment(
 
 
 class TestRenderCommentLine:
-    def test_renders_basic_comment(self, memory_conn: sqlite3.Connection) -> None:
+    def test_renders_basic_comment(self) -> None:
         comment: dict[str, object] = {
             "posted_at": "2026-01-15T10:00:00",
             "poster_id": "user123",
             "content": "Hello world",
             "attachment_json": None,
         }
-        result = _render_comment_line(memory_conn, comment, include_attachments=False)
+        result = _render_comment_line(comment, include_attachments=False)
         assert result == "[2026-01-15 user123] Hello world"
 
-    def test_no_attachment_when_flag_false(self, memory_conn: sqlite3.Connection) -> None:
+    def test_no_attachment_when_flag_false(self) -> None:
         attachment_data = json.dumps(
             {
                 "file_name": "doc.pdf",
@@ -196,11 +196,11 @@ class TestRenderCommentLine:
             "content": "See file",
             "attachment_json": attachment_data,
         }
-        result = _render_comment_line(memory_conn, comment, include_attachments=False)
+        result = _render_comment_line(comment, include_attachments=False)
         assert "attachment" not in result
         assert result == "[2026-01-15 user123] See file"
 
-    def test_includes_attachment_when_flag_true(self, memory_conn: sqlite3.Connection) -> None:
+    def test_includes_attachment_when_flag_true(self) -> None:
         attachment_data = json.dumps(
             {
                 "file_name": "report.pdf",
@@ -215,21 +215,21 @@ class TestRenderCommentLine:
             "content": "See attached report",
             "attachment_json": attachment_data,
         }
-        result = _render_comment_line(memory_conn, comment, include_attachments=True)
+        result = _render_comment_line(comment, include_attachments=True)
         assert "[2026-01-15 user123] See attached report" in result
         assert "attachment: report.pdf" in result
         assert "application/pdf" in result
         assert "https://example.com/report.pdf" in result
         assert "20.0 KB" in result
 
-    def test_no_attachment_appended_when_attachment_json_is_none(self, memory_conn: sqlite3.Connection) -> None:
+    def test_no_attachment_appended_when_attachment_json_is_none(self) -> None:
         comment: dict[str, object] = {
             "posted_at": "2026-01-15T10:00:00",
             "poster_id": "user123",
             "content": "No file here",
             "attachment_json": None,
         }
-        result = _render_comment_line(memory_conn, comment, include_attachments=True)
+        result = _render_comment_line(comment, include_attachments=True)
         assert "attachment" not in result
         assert result == "[2026-01-15 user123] No file here"
 
