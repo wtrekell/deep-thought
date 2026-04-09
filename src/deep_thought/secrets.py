@@ -189,11 +189,10 @@ def _load_oauth_from_keychain(service: str, scopes: list[str]) -> Credentials | 
         A Credentials object if a token is found, or None.
     """
     full_service = _service_name(service)
-    try:
-        token_json = keyring.get_password(full_service, _OAUTH_ACCOUNT)
-    except keyring.errors.KeyringLocked:
-        logger.warning("Keychain access denied loading OAuth token (service=%s).", full_service)
-        return None
+    # KeyringLocked is intentionally NOT caught here — it propagates to
+    # get_oauth_credentials() which flips use_keychain=False and falls
+    # back to file-based token storage.
+    token_json = keyring.get_password(full_service, _OAUTH_ACCOUNT)
     if token_json is None:
         logger.debug("No OAuth token found in keychain (service=%s).", full_service)
         return None
@@ -330,6 +329,16 @@ def get_oauth_credentials(
             logger.warning("Keychain access denied (service=%s). Falling back to file-based token.", service)
             use_keychain = False
             existing_credentials = None
+            # Fall back to file-based token since keychain is locked.
+            if resolved_token_path is not None and resolved_token_path.exists():
+                try:
+                    existing_credentials = Credentials.from_authorized_user_file(  # type: ignore[no-untyped-call]
+                        str(resolved_token_path), scopes
+                    )
+                    logger.debug("Loaded OAuth token from file after keychain lock (service=%s).", service)
+                except (ValueError, json.JSONDecodeError):
+                    logger.warning("Token file is corrupt (service=%s). Ignoring.", service)
+                    existing_credentials = None
 
         # Auto-migrate: file token present but keychain is empty → move it over.
         if (

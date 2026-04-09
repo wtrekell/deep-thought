@@ -330,12 +330,18 @@ class TestResearch:
             _make_mock_response(200, submit_body),
         ] + [_make_mock_response(200, pending_body)] * 20
 
-        # Simulate time advancing past the 600-second timeout on the second monotonic call
-        monotonic_values = [0.0, 0.0, 601.0]
+        # Use a counter that exceeds the timeout after the initial calls.
+        # Robust against future code adding extra monotonic() calls.
+        call_count = 0
+
+        def _advancing_monotonic() -> float:
+            nonlocal call_count
+            call_count += 1
+            return 0.0 if call_count <= 2 else 601.0
 
         with (
             patch("time.sleep"),
-            patch("time.monotonic", side_effect=monotonic_values),
+            patch("time.monotonic", side_effect=_advancing_monotonic),
             pytest.raises(TimeoutError),
         ):
             client.research("Slow question?")

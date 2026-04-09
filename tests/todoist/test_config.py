@@ -158,6 +158,16 @@ class TestGetApiToken:
         with patch("deep_thought.secrets.keychain_available", return_value=False), pytest.raises(OSError):
             get_api_token(config)
 
+    def test_yaml_null_values_produce_empty_defaults(self, tmp_path: Path) -> None:
+        """Explicit YAML nulls for top-level keys must not crash — they become empty defaults."""
+        config_file = tmp_path / "null_config.yaml"
+        config_file.write_text(
+            "todoist:\n  api_token_env: TEST_TOKEN\nprojects: null\nfilters: null\ncomments: null\nclaude: null\n"
+        )
+        config = load_config(config_file)
+        assert isinstance(config, TodoistConfig)
+        assert config.projects == []
+
 
 # ---------------------------------------------------------------------------
 # validate_config
