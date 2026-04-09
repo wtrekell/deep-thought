@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from unittest.mock import patch
 
 from rich.progress import (
@@ -50,10 +51,10 @@ class TestTrackItems:
     def test_generator_input(self) -> None:
         """A generator (no len()) should work in indeterminate mode."""
 
-        def gen() -> __builtins__:  # type: ignore[name-defined]
+        def gen() -> Iterator[int]:
             yield from range(3)
 
-        result = list(track_items(gen(), description="Generator"))  # type: ignore[arg-type]
+        result = list(track_items(gen(), description="Generator"))
         assert result == [0, 1, 2]
 
     def test_explicit_total_overrides_len(self) -> None:
