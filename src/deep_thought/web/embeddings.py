@@ -9,7 +9,6 @@ All third-party imports are lazy so this module can be imported without
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
@@ -18,8 +17,6 @@ from deep_thought.embeddings import COLLECTION_NAME
 
 if TYPE_CHECKING:
     from deep_thought.web.models import CrawledPageLocal
-
-logger = logging.getLogger(__name__)
 
 # Maps crawl mode strings to Qdrant source_type values.
 _SOURCE_TYPE_MAP: dict[str, str] = {

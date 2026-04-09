@@ -9,15 +9,12 @@ All third-party imports are lazy so this module can be imported without
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any
 
 from deep_thought.embeddings import COLLECTION_NAME
 
 if TYPE_CHECKING:
     from deep_thought.research.models import ResearchResult
-
-logger = logging.getLogger(__name__)
 
 
 def write_embedding(

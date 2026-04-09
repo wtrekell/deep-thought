@@ -9,7 +9,6 @@ All third-party imports are lazy so this module can be imported without
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -17,8 +16,6 @@ from deep_thought.embeddings import COLLECTION_NAME
 
 if TYPE_CHECKING:
     from deep_thought.reddit.models import CollectedPostLocal
-
-logger = logging.getLogger(__name__)
 
 
 def write_embedding(
