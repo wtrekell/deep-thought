@@ -5,9 +5,17 @@ All tests mock the Qdrant client so no live server is required.
 
 from __future__ import annotations
 
+import uuid
 from unittest.mock import MagicMock, patch
 
-from deep_thought.embeddings import COLLECTION_NAME, PAYLOAD_INDEX_FIELDS, ensure_collection, search_embeddings
+from deep_thought.embeddings import (
+    COLLECTION_NAME,
+    PAYLOAD_INDEX_FIELDS,
+    ensure_collection,
+    search_embeddings,
+    strip_frontmatter,
+    write_embedding,
+)
 
 
 def _make_qdrant_client(
@@ -35,6 +43,117 @@ def _make_qdrant_client(
     mock_client.get_collection.return_value = collection_info
 
     return mock_client
+
+
+class TestStripFrontmatter:
+    """Unit tests for strip_frontmatter()."""
+
+    def test_removes_yaml_frontmatter_from_content(self) -> None:
+        """Frontmatter delimited by --- is removed; body content is returned."""
+        markdown_with_frontmatter = "---\ntitle: Test\ndate: 2026-04-09\n---\n\n# Heading\n\nBody text."
+        result = strip_frontmatter(markdown_with_frontmatter)
+        assert result == "# Heading\n\nBody text."
+
+    def test_content_without_frontmatter_returned_unchanged(self) -> None:
+        """A string that does not start with --- is returned exactly as given."""
+        plain_markdown = "# Heading\n\nNo frontmatter here."
+        result = strip_frontmatter(plain_markdown)
+        assert result == plain_markdown
+
+    def test_triple_dash_inside_yaml_value_not_treated_as_closing_delimiter(self) -> None:
+        """A --- that appears mid-value (not on its own line after a newline) is not a closing delimiter."""
+        # The closing delimiter is found via "\n---" so a value of "foo---bar" is safe.
+        markdown_text = "---\ntitle: foo---bar\n---\n\nBody after real closing delimiter."
+        result = strip_frontmatter(markdown_text)
+        assert result == "Body after real closing delimiter."
+
+    def test_empty_string_returned_unchanged(self) -> None:
+        """An empty string input produces an empty string output."""
+        result = strip_frontmatter("")
+        assert result == ""
+
+    def test_frontmatter_only_with_no_body_returns_empty_string(self) -> None:
+        """Frontmatter with no following body content produces an empty string."""
+        frontmatter_only = "---\ntitle: Only\n---\n"
+        result = strip_frontmatter(frontmatter_only)
+        assert result == ""
+
+    def test_leading_newlines_after_closing_delimiter_stripped(self) -> None:
+        """Newlines immediately after the closing --- are stripped from the body."""
+        markdown_text = "---\ntitle: Test\n---\n\n\nFirst paragraph."
+        result = strip_frontmatter(markdown_text)
+        assert result == "First paragraph."
+
+
+class TestWriteEmbedding:
+    """Unit tests for write_embedding()."""
+
+    def test_upsert_called_with_correct_collection_and_merged_payload(self) -> None:
+        """write_embedding upserts to the specified collection with the correct payload."""
+        mock_qdrant_client = MagicMock()
+        mock_model = MagicMock()
+        fake_vector = [0.1] * 384
+        source_output_path = "/data/web/article.md"
+        source_payload = {"source_tool": "web", "title": "Test Article"}
+
+        with patch("deep_thought.embeddings.embed_text", return_value=fake_vector):
+            write_embedding(
+                content="Some article content",
+                payload=source_payload,
+                output_path=source_output_path,
+                model=mock_model,
+                qdrant_client=mock_qdrant_client,
+                collection_name="test_collection",
+            )
+
+        mock_qdrant_client.upsert.assert_called_once()
+        upsert_kwargs = mock_qdrant_client.upsert.call_args.kwargs
+        assert upsert_kwargs["collection_name"] == "test_collection"
+
+        upserted_point = upsert_kwargs["points"][0]
+        assert upserted_point.vector == fake_vector
+        assert upserted_point.payload["output_path"] == source_output_path
+        assert upserted_point.payload["source_tool"] == "web"
+        assert upserted_point.payload["title"] == "Test Article"
+
+    def test_point_id_is_uuid5_derived_from_output_path(self) -> None:
+        """The Qdrant point ID must be a UUID5 generated from the output_path."""
+        mock_qdrant_client = MagicMock()
+        mock_model = MagicMock()
+        fake_vector = [0.2] * 384
+        source_output_path = "/data/reddit/post-123.md"
+        expected_point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, source_output_path))
+
+        with patch("deep_thought.embeddings.embed_text", return_value=fake_vector):
+            write_embedding(
+                content="Reddit post content",
+                payload={"source_tool": "reddit"},
+                output_path=source_output_path,
+                model=mock_model,
+                qdrant_client=mock_qdrant_client,
+            )
+
+        upsert_kwargs = mock_qdrant_client.upsert.call_args.kwargs
+        upserted_point = upsert_kwargs["points"][0]
+        assert upserted_point.id == expected_point_id
+
+    def test_default_collection_name_used_when_not_specified(self) -> None:
+        """When collection_name is omitted, write_embedding targets COLLECTION_NAME."""
+        mock_qdrant_client = MagicMock()
+        mock_model = MagicMock()
+        fake_vector = [0.3] * 384
+
+        with patch("deep_thought.embeddings.embed_text", return_value=fake_vector):
+            write_embedding(
+                content="Some content",
+                payload={"source_tool": "research"},
+                output_path="/data/research/query.md",
+                model=mock_model,
+                qdrant_client=mock_qdrant_client,
+            )
+
+        upsert_kwargs = mock_qdrant_client.upsert.call_args.kwargs
+        assert upsert_kwargs["collection_name"] == COLLECTION_NAME
 
 
 class TestEnsureCollection:

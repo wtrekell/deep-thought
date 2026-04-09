@@ -10,9 +10,11 @@ import sqlite3
 from typing import Any
 
 from deep_thought.web.db.queries import (
+    delete_crawled_page,
     get_all_crawled_pages,
     get_crawled_page,
     get_crawled_pages_by_status,
+    update_page_child_links,
     upsert_crawled_page,
 )
 from deep_thought.web.db.schema import get_schema_version, initialize_database
@@ -214,6 +216,104 @@ class TestGetCrawledPagesByStatus:
         in_memory_db.commit()
         results = get_crawled_pages_by_status(in_memory_db, "success")
         assert len(results) == 2
+
+
+# ---------------------------------------------------------------------------
+# TestGetAllCrawledPages
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# TestDeleteCrawledPage
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteCrawledPage:
+    def test_deleted_page_is_no_longer_retrievable(self, in_memory_db: Any) -> None:
+        """After delete_crawled_page, get_crawled_page must return None for that URL."""
+        page_url = "https://example.com/to-delete"
+        upsert_crawled_page(in_memory_db, _page_data(url=page_url))
+        in_memory_db.commit()
+
+        delete_crawled_page(in_memory_db, page_url)
+        in_memory_db.commit()
+
+        result = get_crawled_page(in_memory_db, page_url)
+        assert result is None
+
+    def test_delete_leaves_other_pages_intact(self, in_memory_db: Any) -> None:
+        """delete_crawled_page must not remove rows for other URLs."""
+        url_to_delete = "https://example.com/delete-me"
+        url_to_keep = "https://example.com/keep-me"
+        upsert_crawled_page(in_memory_db, _page_data(url=url_to_delete))
+        upsert_crawled_page(in_memory_db, _page_data(url=url_to_keep))
+        in_memory_db.commit()
+
+        delete_crawled_page(in_memory_db, url_to_delete)
+        in_memory_db.commit()
+
+        assert get_crawled_page(in_memory_db, url_to_keep) is not None
+
+    def test_delete_nonexistent_url_does_not_raise(self, in_memory_db: Any) -> None:
+        """Calling delete_crawled_page for a URL that does not exist must not raise."""
+        delete_crawled_page(in_memory_db, "https://example.com/never-existed")
+        in_memory_db.commit()
+
+
+# ---------------------------------------------------------------------------
+# TestUpdatePageChildLinks
+# ---------------------------------------------------------------------------
+
+
+class TestUpdatePageChildLinks:
+    def test_child_links_stored_and_retrieved(self, in_memory_db: Any) -> None:
+        """update_page_child_links must persist the JSON string so it can be read back."""
+        import json
+
+        page_url = "https://example.com/parent"
+        upsert_crawled_page(in_memory_db, _page_data(url=page_url))
+        in_memory_db.commit()
+
+        child_urls = ["https://example.com/child-a", "https://example.com/child-b"]
+        child_links_json = json.dumps(child_urls)
+        update_page_child_links(in_memory_db, page_url, child_links_json)
+        in_memory_db.commit()
+
+        result = get_crawled_page(in_memory_db, page_url)
+        assert result is not None
+        assert result["child_links"] == child_links_json
+
+    def test_child_links_round_trip_as_list(self, in_memory_db: Any) -> None:
+        """The stored child_links JSON must deserialise back to the original list."""
+        import json
+
+        page_url = "https://example.com/round-trip"
+        upsert_crawled_page(in_memory_db, _page_data(url=page_url))
+        in_memory_db.commit()
+
+        original_child_urls = ["https://example.com/alpha", "https://example.com/beta"]
+        update_page_child_links(in_memory_db, page_url, json.dumps(original_child_urls))
+        in_memory_db.commit()
+
+        result = get_crawled_page(in_memory_db, page_url)
+        assert result is not None
+        retrieved_urls = json.loads(result["child_links"])
+        assert retrieved_urls == original_child_urls
+
+    def test_empty_child_links_list_stored_correctly(self, in_memory_db: Any) -> None:
+        """An empty child links list must be stored as the JSON string '[]'."""
+        import json
+
+        page_url = "https://example.com/leaf"
+        upsert_crawled_page(in_memory_db, _page_data(url=page_url))
+        in_memory_db.commit()
+
+        update_page_child_links(in_memory_db, page_url, json.dumps([]))
+        in_memory_db.commit()
+
+        result = get_crawled_page(in_memory_db, page_url)
+        assert result is not None
+        assert json.loads(result["child_links"]) == []
 
 
 # ---------------------------------------------------------------------------

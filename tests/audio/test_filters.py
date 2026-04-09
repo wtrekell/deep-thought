@@ -327,6 +327,13 @@ class TestCollectInputFiles:
         result = collect_input_files(tmp_path)
         assert result == []
 
+    def test_single_unsupported_file_returns_empty_list(self, tmp_path: Path) -> None:
+        """A single file with an unsupported extension passed directly must return an empty list."""
+        unsupported_file = tmp_path / "archive.xyz"
+        unsupported_file.write_bytes(b"not audio")
+        result = collect_input_files(unsupported_file)
+        assert result == []
+
     @pytest.mark.error_handling
     def test_missing_path_raises_file_not_found(self, tmp_path: Path) -> None:
         """A non-existent input path must raise FileNotFoundError."""

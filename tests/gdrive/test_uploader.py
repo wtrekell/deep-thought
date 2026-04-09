@@ -7,9 +7,10 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 from deep_thought.gdrive.config import GDriveConfig
-from deep_thought.gdrive.db.queries import get_backed_up_file
+from deep_thought.gdrive.db.queries import get_backed_up_file, upsert_backed_up_file
 from deep_thought.gdrive.db.schema import init_db
-from deep_thought.gdrive.uploader import run_backup
+from deep_thought.gdrive.models import BackedUpFile
+from deep_thought.gdrive.uploader import run_backup, run_prune
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -322,3 +323,114 @@ def test_dry_run_does_not_call_api_or_write_db(tmp_path: Path) -> None:
     # DB should have no records
     record = get_backed_up_file(db, "source/doc.md")
     assert record is None
+
+
+# ---------------------------------------------------------------------------
+# run_prune tests
+# ---------------------------------------------------------------------------
+
+
+def _insert_backed_up_file(
+    db: sqlite3.Connection,
+    local_path: str,
+    drive_file_id: str = "drive-id-placeholder",
+) -> None:
+    """Insert a BackedUpFile row directly into the DB without going through a backup run."""
+    upsert_backed_up_file(
+        db,
+        BackedUpFile(
+            local_path=local_path,
+            drive_file_id=drive_file_id,
+            drive_folder_id="folder-id",
+            mtime=1712345678.0,
+            size_bytes=512,
+            status="uploaded",
+            uploaded_at="2026-04-04T12:00:00+00:00",
+            updated_at="2026-04-04T12:00:00+00:00",
+        ),
+    )
+
+
+def test_run_prune_deletes_matching_files_and_removes_db_rows() -> None:
+    """run_prune calls client.delete_file for matching files and removes their DB rows."""
+    db = _make_db()
+    # DB paths use the source-dir name as the first component
+    _insert_backed_up_file(db, "source/cache/temp.tmp", drive_file_id="drive-tmp-id")
+    _insert_backed_up_file(db, "source/notes/keep.md", drive_file_id="drive-md-id")
+
+    mock_client = _make_mock_client()
+    # Source dir name is "source"; exclude_patterns applies to path relative to source
+    config = _make_config("/fake/parent/source", exclude_patterns=["*.tmp"])
+
+    prune_result = run_prune(config=config, client=mock_client, db_conn=db)
+
+    # Only the .tmp file should be deleted
+    mock_client.delete_file.assert_called_once_with("drive-tmp-id")
+
+    # The .tmp row must be gone; the .md row must remain
+    assert get_backed_up_file(db, "source/cache/temp.tmp") is None
+    assert get_backed_up_file(db, "source/notes/keep.md") is not None
+
+    assert prune_result.deleted == 1
+    assert prune_result.errors == 0
+
+
+def test_run_prune_dry_run_does_not_call_api_or_modify_db() -> None:
+    """run_prune with dry_run=True counts matched files but makes no API calls or DB changes."""
+    db = _make_db()
+    _insert_backed_up_file(db, "source/logs/debug.log", drive_file_id="drive-log-id")
+    _insert_backed_up_file(db, "source/docs/readme.md", drive_file_id="drive-doc-id")
+
+    mock_client = _make_mock_client()
+    config = _make_config("/fake/parent/source", exclude_patterns=["*.log"])
+
+    prune_result = run_prune(config=config, client=mock_client, db_conn=db, dry_run=True)
+
+    # No Drive API calls in dry-run mode
+    mock_client.delete_file.assert_not_called()
+
+    # Both DB rows must still exist
+    assert get_backed_up_file(db, "source/logs/debug.log") is not None
+    assert get_backed_up_file(db, "source/docs/readme.md") is not None
+
+    # The count still reflects what would have been pruned
+    assert prune_result.deleted == 1
+    assert prune_result.errors == 0
+
+
+def test_run_prune_excludes_files_not_matching_patterns() -> None:
+    """run_prune does not touch files whose paths do not match any exclude_pattern."""
+    db = _make_db()
+    _insert_backed_up_file(db, "source/archive/old.zip", drive_file_id="drive-zip-id")
+    _insert_backed_up_file(db, "source/docs/report.pdf", drive_file_id="drive-pdf-id")
+    _insert_backed_up_file(db, "source/docs/notes.md", drive_file_id="drive-notes-id")
+
+    mock_client = _make_mock_client()
+    # Pattern only matches .zip files
+    config = _make_config("/fake/parent/source", exclude_patterns=["*.zip"])
+
+    prune_result = run_prune(config=config, client=mock_client, db_conn=db)
+
+    mock_client.delete_file.assert_called_once_with("drive-zip-id")
+
+    # .pdf and .md files must be untouched
+    assert get_backed_up_file(db, "source/docs/report.pdf") is not None
+    assert get_backed_up_file(db, "source/docs/notes.md") is not None
+    assert get_backed_up_file(db, "source/archive/old.zip") is None
+
+    assert prune_result.deleted == 1
+
+
+def test_run_prune_returns_early_when_no_exclude_patterns() -> None:
+    """run_prune returns an empty PruneResult immediately when exclude_patterns is empty."""
+    db = _make_db()
+    _insert_backed_up_file(db, "source/notes/todo.md", drive_file_id="drive-todo-id")
+
+    mock_client = _make_mock_client()
+    config = _make_config("/fake/parent/source", exclude_patterns=[])
+
+    prune_result = run_prune(config=config, client=mock_client, db_conn=db)
+
+    mock_client.delete_file.assert_not_called()
+    assert prune_result.deleted == 0
+    assert prune_result.errors == 0

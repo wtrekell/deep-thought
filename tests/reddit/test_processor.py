@@ -17,6 +17,7 @@ from deep_thought.reddit.config import RedditConfig, RuleConfig
 from deep_thought.reddit.processor import (
     CollectionResult,
     _get_retry_delay,
+    _process_single_post,
     process_rule,
     run_collection,
 )
@@ -86,6 +87,71 @@ class TestCollectionResult:
         assert result.posts_errored == 0
         assert result.errors == []
         assert result.rate_limited is False
+
+
+# ---------------------------------------------------------------------------
+# _process_single_post — force=True reprocessing
+# ---------------------------------------------------------------------------
+
+
+class TestProcessSinglePostForce:
+    def test_force_reprocesses_existing_db_row(self, in_memory_db: sqlite3.Connection, tmp_path: Path) -> None:
+        """When force=True, a post already in the DB must be reprocessed, not skipped."""
+        from deep_thought.reddit.db.queries import get_collected_post, upsert_collected_post
+
+        submission = make_mock_submission(post_id="existing1", score=50, num_comments=5)
+        rule_config = _make_rule_config()
+        mock_client = MagicMock()
+        mock_client.get_comments.return_value = []
+
+        # Insert the post into the DB before the test so it exists as an existing row.
+        existing_post_dict = {
+            "state_key": "existing1:python:test_rule",
+            "post_id": "existing1",
+            "subreddit": "python",
+            "rule_name": "test_rule",
+            "title": "Test Post Title",
+            "author": "test_user",
+            "score": 50,
+            "upvote_ratio": 0.95,
+            "comment_count": 5,
+            "url": "https://www.reddit.com/r/python/comments/existing1/",
+            "is_video": 0,
+            "flair": None,
+            "word_count": 100,
+            "output_path": str(tmp_path / "test_rule" / "existing1.md"),
+            "status": "collected",
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "updated_at": "2026-01-01T00:00:00+00:00",
+            "synced_at": "2026-01-01T00:00:00+00:00",
+        }
+        upsert_collected_post(in_memory_db, existing_post_dict)
+        in_memory_db.commit()
+
+        # Confirm the row exists before calling _process_single_post.
+        assert get_collected_post(in_memory_db, "existing1:python:test_rule") is not None
+
+        written_path = tmp_path / "test_rule" / "existing1.md"
+
+        with (
+            patch("deep_thought.reddit.processor.generate_markdown", return_value="# reprocessed") as mock_generate,
+            patch("deep_thought.reddit.processor.write_post_file", return_value=written_path),
+            patch("deep_thought.reddit.db.queries.upsert_collected_post"),
+        ):
+            action, is_update = _process_single_post(
+                submission=submission,
+                rule_config=rule_config,
+                reddit_client=mock_client,
+                db_conn=in_memory_db,
+                output_dir=tmp_path,
+                dry_run=False,
+                force=True,
+            )
+
+        # With force=True the post should be reprocessed (generate_markdown called),
+        # not returned as "skipped".
+        mock_generate.assert_called_once()
+        assert action != "skipped"
 
 
 # ---------------------------------------------------------------------------

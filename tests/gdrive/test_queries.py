@@ -13,6 +13,8 @@ from deep_thought.gdrive.db.queries import (
     clear_backed_up_files,
     clear_drive_folders,
     count_by_status,
+    delete_backed_up_file,
+    get_all_backed_up_files,
     get_backed_up_file,
     get_drive_folder,
     mark_file_status,
@@ -131,6 +133,44 @@ def test_count_by_status_returns_empty_dict_when_no_rows(db: sqlite3.Connection)
     """count_by_status returns an empty dict when the table is empty."""
     status_counts = count_by_status(db)
     assert status_counts == {}
+
+
+def test_delete_backed_up_file_removes_the_row(db: sqlite3.Connection) -> None:
+    """delete_backed_up_file removes the row so get_backed_up_file returns None."""
+    inserted_file = _make_backed_up_file(local_path="source/notes/todo.md")
+    upsert_backed_up_file(db, inserted_file)
+
+    # Confirm the row is present before deletion
+    assert get_backed_up_file(db, "source/notes/todo.md") is not None
+
+    delete_backed_up_file(db, "source/notes/todo.md")
+
+    assert get_backed_up_file(db, "source/notes/todo.md") is None
+
+
+def test_delete_backed_up_file_is_idempotent_for_missing_path(db: sqlite3.Connection) -> None:
+    """delete_backed_up_file does not raise when the path does not exist."""
+    # Should complete without any exception
+    delete_backed_up_file(db, "source/nonexistent/file.md")
+
+
+def test_get_all_backed_up_files_returns_all_rows(db: sqlite3.Connection) -> None:
+    """get_all_backed_up_files returns every row inserted into backed_up_files."""
+    paths = ["source/a.md", "source/b.md", "source/c.md"]
+    for file_path in paths:
+        upsert_backed_up_file(db, _make_backed_up_file(local_path=file_path))
+
+    all_files = get_all_backed_up_files(db)
+
+    assert len(all_files) == 3
+    returned_paths = {backed_up_file.local_path for backed_up_file in all_files}
+    assert returned_paths == set(paths)
+
+
+def test_get_all_backed_up_files_returns_empty_list_when_table_is_empty(db: sqlite3.Connection) -> None:
+    """get_all_backed_up_files returns an empty list when the table has no rows."""
+    all_files = get_all_backed_up_files(db)
+    assert all_files == []
 
 
 # ---------------------------------------------------------------------------

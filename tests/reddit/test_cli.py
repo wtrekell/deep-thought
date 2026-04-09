@@ -706,3 +706,25 @@ class TestCmdCollect:
 
         captured_output = capsys.readouterr().out
         assert "[dry-run]" in captured_output
+
+
+# ---------------------------------------------------------------------------
+# main() — --output flag threading
+# ---------------------------------------------------------------------------
+
+
+class TestMainOutputFlag:
+    def test_output_flag_is_threaded_to_cmd_collect(self) -> None:
+        """main() must dispatch to cmd_collect with args.output set to the provided path."""
+        with (
+            patch("sys.argv", ["reddit", "--output", "/tmp/test-output"]),
+            patch("deep_thought.reddit.cli._run_command") as mock_run,
+            patch("deep_thought.reddit.cli.load_dotenv"),
+        ):
+            main()
+
+        mock_run.assert_called_once()
+        dispatched_handler = mock_run.call_args[0][0]
+        dispatched_args = mock_run.call_args[0][1]
+        assert dispatched_handler is cmd_collect
+        assert dispatched_args.output == "/tmp/test-output"

@@ -1061,3 +1061,82 @@ class TestCmdDelete:
         mock_client.delete_event.assert_called_once_with(work_calendar_id, "evt_work_1")
         captured_output = capsys.readouterr()
         assert work_calendar_id in captured_output.out
+
+    def test_removes_event_from_real_db(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """Should delete the event row from the database when called with a real DB connection.
+
+        Uses a file-backed SQLite database (via tmp_path) so we can re-open it after
+        cmd_delete closes the connection in its finally block and verify the row is gone.
+        """
+        from datetime import UTC, datetime
+
+        from deep_thought.gcal.db.queries import get_event, upsert_calendar, upsert_event
+        from deep_thought.gcal.db.schema import initialize_database as real_initialize_database
+
+        db_file_path = tmp_path / "gcal_test.db"
+        setup_conn = real_initialize_database(str(db_file_path))
+        now_iso = datetime.now(UTC).isoformat()
+
+        upsert_calendar(
+            setup_conn,
+            {
+                "calendar_id": "primary",
+                "summary": "Personal",
+                "description": None,
+                "time_zone": "America/Chicago",
+                "primary_calendar": 1,
+                "created_at": now_iso,
+            },
+        )
+        upsert_event(
+            setup_conn,
+            {
+                "event_id": "evt_to_delete",
+                "calendar_id": "primary",
+                "summary": "Delete Me",
+                "description": None,
+                "location": None,
+                "start_time": "2026-04-09T10:00:00-05:00",
+                "end_time": "2026-04-09T11:00:00-05:00",
+                "all_day": 0,
+                "status": "confirmed",
+                "organizer": None,
+                "attendees": None,
+                "recurrence": None,
+                "html_link": None,
+                "created_at": now_iso,
+                "updated_at": now_iso,
+            },
+        )
+        setup_conn.commit()
+        setup_conn.close()
+
+        # Re-open a fresh connection that cmd_delete will manage (and close).
+        cmd_delete_conn = real_initialize_database(str(db_file_path))
+
+        # Confirm the event exists before deletion.
+        pre_delete_record = get_event(cmd_delete_conn, "evt_to_delete", "primary")
+        assert pre_delete_record is not None
+
+        mock_config = MagicMock()
+        mock_config.output_dir = str(tmp_path / "export")
+        mock_config.flat_output = False
+        mock_client = MagicMock()
+        mock_client.delete_event.return_value = None
+
+        args = self._make_delete_args(event_id="evt_to_delete", calendar_id="primary")
+
+        with (
+            patch("deep_thought.gcal.cli._load_config_from_args", return_value=mock_config),
+            patch("deep_thought.gcal.cli._make_client_from_config", return_value=mock_client),
+            patch("deep_thought.gcal.cli.initialize_database", return_value=cmd_delete_conn),
+        ):
+            cmd_delete(args)
+
+        # cmd_delete closes cmd_delete_conn in its finally block — open a new connection
+        # to the same file to verify the row was actually deleted and committed.
+        verification_conn = real_initialize_database(str(db_file_path))
+        post_delete_record = get_event(verification_conn, "evt_to_delete", "primary")
+        verification_conn.close()
+
+        assert post_delete_record is None

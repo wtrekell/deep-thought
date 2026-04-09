@@ -419,3 +419,79 @@ def test_load_oauth_from_keychain_returns_none_when_empty() -> None:
         result = _load_oauth_from_keychain("gmail", _SCOPES)
 
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# KeyringLocked fallback paths
+# ---------------------------------------------------------------------------
+
+
+def test_get_secret_keyring_locked_falls_back_to_env_var() -> None:
+    """get_secret falls back to env var when keychain raises KeyringLocked."""
+    import keyring.errors
+
+    with (
+        patch("deep_thought.secrets.keychain_available", return_value=True),
+        patch("deep_thought.secrets.keyring.get_password", side_effect=keyring.errors.KeyringLocked),
+        patch.dict("os.environ", {"TODOIST_API_TOKEN": "env-fallback-value"}),
+    ):
+        result = get_secret("todoist", "api-token", env_var="TODOIST_API_TOKEN")
+
+    assert result == "env-fallback-value"
+
+
+def test_get_oauth_credentials_keyring_locked_sets_use_keychain_false(tmp_path: Path) -> None:
+    """When _load_oauth_from_keychain raises KeyringLocked, use_keychain is flipped to False.
+
+    After the flip, no valid token exists (existing_credentials stays None), so the
+    function falls through toward the browser flow. With DEEP_THOUGHT_NO_KEYCHAIN=1
+    set (which is the realistic non-interactive scenario), it raises RuntimeError.
+    This verifies the branch is taken correctly rather than an uncaught exception.
+    """
+    import keyring.errors
+
+    credentials_file = tmp_path / "credentials.json"
+    credentials_file.write_text('{"installed": {}}')
+
+    with (
+        patch.dict("os.environ", {"DEEP_THOUGHT_NO_KEYCHAIN": "1"}),
+        patch("deep_thought.secrets.keychain_available", return_value=True),
+        patch(
+            "deep_thought.secrets._load_oauth_from_keychain",
+            side_effect=keyring.errors.KeyringLocked,
+        ),
+        pytest.raises(RuntimeError, match="interactive browser auth is disabled"),
+    ):
+        get_oauth_credentials("gcal", str(credentials_file), "", _SCOPES)
+
+
+def test_persist_oauth_keychain_locked_falls_back_to_file(tmp_path: Path) -> None:
+    """_persist_oauth writes to file when _save_oauth_to_keychain raises KeyringLocked."""
+    import keyring.errors
+
+    from deep_thought.secrets import _persist_oauth
+
+    token_file = tmp_path / "token.json"
+    creds = _make_valid_credentials()
+
+    with patch(
+        "deep_thought.secrets._save_oauth_to_keychain",
+        side_effect=keyring.errors.KeyringLocked,
+    ):
+        _persist_oauth("test", creds, str(token_file), use_keychain=True)
+
+    assert token_file.exists()
+    assert token_file.read_text() == _FAKE_TOKEN_JSON
+
+
+def test_get_oauth_credentials_raises_when_no_keychain_and_no_token(tmp_path: Path) -> None:
+    """get_oauth_credentials raises RuntimeError when DEEP_THOUGHT_NO_KEYCHAIN=1 and no valid token exists."""
+    credentials_file = tmp_path / "credentials.json"
+    credentials_file.write_text('{"installed": {}}')
+
+    with (
+        patch.dict("os.environ", {"DEEP_THOUGHT_NO_KEYCHAIN": "1"}),
+        patch("deep_thought.secrets.keychain_available", return_value=False),
+        pytest.raises(RuntimeError, match="interactive browser auth is disabled"),
+    ):
+        get_oauth_credentials("gcal", str(credentials_file), "", _SCOPES)
