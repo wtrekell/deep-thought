@@ -155,7 +155,7 @@ def _validate_priority(priority: int) -> int:
 
 
 def create_task(
-    client: TodoistClient,
+    client: TodoistClient | None,
     conn: sqlite3.Connection,
     task_content: str,
     project_name: str,
@@ -174,7 +174,8 @@ def create_task(
     (to catch typos early) but no API call or database write is made.
 
     Args:
-        client: An initialised TodoistClient.
+        client: An authenticated TodoistClient instance. May be None only when
+            dry_run is True — passing None with dry_run=False raises ValueError.
         conn: An open SQLite connection.
         task_content: The text content of the new task.
         project_name: The display name of the project to add the task to.
@@ -189,7 +190,8 @@ def create_task(
         A CreateResult describing what happened.
 
     Raises:
-        ValueError: If project, section, or any label name cannot be resolved locally.
+        ValueError: If project, section, or any label name cannot be resolved locally,
+            or if client is None and dry_run is False.
     """
     # Resolve project — let ValueError propagate to the caller
     resolved_project_id = _resolve_project_id(conn, project_name)
@@ -207,6 +209,9 @@ def create_task(
     # Short-circuit for dry runs: resolution happened, but no writes
     if dry_run:
         return CreateResult(task_id="(dry-run)", task_content=task_content, dry_run=True)
+
+    if client is None:
+        raise ValueError("create_task: client must not be None when dry_run is False.")
 
     # Build only the kwargs that the SDK should receive (skip None values)
     create_kwargs: dict[str, Any] = {"project_id": resolved_project_id}

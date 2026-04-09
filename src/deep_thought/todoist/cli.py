@@ -490,7 +490,10 @@ def cmd_create(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     config = _load_config_from_args(args)
-    todoist_client = _make_client_from_config(config)
+
+    # Defer token resolution until after dry-run validation so that
+    # --dry-run works without a configured API token.
+    todoist_client = None if args.dry_run else _make_client_from_config(config)
 
     connection = initialize_database()
     try:
