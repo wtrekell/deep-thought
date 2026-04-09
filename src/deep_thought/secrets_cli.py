@@ -12,6 +12,7 @@ import sys
 
 import keyring
 import keyring.backends.fail
+import keyring.errors
 from dotenv import dotenv_values
 
 from deep_thought.secrets import delete_secret, keychain_available, set_secret
@@ -63,8 +64,11 @@ def cmd_status(args: argparse.Namespace) -> None:  # noqa: ARG001
         in_env = bool(env_values.get(env_var))
 
         if has_keychain:
-            keychain_value = keyring.get_password(full_service, key_name)
-            in_keychain = keychain_value is not None and keychain_value != ""
+            try:
+                keychain_value = keyring.get_password(full_service, key_name)
+                in_keychain = keychain_value is not None and keychain_value != ""
+            except keyring.errors.KeyringLocked:
+                in_keychain = False
 
         location_parts: list[str] = []
         if in_keychain:
