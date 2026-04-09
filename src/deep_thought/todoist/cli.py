@@ -117,7 +117,7 @@ def cmd_init(args: argparse.Namespace) -> None:
     """Bootstrap the Todoist Tool for first use in the calling repo.
 
     Copies the bundled default config template from the package to
-    ``src/config/todoist_configuration.yaml`` (relative to cwd), creates the
+    ``src/config/todoist-configuration.yaml`` (relative to cwd), creates the
     SQLite database, snapshot and export directories, and prints a summary.
 
     Never attempts to load the project-level config — it does not exist yet.
