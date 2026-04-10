@@ -11,6 +11,7 @@
 
 - Secret retrieval now checks macOS Keychain first, falling back to environment variables. Uses the shared `deep_thought.secrets` module.
 - OAuth token storage now uses macOS Keychain (primary) with file fallback, including auto-migration from file to Keychain on first run.
+- Google OAuth token is now shared across gmail, gcal, and gdrive — one auth flow covers all three tools. Token stored under `deep-thought-google` keychain entry with combined Gmail + Calendar + Drive scopes.
 - Standardized export filename date prefix from `YYYY-MM-DD_` to `YYMMDD-` (e.g., `260330-weekly-digest.md`).
 
 ### Added

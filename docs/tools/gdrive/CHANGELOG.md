@@ -8,6 +8,7 @@ All notable changes to the gdrive tool will be documented in this file.
 
 - Secret retrieval now checks macOS Keychain first, falling back to environment variables. Uses the shared `deep_thought.secrets` module.
 - OAuth token management refactored to delegate to the shared `deep_thought.secrets` module (behavior unchanged).
+- Google OAuth token is now shared across gmail, gcal, and gdrive — one auth flow covers all three tools. Token stored under `deep-thought-google` keychain entry with combined Gmail + Calendar + Drive scopes.
 
 ### Added
 

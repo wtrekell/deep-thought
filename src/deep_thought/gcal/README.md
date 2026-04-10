@@ -30,6 +30,8 @@ Google Calendar API → Local Models → Filters → SQLite DB → Markdown Expo
    gcal auth
    ```
 
+   This runs a one-time browser consent flow and stores a shared token under the `deep-thought-google` keychain entry. The token covers Gmail, Calendar, and Drive scopes together, so running `gcal auth` (or `gmail auth` or `gdrive auth`) authenticates all three Google tools at once. You only need to run the auth command on one of them.
+
 4. Pull your first sync:
 
    ```bash
@@ -118,7 +120,7 @@ All paths are rooted at `data/gcal/` by default. Set `DEEP_THOUGHT_DATA_DIR` to 
 
 ## Tool-Specific Notes
 
-- **OAuth 2.0 flow:** Credentials are cached in a local token file; refresh tokens are handled automatically
+- **OAuth 2.0 flow:** A single shared token (`deep-thought-google` keychain entry) covers Gmail, Calendar, and Drive. Authenticating via any of the three tools' `auth` command grants access to all three; refresh tokens are handled automatically
 - **All-day events:** Stored as separate from timed events; date representation differs in frontmatter
 - **Attendee list:** Extracted and stored; used for filtering and LLM context
 - **Timezone handling:** Events respect the calendar's timezone; local times are standardized in export
