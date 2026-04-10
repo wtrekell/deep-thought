@@ -432,6 +432,77 @@ class TestProcessSingleEmail:
         aggregate_file = tmp_path / "newsletters" / "newsletters.md"
         assert aggregate_file.exists()
 
+    def test_save_local_false_skips_file_write(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        tmp_path: Path,
+    ) -> None:
+        """Should not create any files when save_local is False but still apply actions."""
+        no_save_rule = RuleConfig(
+            name="forward_only",
+            query="label:newsletter",
+            ai_instructions=None,
+            actions=["archive"],
+            append_mode=False,
+            save_local=False,
+        )
+        message = make_mock_message(message_id="nosave_msg")
+        mock_gmail_client.get_message.return_value = message
+
+        status, actions = _process_single_email(
+            gmail_client=mock_gmail_client,
+            message_stub={"id": "nosave_msg"},
+            rule_config=no_save_rule,
+            db_conn=in_memory_db,
+            extractor=None,
+            output_dir=tmp_path,
+            dry_run=False,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+        )
+
+        assert status == "ok"
+        assert "archive" in actions
+        # No files should be created
+        assert not any(tmp_path.rglob("*.md"))
+
+    def test_save_local_false_still_records_in_database(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        tmp_path: Path,
+    ) -> None:
+        """Should still record the email in the database when save_local is False."""
+        from deep_thought.gmail.db.queries import get_processed_email
+
+        no_save_rule = RuleConfig(
+            name="forward_only",
+            query="label:newsletter",
+            ai_instructions=None,
+            actions=[],
+            append_mode=False,
+            save_local=False,
+        )
+        message = make_mock_message(message_id="nosave_db_msg")
+        mock_gmail_client.get_message.return_value = message
+
+        _process_single_email(
+            gmail_client=mock_gmail_client,
+            message_stub={"id": "nosave_db_msg"},
+            rule_config=no_save_rule,
+            db_conn=in_memory_db,
+            extractor=None,
+            output_dir=tmp_path,
+            dry_run=False,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+        )
+
+        record = get_processed_email(in_memory_db, "nosave_db_msg")
+        assert record is not None
+        assert record["output_path"] == ""
+
 
 # ---------------------------------------------------------------------------
 # process_rule

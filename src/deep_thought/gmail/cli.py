@@ -284,6 +284,23 @@ def cmd_collect(args: argparse.Namespace) -> None:
                 logger.warning("Gemini extractor not available: %s", gemini_error)
                 logger.warning("AI extraction will be skipped for this run.")
 
+        # Set up embedding infrastructure (non-fatal if unavailable)
+        embedding_model = None
+        embedding_qdrant_client = None
+        if not args.dry_run:
+            try:
+                from deep_thought.embeddings import (  # noqa: PLC0415
+                    create_embedding_model,
+                    create_qdrant_client,
+                    ensure_collection,
+                )
+
+                embedding_model = create_embedding_model()
+                embedding_qdrant_client = create_qdrant_client()
+                ensure_collection(embedding_qdrant_client, config.qdrant_collection)
+            except Exception as init_err:
+                logger.error("Embedding infrastructure unavailable, continuing without embeddings: %s", init_err)
+
         collection_result: CollectResult = run_collection(
             gmail_client=gmail_client,
             config=config,
@@ -293,6 +310,9 @@ def cmd_collect(args: argparse.Namespace) -> None:
             force=args.force,
             rule_name_filter=args.rule if hasattr(args, "rule") and args.rule else None,
             output_override=output_override,
+            embedding_model=embedding_model,
+            embedding_qdrant_client=embedding_qdrant_client,
+            qdrant_collection=config.qdrant_collection,
         )
         connection.commit()
     finally:

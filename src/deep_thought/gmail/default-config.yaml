@@ -25,6 +25,9 @@ decision_cache_ttl: 3600 # Seconds to cache AI extraction decisions
 # Output
 output_dir: "data/gmail/export/"
 
+# Qdrant
+qdrant_collection: "deep_thought_db" # Qdrant collection for semantic search; emails are embedded automatically
+
 rules:
   - name: "newsletters"
     query: "label:newsletter"
@@ -33,6 +36,7 @@ rules:
       - archive
       - label:Processed
     append_mode: true # Append to existing file rather than create new
+    save_local: true # Write markdown to disk (default)
 
   - name: "receipts"
     query: "subject:receipt OR subject:invoice newer_than:7d"
@@ -41,6 +45,7 @@ rules:
       - archive
       - label:Receipts
     append_mode: false
+    save_local: true
 
   - name: "readwise"
     query: "label:newsletter -label:Forwarded newer_than:7d"
@@ -50,3 +55,4 @@ rules:
       - label:Forwarded
       - archive
     append_mode: false
+    save_local: false # Action-only rule — no local file needed

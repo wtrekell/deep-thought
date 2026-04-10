@@ -167,6 +167,9 @@ def _process_single_email(
     dry_run: bool,
     clean_newsletters: bool,
     decision_cache_ttl: int,
+    embedding_model: Any | None = None,
+    embedding_qdrant_client: Any | None = None,
+    qdrant_collection: str = "deep_thought_db",
 ) -> tuple[str, list[str]]:
     """Fetch, process, and write output for a single email.
 
@@ -180,6 +183,11 @@ def _process_single_email(
         dry_run: If True, skip writing files and applying actions.
         clean_newsletters: If True, clean HTML before processing.
         decision_cache_ttl: Cache TTL in seconds for AI decisions.
+        embedding_model: Optional MLX embedding model. When provided together
+            with ``embedding_qdrant_client``, the email is embedded after writing.
+        embedding_qdrant_client: Optional Qdrant client. Must be provided
+            together with ``embedding_model`` for embedding to occur.
+        qdrant_collection: Qdrant collection name for embeddings.
 
     Returns:
         A tuple of (status, actions_applied). Status is 'ok' or 'error'.
@@ -232,21 +240,48 @@ def _process_single_email(
                         },
                     )
 
-        # Generate markdown
+        # Generate markdown (always — needed for embeddings even when not saving locally)
         actions_applied: list[str] = []
+        subject = _extract_header(message, "Subject") or "(no subject)"
         markdown_content = generate_email_markdown(message, body_text, rule_config.name, rule_config.actions)
 
-        # Write output
-        subject = _extract_header(message, "Subject") or "(no subject)"
+        # Write output (only when save_local is True)
         date_str = datetime.now(tz=UTC).strftime("%y%m%d")
 
         if not dry_run:
-            if rule_config.append_mode:
-                output_path = append_to_rule_file(markdown_content, output_dir, rule_config.name)
+            if rule_config.save_local:
+                if rule_config.append_mode:
+                    output_path = append_to_rule_file(markdown_content, output_dir, rule_config.name)
+                else:
+                    output_path = write_email_file(markdown_content, output_dir, rule_config.name, subject, date_str)
+                output_path_str = str(output_path)
             else:
-                output_path = write_email_file(markdown_content, output_dir, rule_config.name, subject, date_str)
+                output_path_str = ""
 
-            output_path_str = str(output_path)
+            # Embed into Qdrant
+            if embedding_model is not None and embedding_qdrant_client is not None:
+                try:
+                    from deep_thought.embeddings import strip_frontmatter as _strip_frontmatter  # noqa: PLC0415
+                    from deep_thought.gmail.embeddings import (  # noqa: PLC0415
+                        write_embedding as _write_gmail_embedding,
+                    )
+
+                    embed_content = f"Subject: {subject}\n\n{_strip_frontmatter(markdown_content)}"
+                    email_record_for_embed = ProcessedEmailLocal.from_message(
+                        message=message,
+                        rule_name=rule_config.name,
+                        output_path=output_path_str,
+                        actions=[],
+                    )
+                    _write_gmail_embedding(
+                        embed_content,
+                        email_record_for_embed,
+                        embedding_model,
+                        embedding_qdrant_client,
+                        qdrant_collection,
+                    )
+                except Exception as embed_err:
+                    logger.warning("Embedding failed for email %s: %s", message_id, embed_err)
         else:
             output_path_str = f"[dry-run] {output_dir / rule_config.name / _shared_slugify(subject)}.md"
 
@@ -288,6 +323,9 @@ def process_rule(
     decision_cache_ttl: int,
     global_email_count: int,
     max_emails_per_run: int,
+    embedding_model: Any | None = None,
+    embedding_qdrant_client: Any | None = None,
+    qdrant_collection: str = "deep_thought_db",
 ) -> CollectResult:
     """Process a single rule: query Gmail, fetch messages, process each.
 
@@ -303,6 +341,11 @@ def process_rule(
         decision_cache_ttl: Cache TTL for AI decisions.
         global_email_count: Number of emails already processed this run.
         max_emails_per_run: Maximum emails per run.
+        embedding_model: Optional MLX embedding model. Threaded through to
+            ``_process_single_email`` to embed each collected email.
+        embedding_qdrant_client: Optional Qdrant client. Threaded through to
+            ``_process_single_email`` for writing embeddings.
+        qdrant_collection: Qdrant collection name for embeddings.
 
     Returns:
         A CollectResult summarising this rule's processing.
@@ -342,6 +385,9 @@ def process_rule(
             dry_run=dry_run,
             clean_newsletters=clean_newsletters,
             decision_cache_ttl=decision_cache_ttl,
+            embedding_model=embedding_model,
+            embedding_qdrant_client=embedding_qdrant_client,
+            qdrant_collection=qdrant_collection,
         )
 
         if status == "ok":
@@ -370,6 +416,9 @@ def run_collection(
     force: bool = False,
     rule_name_filter: str | None = None,
     output_override: Path | None = None,
+    embedding_model: Any | None = None,
+    embedding_qdrant_client: Any | None = None,
+    qdrant_collection: str = "deep_thought_db",
 ) -> CollectResult:
     """Run all collection rules and aggregate results.
 
@@ -382,6 +431,11 @@ def run_collection(
         force: Clear state and reprocess.
         rule_name_filter: Run only this rule (None = all rules).
         output_override: Override the output directory.
+        embedding_model: Optional MLX embedding model. Passed through to each
+            ``process_rule`` call so emails are embedded as they are collected.
+        embedding_qdrant_client: Optional Qdrant client. Passed through to
+            each ``process_rule`` call for writing embeddings.
+        qdrant_collection: Qdrant collection name for embeddings.
 
     Returns:
         An aggregated CollectResult across all rules.
@@ -407,6 +461,9 @@ def run_collection(
             decision_cache_ttl=config.decision_cache_ttl,
             global_email_count=global_email_count,
             max_emails_per_run=config.max_emails_per_run,
+            embedding_model=embedding_model,
+            embedding_qdrant_client=embedding_qdrant_client,
+            qdrant_collection=qdrant_collection,
         )
 
         total_result.processed += rule_result.processed

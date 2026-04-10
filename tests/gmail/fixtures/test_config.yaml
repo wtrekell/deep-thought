@@ -17,6 +17,7 @@ clean_newsletters: true
 decision_cache_ttl: 3600
 
 output_dir: "data/gmail/export/"
+qdrant_collection: "test_collection"
 
 rules:
   - name: "test_rule"
@@ -26,3 +27,4 @@ rules:
       - archive
       - label:TestLabel
     append_mode: false
+    save_local: true

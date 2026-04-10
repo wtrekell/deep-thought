@@ -23,6 +23,7 @@ class RuleConfig:
     ai_instructions: str | None
     actions: list[str]
     append_mode: bool
+    save_local: bool = True
 
 
 @dataclass
@@ -43,6 +44,7 @@ class GmailConfig:
     decision_cache_ttl: int
     output_dir: str
     rules: list[RuleConfig]
+    qdrant_collection: str = "deep_thought_db"
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +143,7 @@ def _parse_rule_config(raw_rule: dict[str, Any]) -> RuleConfig:
         ai_instructions=ai_instructions,
         actions=actions,
         append_mode=bool(raw_rule.get("append_mode", False)),
+        save_local=bool(raw_rule.get("save_local", True)),
     )
 
 
@@ -209,6 +212,7 @@ def load_config(config_path: Path | None = None) -> GmailConfig:
         clean_newsletters=bool(raw_dict.get("clean_newsletters", True)),
         decision_cache_ttl=int(raw_dict.get("decision_cache_ttl", 3600)),
         output_dir=str(raw_dict.get("output_dir", "data/gmail/export/")),
+        qdrant_collection=str(raw_dict.get("qdrant_collection", "deep_thought_db")),
         rules=rules,
     )
 

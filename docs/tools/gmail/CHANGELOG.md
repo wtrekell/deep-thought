@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Global `gmail` entry point failed with `No module named 'keyring'` when the uv tool environment was stale. Resolved by reinstalling the global tool environment (#28).
 - Migrated Gemini AI extraction from deprecated `google-generativeai` SDK to `google-genai`. Client initialization and generation call updated in `extractor.py`.
 - Added service initialization guard to `client._execute()`: calling any API method before `authenticate()` now raises `RuntimeError("Must call authenticate() before making API requests.")` instead of a cryptic `AttributeError`.
 
@@ -16,6 +17,8 @@
 
 ### Added
 
+- Per-rule `save_local` option (default `true`). Set to `false` to skip local markdown output for action-only rules like forwarding (#29).
+- Qdrant vector store integration. Collected emails are embedded into the shared `deep_thought_db` collection for semantic search. Configure via `qdrant_collection` in config. Embedding failures are non-fatal (#30).
 - Initial release: collect, send, auth commands
 - Rule-based email collection with Gmail search queries
 - Gemini AI extraction with decision caching

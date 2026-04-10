@@ -6,6 +6,18 @@ Findings from code review on 2026-03-23. Critical and high severity issues were 
 
 ## Resolved (2026-04-09)
 
+### Global `gmail` command fails with missing keyring — FIXED
+
+**GitHub:** #28
+
+The globally installed `gmail` entry point (`~/.local/bin/gmail`) failed with `ModuleNotFoundError: No module named 'keyring'`. The `keyring>=24.0.0` dependency was declared in `pyproject.toml` but the global uv tool environment (`~/.local/share/uv/tools/deep-thought/`) was stale and had not been refreshed since keyring was added.
+
+Fixed (2026-04-09): Reinstalled the global tool environment with `uv tool install --editable . --force`. This synced all current dependencies including keyring. The reinstall also picked up two missing entry points (`gdrive`, `secrets`) that were absent from the prior install.
+
+**Prevention:** After adding or changing dependencies in `pyproject.toml`, run `uv tool install --editable . --force` from the repo root to refresh the global tool environment.
+
+---
+
 ### L7: `google.generativeai` package is deprecated — FIXED
 
 **File:** `extractor.py:32`

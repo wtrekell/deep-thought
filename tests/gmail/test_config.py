@@ -47,6 +47,7 @@ class TestLoadConfig:
         assert rule.ai_instructions == "Extract key points."
         assert rule.actions == ["archive", "label:TestLabel"]
         assert rule.append_mode is False
+        assert rule.save_local is True
 
     def test_parses_scopes(self) -> None:
         """Should parse the OAuth scopes list."""
@@ -74,6 +75,7 @@ class TestLoadConfig:
         assert config.clean_newsletters is True
         assert config.decision_cache_ttl == 3600
         assert config.output_dir == "data/gmail/export/"
+        assert config.qdrant_collection == "test_collection"
 
     def test_raises_for_missing_file(self, tmp_path: Path) -> None:
         """Should raise FileNotFoundError when the config file is missing."""
@@ -100,6 +102,20 @@ class TestLoadConfig:
         bad_file.write_text("rules:\n  - name: 'test'\n")
         with pytest.raises(ValueError, match="must have a 'query' field"):
             load_config(bad_file)
+
+    def test_save_local_defaults_to_true(self, tmp_path: Path) -> None:
+        """A rule without save_local should default to True."""
+        config_file = tmp_path / "no_save_local.yaml"
+        config_file.write_text("rules:\n  - name: 'minimal'\n    query: 'label:test'\n")
+        config = load_config(config_file)
+        assert config.rules[0].save_local is True
+
+    def test_save_local_false_parsed(self, tmp_path: Path) -> None:
+        """A rule with save_local: false should set the field to False."""
+        config_file = tmp_path / "save_local_false.yaml"
+        config_file.write_text("rules:\n  - name: 'fwd_only'\n    query: 'label:test'\n    save_local: false\n")
+        config = load_config(config_file)
+        assert config.rules[0].save_local is False
 
     def test_null_ai_instructions_parsed_as_none(self, tmp_path: Path) -> None:
         """A rule with ai_instructions: null should set the field to None."""
@@ -148,7 +164,14 @@ class TestValidateConfig:
         """Should report an issue when two rules share the same name."""
         config = load_config(FIXTURES_DIR / "test_config.yaml")
         config.rules.append(
-            RuleConfig(name="test_rule", query="label:dup", ai_instructions=None, actions=[], append_mode=False)
+            RuleConfig(
+                name="test_rule",
+                query="label:dup",
+                ai_instructions=None,
+                actions=[],
+                append_mode=False,
+                save_local=True,
+            )
         )
         issues = validate_config(config)
         assert any("Duplicate rule name" in issue for issue in issues)
