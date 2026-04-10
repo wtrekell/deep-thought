@@ -405,6 +405,7 @@ def cmd_config(args: argparse.Namespace) -> None:
     print(f"  retry_max_attempts:       {config.retry_max_attempts}")
     print(f"  retry_base_delay_seconds: {config.retry_base_delay_seconds}")
     print(f"  output_dir:               {config.output_dir}")
+    print(f"  qdrant_collection:        {config.qdrant_collection}")
 
 
 def cmd_search(args: argparse.Namespace) -> None:

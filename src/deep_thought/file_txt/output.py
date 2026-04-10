@@ -66,7 +66,7 @@ def write_document(
         existing_md = document_dir / f"{document_name}.md"
         if existing_md.exists():
             existing_content = existing_md.read_text(encoding="utf-8")
-            if f"source_file: {source_path.name}" not in existing_content:
+            if f'source_file: "{source_path.name}"' not in existing_content:
                 document_name = f"{source_path.stem}_{source_path.suffix.lstrip('.')}"
                 document_dir = output_root / document_name
 
@@ -121,7 +121,7 @@ def _build_frontmatter(
     """
     lines: list[str] = ["---"]
     lines.append("tool: file-txt")
-    lines.append(f"source_file: {source_file}")
+    lines.append(f'source_file: "{_escape_yaml_string(source_file)}"')
     lines.append(f"file_type: {file_type}")
     if page_count is not None:
         lines.append(f"page_count: {page_count}")
@@ -134,7 +134,7 @@ def _build_frontmatter(
         lines.append(f"attachment_count: {email_metadata.get('attachment_count', 0)}")
     lines.append(f"word_count: {word_count}")
     lines.append(f"has_images: {str(has_images).lower()}")
-    lines.append(f"processed_date: {processed_date}")
+    lines.append(f'processed_date: "{processed_date}"')
     lines.append("---")
     return "\n".join(lines) + "\n"
 

@@ -62,6 +62,7 @@ def _build_output_path(
     rule_name: str,
     post_id: str,
     title: str,
+    date_prefix: str,
 ) -> str:
     """Compute the expected output file path for a post (without writing it).
 
@@ -73,15 +74,14 @@ def _build_output_path(
         rule_name: Rule name subdirectory.
         post_id: Reddit post ID for the filename.
         title: Post title to slugify for the filename.
+        date_prefix: Pre-computed YYMMDD date string shared with write_post_file
+            to guarantee both use the same date even across a midnight boundary.
 
     Returns:
         String representation of the output file path.
     """
-    from datetime import UTC, datetime  # noqa: PLC0415
-
     from deep_thought.reddit.utils import slugify_title  # noqa: PLC0415
 
-    date_prefix = datetime.now(tz=UTC).strftime("%y%m%d")
     title_slug = slugify_title(title)
     filename = f"{date_prefix}-{post_id}_{title_slug}.md"
     return str(output_dir / rule_name / filename)
@@ -160,9 +160,14 @@ def _process_single_post(
 
     # Generate markdown
     markdown_content = generate_markdown(submission, comments, rule_config)
-    word_count = count_words(markdown_content)
 
-    output_path_str = _build_output_path(output_dir, rule_config.name, post_id, str(submission.title))
+    # Capture date once so _build_output_path and write_post_file agree,
+    # even if processing spans a midnight boundary.
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    run_date_prefix = datetime.now(tz=UTC).strftime("%y%m%d")
+
+    output_path_str = _build_output_path(output_dir, rule_config.name, post_id, str(submission.title), run_date_prefix)
 
     if not dry_run:
         written_path = write_post_file(
@@ -171,6 +176,7 @@ def _process_single_post(
             rule_name=rule_config.name,
             post_id=post_id,
             title=str(submission.title),
+            date_prefix=run_date_prefix,
         )
         output_path_str = str(written_path)
 
@@ -187,6 +193,9 @@ def _process_single_post(
                 written_path.write_text(updated_markdown, encoding="utf-8")
                 markdown_content = updated_markdown
 
+        # Count words after image rewrite so the final on-disk content is measured.
+        word_count = count_words(markdown_content)
+
         local_post = CollectedPostLocal.from_submission(
             submission=submission,
             rule_name=rule_config.name,
@@ -196,12 +205,10 @@ def _process_single_post(
 
         if embedding_model is not None and embedding_qdrant_client is not None:
             try:
-                from pathlib import Path as _EmbedPath  # noqa: PLC0415
-
                 from deep_thought.embeddings import strip_frontmatter as _strip_frontmatter  # noqa: PLC0415
                 from deep_thought.reddit.embeddings import write_embedding as _write_reddit_embedding  # noqa: PLC0415
 
-                raw_md = _EmbedPath(output_path_str).read_text(encoding="utf-8")
+                raw_md = Path(output_path_str).read_text(encoding="utf-8")
                 embed_content = f"Title: {submission.title}\n\n{_strip_frontmatter(raw_md)}"
                 _write_reddit_embedding(
                     embed_content,

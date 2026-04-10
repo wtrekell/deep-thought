@@ -30,6 +30,7 @@ Markdown format (from requirements):
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -47,6 +48,10 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from deep_thought.todoist.config import TodoistConfig
+
+logger = logging.getLogger(__name__)
+
+_MAX_SAFE_NAME_LENGTH = 80
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +99,9 @@ def _safe_directory_name(name: str) -> str:
     sanitized = "".join(safe_chars)
     # Strip leading dots to prevent path traversal names like ".." or "..."
     sanitized = sanitized.strip(".")
+    # Enforce a maximum filename length to avoid filesystem limits
+    if len(sanitized) > _MAX_SAFE_NAME_LENGTH:
+        sanitized = sanitized[:_MAX_SAFE_NAME_LENGTH].rstrip("-.")
     if not sanitized:
         sanitized = "_unnamed"
     return sanitized
@@ -160,13 +168,20 @@ def _render_comment_line(comment: dict[str, Any], include_attachments: bool) -> 
     if include_attachments:
         raw_attachment = comment.get("attachment_json")
         if raw_attachment is not None:
-            attachment: dict[str, Any] = json.loads(raw_attachment)
-            file_name: str = attachment.get("file_name") or "attachment"
-            file_type: str = attachment.get("file_type") or "unknown"
-            raw_size = attachment.get("file_size") or 0
-            size_kb = round(int(raw_size) / 1024, 1)
-            file_url: str = attachment.get("file_url") or ""
-            line += f"  [attachment: {file_name} ({file_type}, {size_kb} KB) — {file_url}]"
+            try:
+                attachment: dict[str, Any] = json.loads(raw_attachment)
+            except json.JSONDecodeError:
+                logger.warning(
+                    "Skipping malformed attachment JSON for comment posted at %s",
+                    posted_at,
+                )
+            else:
+                file_name: str = attachment.get("file_name") or "attachment"
+                file_type: str = attachment.get("file_type") or "unknown"
+                raw_size = attachment.get("file_size") or 0
+                size_kb = round(int(raw_size) / 1024, 1)
+                file_url: str = attachment.get("file_url") or ""
+                line += f"  [attachment: {file_name} ({file_type}, {size_kb} KB) — {file_url}]"
 
     return line
 

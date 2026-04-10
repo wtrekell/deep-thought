@@ -8,6 +8,7 @@ a JSON snapshot of the raw API response for debugging/backup.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -40,6 +41,8 @@ if TYPE_CHECKING:
 
     from deep_thought.todoist.client import TodoistClient
     from deep_thought.todoist.config import TodoistConfig
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -277,7 +280,18 @@ def pull(
         # Comments (only if comment sync is enabled and not dry_run for writing)
         if config.comments.sync:
             for task in filtered_tasks:
-                task_comments = client.get_comments(task_id=task.id)
+                try:
+                    task_comments = client.get_comments(task_id=task.id)
+                except Exception as comment_fetch_error:
+                    logger.warning(
+                        "Failed to fetch comments for task %s (%s): %s — skipping",
+                        task.id,
+                        task.content,
+                        comment_fetch_error,
+                    )
+                    result.errors.append(f"Comment fetch failed for task {task.id}: {comment_fetch_error}")
+                    task_comments = []
+
                 local_comments = [CommentLocal.from_sdk(comment) for comment in task_comments]
                 result.comments_synced += len(local_comments)
 

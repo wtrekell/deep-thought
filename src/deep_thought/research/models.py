@@ -148,7 +148,8 @@ class ResearchResult:
         Returns:
             A ResearchResult with all fields populated.
         """
-        first_choice: dict[str, Any] = response_data.get("choices", [{}])[0]
+        choices: list[dict[str, Any]] = response_data.get("choices") or [{}]
+        first_choice: dict[str, Any] = choices[0]
         answer_text: str = first_choice.get("message", {}).get("content", "")
 
         if not answer_text:

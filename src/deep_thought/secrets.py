@@ -28,6 +28,7 @@ import logging
 import os
 from pathlib import Path
 
+import google.auth.exceptions
 import keyring
 import keyring.backends.fail
 import keyring.errors
@@ -169,7 +170,11 @@ def delete_secret(service: str, key_name: str) -> None:
     try:
         keyring.delete_password(full_service, key_name)
         logger.debug("Secret deleted from keychain (service=%s, key=%s).", full_service, key_name)
-    except (keyring.errors.PasswordDeleteError, keyring.errors.KeyringLocked):
+    except keyring.errors.KeyringLocked as exc:
+        raise RuntimeError(
+            f"Cannot delete secret: macOS Keychain is locked (service={full_service}, key={key_name})."
+        ) from exc
+    except keyring.errors.PasswordDeleteError:
         logger.debug("No secret to delete in keychain (service=%s, key=%s).", full_service, key_name)
 
 
@@ -240,10 +245,13 @@ def _save_oauth_to_file(credentials: Credentials, token_path: Path) -> None:
         token_path: The file path to write the token to.
     """
     token_path.parent.mkdir(parents=True, exist_ok=True)
-    token_path.write_text(credentials.to_json())  # type: ignore[no-untyped-call]
-    # chmod(0o600) restricts access to the owner only on POSIX systems.
-    # This call is a no-op on Windows — a known platform limitation.
-    token_path.chmod(0o600)
+    # Use os.open() with restricted permissions at creation time to avoid the TOCTOU
+    # race that would exist between write_text() and a subsequent chmod() call.
+    file_descriptor = os.open(str(token_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(file_descriptor, credentials.to_json().encode())  # type: ignore[no-untyped-call]
+    finally:
+        os.close(file_descriptor)
     logger.debug("OAuth token saved to %s", token_path)
 
 
@@ -370,10 +378,18 @@ def get_oauth_credentials(
                     use_keychain = False
     else:
         if resolved_token_path is not None and resolved_token_path.exists():
-            existing_credentials = Credentials.from_authorized_user_file(  # type: ignore[no-untyped-call]
-                str(resolved_token_path), scopes
-            )
-            logger.debug("Loaded existing OAuth token from %s", resolved_token_path)
+            try:
+                existing_credentials = Credentials.from_authorized_user_file(  # type: ignore[no-untyped-call]
+                    str(resolved_token_path), scopes
+                )
+                logger.debug("Loaded existing OAuth token from %s", resolved_token_path)
+            except (ValueError, json.JSONDecodeError, OSError):
+                logger.warning(
+                    "Token file is corrupt or unreadable (service=%s, path=%s). Falling through to browser auth flow.",
+                    service,
+                    resolved_token_path,
+                )
+                existing_credentials = None
 
     if existing_credentials is not None and existing_credentials.valid:
         if migrated_file_to_delete is not None:
@@ -383,7 +399,13 @@ def get_oauth_credentials(
 
     if existing_credentials is not None and existing_credentials.expired and existing_credentials.refresh_token:
         logger.debug("Refreshing expired OAuth token (service=%s).", service)
-        existing_credentials.refresh(Request())
+        try:
+            existing_credentials.refresh(Request())
+        except google.auth.exceptions.RefreshError:
+            if migrated_file_to_delete is not None:
+                migrated_file_to_delete.unlink(missing_ok=True)
+                logger.info("Cleaned up migrated token file after refresh failure: %s", migrated_file_to_delete)
+            raise
         _persist_oauth(service, existing_credentials, token_path, use_keychain)
         if migrated_file_to_delete is not None:
             migrated_file_to_delete.unlink(missing_ok=True)

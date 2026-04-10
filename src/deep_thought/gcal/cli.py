@@ -261,7 +261,7 @@ def cmd_pull(args: argparse.Namespace) -> None:
 
     calendar_override: list[str] | None = None
     if args.calendar:
-        calendar_override = [calendar_id.strip() for calendar_id in args.calendar.split(",")]
+        calendar_override = [calendar_id.strip() for calendar_id in args.calendar.split(",") if calendar_id.strip()]
 
     output_override: str | None = args.output if args.output else None
 
@@ -394,15 +394,15 @@ def cmd_delete(args: argparse.Namespace) -> None:
 
     connection = initialize_database()
     try:
-        # Delete from Google Calendar API
-        gcal_client.delete_event(calendar_id, event_id)
-
-        # Look up the local event record before deleting it so we can remove the file
+        # Look up the local event record and calendar name before calling the API
+        # so that a missing-record condition can be detected without a partial side effect.
         local_event_record = get_event(connection, event_id, calendar_id)
 
-        # Look up calendar name for file path resolution
         calendar_record = get_calendar(connection, calendar_id)
         calendar_display_name = calendar_record["summary"] if calendar_record else calendar_id
+
+        # Delete from Google Calendar API only after local validation succeeds.
+        gcal_client.delete_event(calendar_id, event_id)
 
         if local_event_record is not None:
             from deep_thought.gcal.models import EventLocal

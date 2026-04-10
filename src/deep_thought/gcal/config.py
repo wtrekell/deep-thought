@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 from dotenv import load_dotenv
-
-logger = logging.getLogger(__name__)
 
 _LARGE_DAY_VALUE_THRESHOLD = 365
 
@@ -167,11 +164,6 @@ def validate_config(config: GcalConfig) -> list[str]:
     if config.lookback_days < 0:
         issues.append(f"lookback_days must be >= 0, got: {config.lookback_days}.")
     elif config.lookback_days > _LARGE_DAY_VALUE_THRESHOLD:
-        logger.warning(
-            "lookback_days is set to %d (> %d). This may result in very slow API calls and excessive data.",
-            config.lookback_days,
-            _LARGE_DAY_VALUE_THRESHOLD,
-        )
         issues.append(
             f"lookback_days value of {config.lookback_days} is very large (> {_LARGE_DAY_VALUE_THRESHOLD} days) "
             "and may result in slow API calls."
@@ -180,11 +172,6 @@ def validate_config(config: GcalConfig) -> list[str]:
     if config.lookahead_days < 0:
         issues.append(f"lookahead_days must be >= 0, got: {config.lookahead_days}.")
     elif config.lookahead_days > _LARGE_DAY_VALUE_THRESHOLD:
-        logger.warning(
-            "lookahead_days is set to %d (> %d). This may result in very slow API calls and excessive data.",
-            config.lookahead_days,
-            _LARGE_DAY_VALUE_THRESHOLD,
-        )
         issues.append(
             f"lookahead_days value of {config.lookahead_days} is very large (> {_LARGE_DAY_VALUE_THRESHOLD} days) "
             "and may result in slow API calls."

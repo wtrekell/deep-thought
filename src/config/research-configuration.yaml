@@ -8,9 +8,8 @@ search_model: "sonar" # Model used by the search command
 research_model: "sonar-deep-research" # Model used by the research command
 
 # Defaults
-default_recency:
-  null # Recency filter: 'hour', 'day', 'week', 'month', 'year', '3 months', '6 months', or null (disabled)
-  # '3 months' and '6 months' map to 'year' at the Perplexity API level (closest supported superset)
+default_recency: null # Recency filter: 'hour', 'day', 'week', 'month', 'year', '3 months', '6 months', or null (disabled)
+# Note: '3 months' and '6 months' map to 'year' at the Perplexity API level (closest supported superset)
 
 # Output
 output_dir: "data/research/export/" # Directory for research output markdown files

@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
-
-logger = logging.getLogger(__name__)
 
 _PROJECT_CONFIG_RELATIVE_PATH = Path("src") / "config" / "gdrive-configuration.yaml"
 

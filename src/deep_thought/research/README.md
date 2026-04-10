@@ -47,10 +47,9 @@ Query + Context → Perplexity API (sonar or sonar-deep-research)
 
 Configuration lives at `src/config/research-configuration.yaml`. Key settings:
 
-- **api_key** — Perplexity API key (read from `PERPLEXITY_API_KEY` env var if not specified)
-- **sonar_model** — Model for `search` command (default: `sonar`)
-- **sonar_deep_model** — Model for `research` command (default: `sonar-deep-research`)
-- **embeddings** — Enable/disable Qdrant embedding writes
+- **api_key_env** — Name of the environment variable holding the Perplexity API key (default: `PERPLEXITY_API_KEY`)
+- **search_model** — Model for `search` command (default: `sonar`)
+- **research_model** — Model for `research` command (default: `sonar-deep-research`)
 
 ## CLI Usage
 

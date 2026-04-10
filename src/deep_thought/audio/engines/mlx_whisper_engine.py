@@ -109,6 +109,7 @@ class MlxWhisperEngine:
         chunk_results: list[ChunkResult] = []
         detected_language = "unknown"
 
+        cumulative_offset_seconds: float = 0.0
         try:
             for index, chunk_path in enumerate(chunks):
                 logger.debug("Transcribing chunk %d: %s", index, chunk_path)
@@ -121,11 +122,12 @@ class MlxWhisperEngine:
                 segments = _parse_mlx_segments(result.get("segments", []))
                 chunk_duration = _get_audio_duration(chunk_path)
 
-                # Offset timestamps by chunk start time
-                offset = index * self._chunk_duration_minutes * 60
+                # Offset timestamps by the accumulated duration of all prior chunks,
+                # using the measured duration rather than the nominal chunk length so
+                # the last (usually shorter) chunk is handled correctly.
                 for seg in segments:
-                    seg.start += offset
-                    seg.end += offset
+                    seg.start += cumulative_offset_seconds
+                    seg.end += cumulative_offset_seconds
 
                 chunk_results.append(
                     ChunkResult(
@@ -134,6 +136,7 @@ class MlxWhisperEngine:
                         duration=chunk_duration,
                     )
                 )
+                cumulative_offset_seconds += chunk_duration
                 if index == 0:
                     detected_language = result.get("language", "unknown")
         finally:
@@ -189,7 +192,13 @@ def _get_audio_duration(audio_path: Path) -> float:
             "ffprobe not found. Install FFmpeg: brew install ffmpeg (macOS) or apt install ffmpeg (Linux)"
         ) from None
     data: dict[str, Any] = json.loads(result.stdout)
-    return float(data["format"]["duration"])
+    format_section: dict[str, Any] = data.get("format", {})
+    raw_duration = format_section.get("duration")
+    if raw_duration is None:
+        raise RuntimeError(
+            f"ffprobe did not return a duration for {audio_path}. The file may be corrupt or in an unsupported format."
+        )
+    return float(raw_duration)
 
 
 def _split_audio(audio_path: Path, chunk_minutes: int) -> list[Path]:
@@ -229,13 +238,23 @@ def _split_audio(audio_path: Path, chunk_minutes: int) -> list[Path]:
             check=True,
         )
     except FileNotFoundError:
+        with contextlib.suppress(OSError):
+            chunk_dir.rmdir()
         raise RuntimeError(
             "ffmpeg not found. Install FFmpeg: brew install ffmpeg (macOS) or apt install ffmpeg (Linux)"
         ) from None
+    except subprocess.CalledProcessError:
+        # Clean up any partial output before re-raising
+        for partial_chunk in chunk_dir.glob(f"chunk_*{audio_path.suffix}"):
+            partial_chunk.unlink(missing_ok=True)
+        with contextlib.suppress(OSError):
+            chunk_dir.rmdir()
+        raise
 
     chunks = sorted(chunk_dir.glob(f"chunk_*{audio_path.suffix}"))
     if not chunks:
-        chunk_dir.rmdir()
+        with contextlib.suppress(OSError):
+            chunk_dir.rmdir()
         raise RuntimeError(f"FFmpeg produced no chunks from {audio_path}")
     return chunks
 

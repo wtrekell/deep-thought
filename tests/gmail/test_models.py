@@ -51,8 +51,8 @@ class TestSlugifySubject:
         assert _slugify_subject("") == ""
 
     def test_unicode_characters(self) -> None:
-        """Should replace unicode characters with hyphens."""
-        assert _slugify_subject("Café résumé") == "caf-r-sum"
+        """Should transliterate unicode characters to ASCII equivalents."""
+        assert _slugify_subject("Café résumé") == "cafe-resume"
 
 
 # ---------------------------------------------------------------------------

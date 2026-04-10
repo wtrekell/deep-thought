@@ -4,15 +4,15 @@ Findings from code review on 2026-03-23. Critical and high severity issues were 
 
 ---
 
-## Open
+## Resolved (2026-04-09)
 
-### L7: `google.generativeai` package is deprecated
+### L7: `google.generativeai` package is deprecated — FIXED
 
 **File:** `extractor.py:32`
 
-The `google.generativeai` package shows a `FutureWarning` recommending migration to `google.genai`. The old package will stop receiving updates.
+The `google.generativeai` package showed a `FutureWarning` recommending migration to `google.genai`. The old package was no longer receiving updates.
 
-**Fix:** Migrate to `google.genai` SDK. This affects the constructor, `configure()`, and `GenerativeModel` usage patterns.
+Fixed (2026-04-09): Migrated to the `google-genai` SDK. Client initialization and the generation call in `extractor.py` updated to match the new API. The `FutureWarning` no longer appears at runtime.
 
 ---
 

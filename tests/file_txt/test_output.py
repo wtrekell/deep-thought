@@ -23,12 +23,12 @@ class TestBuildFrontmatter:
             processed_date="2026-03-21T00:00:00+00:00",
         )
         assert "tool: file-txt" in frontmatter
-        assert "source_file: report.pdf" in frontmatter
+        assert 'source_file: "report.pdf"' in frontmatter
         assert "file_type: pdf" in frontmatter
         assert "page_count: 5" in frontmatter
         assert "word_count: 1200" in frontmatter
         assert "has_images: true" in frontmatter
-        assert "processed_date: 2026-03-21T00:00:00+00:00" in frontmatter
+        assert 'processed_date: "2026-03-21T00:00:00+00:00"' in frontmatter
 
     def test_frontmatter_is_wrapped_in_dashes(self) -> None:
         """The frontmatter block must be delimited by --- markers."""
@@ -200,7 +200,7 @@ class TestWriteDocument:
         content = output_path.read_text(encoding="utf-8")
         assert content.startswith("---\n")
         assert "tool: file-txt" in content
-        assert "source_file: summary.docx" in content
+        assert 'source_file: "summary.docx"' in content
 
     def test_page_count_omitted_for_non_pdf_in_written_file(self, tmp_path: Path) -> None:
         """The written file must not include page_count when it is None."""

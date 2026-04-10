@@ -289,6 +289,17 @@ def cmd_crawl(args: argparse.Namespace) -> None:
                 batch_config = load_config(batch_config_path)
                 batch_rule_name = batch_config_path.stem
 
+                batch_validation_issues = validate_config(batch_config)
+                if batch_validation_issues:
+                    logger.warning(
+                        "Skipping batch rule '%s' due to %d config issue(s): %s",
+                        batch_rule_name,
+                        len(batch_validation_issues),
+                        "; ".join(batch_validation_issues),
+                    )
+                    total_failed += 1
+                    continue
+
                 if embedding_qdrant_client is not None and batch_config.crawl.qdrant_collection is not None:
                     try:
                         ensure_collection(embedding_qdrant_client, batch_config.crawl.qdrant_collection)

@@ -55,7 +55,6 @@ def _get_mime_type(file_path: str) -> str:
 
 def _ensure_parent_folder_hierarchy(
     relative_file_path: str,
-    source_dir: str,
     root_drive_folder_id: str,
     client: DriveClient,
     conn: sqlite3.Connection,
@@ -68,7 +67,6 @@ def _ensure_parent_folder_hierarchy(
 
     Args:
         relative_file_path: The relative path of the file (from parent of source_dir).
-        source_dir: The configured source directory path.
         root_drive_folder_id: The top-level Drive folder ID from config.
         client: Authenticated DriveClient.
         conn: Open SQLite connection.
@@ -156,6 +154,10 @@ def run_backup(
         clear_drive_folders(db_conn)
         db_conn.commit()
 
+    if not Path(config.source_dir).exists():
+        logger.warning("Source directory does not exist: %s — skipping backup.", config.source_dir)
+        return backup_result
+
     logger.info("Walking source directory: %s", config.source_dir)
     walked_files = walk_tree(config.source_dir, config.exclude_patterns)
     logger.info("Found %d file(s) to consider.", len(walked_files))
@@ -181,7 +183,6 @@ def run_backup(
             file_mime_type = _get_mime_type(absolute_file_path)
             parent_drive_folder_id = _ensure_parent_folder_hierarchy(
                 relative_file_path=relative_file_path,
-                source_dir=config.source_dir,
                 root_drive_folder_id=config.drive_folder_id,
                 client=client,
                 conn=db_conn,

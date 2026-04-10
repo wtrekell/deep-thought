@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
 
 from deep_thought.gdrive.config import GDriveConfig, get_default_config_path, load_config
-from deep_thought.gdrive.db.schema import get_database_path, init_db, open_database
+from deep_thought.gdrive.db.schema import get_data_dir, get_database_path, init_db, open_database
 from deep_thought.gdrive.uploader import run_backup, run_prune
 
 if TYPE_CHECKING:
@@ -119,15 +119,15 @@ def cmd_init(args: argparse.Namespace) -> None:
     Args:
         args: Parsed argparse namespace.
     """
-    import os
+    import sqlite3
 
-    data_dir = Path(os.environ.get("DEEP_THOUGHT_DATA_DIR", "data")) / "gdrive"
+    data_dir = get_data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
 
     database_path = get_database_path()
-    import sqlite3
 
     raw_connection = sqlite3.connect(str(database_path))
+    raw_connection.row_factory = sqlite3.Row
     init_db(raw_connection)
     raw_connection.close()
 

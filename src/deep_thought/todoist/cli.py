@@ -125,7 +125,6 @@ def cmd_init(args: argparse.Namespace) -> None:
     Args:
         args: Parsed argparse namespace (no subcommand-specific flags).
     """
-    import os
     import shutil
 
     bundled_config = get_bundled_config_path()
@@ -158,10 +157,6 @@ def cmd_init(args: argparse.Namespace) -> None:
 
     export_directory.mkdir(parents=True, exist_ok=True)
     created_items.append(f"  Export directory: {export_directory}")
-
-    # Honour DEEP_THOUGHT_DATA_DIR override in the summary line
-    data_root = Path(os.environ.get("DEEP_THOUGHT_DATA_DIR", "data"))
-    _ = data_root  # referenced only for documentation; get_database_path handles it
 
     print("Todoist Tool initialised successfully.")
     print()

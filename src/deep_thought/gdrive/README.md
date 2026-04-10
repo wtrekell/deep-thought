@@ -4,7 +4,7 @@ Incremental Google Drive backup: walks a local directory tree, compares against 
 
 ## Overview
 
-The GDrive Tool performs bidirectional sync between a local directory and Google Drive. It walks the source tree, compares mtimes against the database, uploads new files, updates changed files, skips unchanged ones, and records all state in SQLite. Designed for backing up local work while avoiding redundant API calls.
+The GDrive Tool performs incremental backup from a local directory to Google Drive. It walks the source tree, compares mtimes against the database, uploads new files, updates changed files, skips unchanged ones, and records all state in SQLite. Designed for backing up local work while avoiding redundant API calls.
 
 ## Data Flow
 
@@ -39,6 +39,17 @@ Local Directory → File Walker → mtime Comparison → SQLite State → Upload
    ```bash
    gdrive --dry-run
    ```
+
+   Other flags available on the default backup run:
+
+   | Flag                 | Description                                                               |
+   | -------------------- | ------------------------------------------------------------------------- |
+   | `--dry-run`          | Preview all changes without uploading or writing to the database          |
+   | `--force`            | Clear all cached state and re-upload all files from scratch               |
+   | `--prune`            | Delete Drive files whose local paths match any configured exclude_pattern |
+   | `--verbose` / `-v`   | Enable debug-level log output                                             |
+   | `--config PATH`      | Override the default configuration file path                              |
+   | `--save-config PATH` | Write an example configuration file to PATH and exit                      |
 
 ## Configuration
 
@@ -96,3 +107,4 @@ All paths are rooted at `data/gdrive/` by default. Set `DEEP_THOUGHT_DATA_DIR` t
 - **MIME type detection:** Uses file extension to guess type; falls back to `application/octet-stream`
 - **Status tracking:** Files marked as `uploaded`, `updated`, `skipped`, or `error` in database
 - **Exclude patterns:** Configure `backup.exclude_patterns` in the YAML to skip directories or files by name or path glob
+- **Prune mode:** `--prune` removes Drive files whose local paths match any configured exclude pattern; use `--dry-run --prune` to preview deletions

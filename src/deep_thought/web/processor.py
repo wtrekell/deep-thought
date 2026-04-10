@@ -643,7 +643,7 @@ def run_documentation_mode(
 
                 # Enqueue child links if we have not reached max depth
                 if current_depth < config.crawl.max_depth:
-                    child_links = extract_internal_links(page_result.html, root_url)
+                    child_links = extract_internal_links(page_result.html, current_url)
                     queries.update_page_child_links(conn, current_url, json.dumps(list(child_links)))
                     conn.commit()
                     for child_url in child_links:

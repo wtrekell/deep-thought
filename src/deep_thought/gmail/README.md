@@ -44,15 +44,42 @@ Gmail API → Fetch (by rule) → Clean HTML → [Optional: Gemini extraction] �
    gmail send message.md
    ```
 
+## CLI
+
+```
+gmail [--dry-run] [--force] [--rule NAME] [--output PATH] [--max-emails INT] [--config PATH] [--verbose]
+gmail init
+gmail auth
+gmail config [--config PATH]
+gmail send [message_path]
+gmail --save-config PATH
+```
+
+| Flag                 | Description                                                               |
+| -------------------- | ------------------------------------------------------------------------- |
+| `--dry-run`          | Preview what would be collected without writing files or applying actions |
+| `--force`            | Clear state and reprocess all matching emails                             |
+| `--rule NAME`        | Run only the named rule (default: all rules)                              |
+| `--output PATH`      | Override the output directory from configuration                          |
+| `--max-emails INT`   | Override `max_emails_per_run` for this invocation                         |
+| `--config PATH`      | Override the default configuration file path                              |
+| `--verbose` / `-v`   | Increase log output to DEBUG level                                        |
+| `--save-config PATH` | Write the default config template to PATH and exit                        |
+
 ## Configuration
 
 Configuration lives at `src/config/gmail-configuration.yaml`. Key settings:
 
-- **rules** — List of collection rules (each with a name, query, and actions)
-- **max_emails_per_rule** — Limit results per rule
-- **use_gemini** — Enable AI extraction via Gemini API
-- **actions** — Post-collection actions: archive, label, forward, delete
-- **clean_html** — Remove styles, scripts, and unwanted tags from email bodies
+- **rules** — List of collection rules. Each rule has `name`, `query`, `ai_instructions` (or `null`), `actions`, and `append_mode`
+- **max_emails_per_run** — Global cap on emails processed per invocation (must be > 0)
+- **clean_newsletters** — Strip tracking pixels, social buttons, and boilerplate from email bodies
+- **decision_cache_ttl** — Seconds to cache AI extraction decisions per message (0 disables caching)
+- **gemini_model** — Gemini model used for AI extraction (e.g. `gemini-2.5-flash`)
+- **gemini_api_key_env** — Name of the environment variable holding the Gemini API key
+- **gemini_rate_limit_rpm** / **gmail_rate_limit_rpm** — Per-service rate limit caps
+- **credentials_path** / **token_path** — Paths to the OAuth 2.0 client secret and cached token
+
+Per-rule actions: `archive`, `mark_read`, `trash`, `delete`, `label:<name>`, `remove_label:<name>`, `forward:<address>`
 
 ## Module Structure
 

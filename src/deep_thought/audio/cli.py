@@ -211,19 +211,20 @@ def cmd_transcribe(args: argparse.Namespace) -> None:
     # Run batch processing
     from deep_thought.audio.processor import process_batch
 
-    results = process_batch(
-        input_path,
-        config,
-        conn,
-        output_root,
-        engine=transcription_engine,
-        dry_run=args.dry_run,
-        force=args.force,
-        nuke=args.nuke,
-    )
-
-    conn.commit()
-    conn.close()
+    try:
+        results = process_batch(
+            input_path,
+            config,
+            conn,
+            output_root,
+            engine=transcription_engine,
+            dry_run=args.dry_run,
+            force=args.force,
+            nuke=args.nuke,
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
     if not results:
         print("No audio files found.")
