@@ -12,7 +12,6 @@ without changes.
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
 
 from deep_thought.secrets import (
@@ -31,8 +30,6 @@ from deep_thought.secrets import (
 
 if TYPE_CHECKING:
     from google.oauth2.credentials import Credentials
-
-logger = logging.getLogger(__name__)
 
 _GDRIVE_SERVICE = "gdrive"
 

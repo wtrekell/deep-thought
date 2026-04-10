@@ -224,7 +224,7 @@ def run_migrations(conn: sqlite3.Connection, migrations_dir: Path) -> None:
             conn.execute("COMMIT")
         except sqlite3.Error as database_error:
             conn.execute("ROLLBACK")
-            raise sqlite3.Error(f"Migration {migration_file.name} failed: {database_error}") from database_error
+            raise type(database_error)(f"Migration {migration_file.name} failed: {database_error}") from database_error
         finally:
             conn.isolation_level = original_isolation_level
 

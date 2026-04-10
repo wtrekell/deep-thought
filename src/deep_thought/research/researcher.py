@@ -182,7 +182,7 @@ class PerplexityClient:
 
         poll_url = f"{_ASYNC_POLL_ENDPOINT}/{job_id}"
         elapsed_start = time.monotonic()
-        completed_response: dict[str, Any] | None = None
+        completed_response: dict[str, Any] = {}
 
         while True:
             elapsed_seconds = time.monotonic() - elapsed_start
@@ -202,6 +202,9 @@ class PerplexityClient:
                 raise RuntimeError(f"Deep research job failed with status: {error_detail}")
 
             time.sleep(_ASYNC_POLL_INTERVAL_SECONDS)
+
+        if not completed_response:
+            raise ValueError("Deep research polling loop exited without a completed response")
 
         return ResearchResult.from_api_response(
             completed_response,

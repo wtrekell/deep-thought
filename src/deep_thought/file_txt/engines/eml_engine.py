@@ -186,11 +186,11 @@ def _collect_attachments(message: Message) -> list[dict[str, str]]:
         disposition = str(part.get("Content-Disposition", ""))
         if "attachment" not in disposition and "inline" not in disposition:
             continue
-        if not part.get_filename():
+        raw_filename = part.get_filename()
+        if not raw_filename:
             # Skip inline parts without filenames (e.g. plain text body parts)
             continue
-        filename = part.get_filename()
-        filename = _decode_header(filename) if filename else "unnamed_attachment"
+        filename = _decode_header(raw_filename)
         payload = part.get_payload(decode=True)
         size_bytes = len(payload) if isinstance(payload, bytes) else 0
         attachments.append(
@@ -219,8 +219,8 @@ def _build_header_list(
     headers: list[tuple[str, str]] = []
 
     if full_headers:
-        for header_name in message:
-            header_value = _decode_header(str(message.get(header_name, "")))
+        for header_name, header_raw_value in message.items():
+            header_value = _decode_header(str(header_raw_value))
             headers.append((header_name, header_value))
     else:
         headers.append(("From", from_address))

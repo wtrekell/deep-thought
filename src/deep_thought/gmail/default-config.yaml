@@ -5,7 +5,7 @@
 credentials_path: "src/config/gmail/credentials.json"
 token_path: "data/gmail/token.json"
 scopes:
-  - "https://mail.google.com/" # Use 'gmail.modify' if permanent delete is not needed
+  - "https://mail.google.com/" # Use 'https://www.googleapis.com/auth/gmail.modify' if permanent delete is not needed
 
 # Gemini AI
 gemini_api_key_env: "GEMINI_API_KEY"

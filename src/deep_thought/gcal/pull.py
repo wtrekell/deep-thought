@@ -396,11 +396,8 @@ def run_pull(
         calendar_events = get_events_by_calendar(db_conn, calendar_id) if not dry_run else []
         all_fetched_events.extend(calendar_events)
 
-    # Commit all DB writes together.
-    if not dry_run:
-        db_conn.commit()
-
     # Generate LLM index files per calendar when configured.
+    # Note: the caller (cli.py) is responsible for committing the transaction.
     if config.generate_llms_files and not dry_run:
         for api_calendar in target_calendars:
             calendar_summary = api_calendar.get("summary", api_calendar["id"])
@@ -413,10 +410,14 @@ def run_pull(
                 write_llms_files(event_files, resolved_output_dir, calendar_summary)
                 logger.debug("LLM files written for calendar %s", calendar_summary)
 
-    # Write the raw snapshot.
+    # Write the raw snapshot. Failures here are non-fatal — the sync is already
+    # committed and surfacing a snapshot error would be misleading.
     if not dry_run:
         data_dir = get_data_dir()
-        _write_snapshot(all_fetched_events, data_dir)
+        try:
+            _write_snapshot(all_fetched_events, data_dir)
+        except Exception as snapshot_error:
+            logger.warning("Snapshot write failed (sync data is intact): %s", snapshot_error)
 
     logger.info(
         "Pull complete: %d calendar(s), %d created, %d updated, %d cancelled, %d unchanged",

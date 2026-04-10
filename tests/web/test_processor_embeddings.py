@@ -89,6 +89,7 @@ class TestProcessorEmbeddingFailureDoesNotAbort:
                 dry_run=False,
                 embedding_model=mock_embedding_model,
                 embedding_qdrant_client=mock_qdrant_client,
+                qdrant_collection="test_collection",
             )
 
         # Even with embedding failure the page model must be returned with success status

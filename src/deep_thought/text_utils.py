@@ -7,6 +7,7 @@ no side effects and no tool-specific imports.
 from __future__ import annotations
 
 import re
+import unicodedata
 
 
 def slugify(text: str, max_length: int = 80, empty_fallback: str = "") -> str:
@@ -34,7 +35,8 @@ def slugify(text: str, max_length: int = 80, empty_fallback: str = "") -> str:
     """
     if max_length < 1:
         raise ValueError("max_length must be >= 1")
-    lowercased = text.lower()
+    ascii_text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    lowercased = ascii_text.lower()
     non_alnum_replaced = re.sub(r"[^a-z0-9]+", "-", lowercased)
     stripped = non_alnum_replaced.strip("-")
     truncated = stripped[:max_length].rstrip("-")

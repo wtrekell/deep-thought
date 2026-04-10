@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from deep_thought.gmail.cleaner import clean_newsletter_html
 from deep_thought.gmail.db.queries import (
+    _now_utc_iso,
     delete_emails_by_rule,
     get_decision_cache,
     upsert_decision_cache,
@@ -39,23 +40,6 @@ if TYPE_CHECKING:
     from deep_thought.gmail.extractor import GeminiExtractor
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Timestamp helpers
-# ---------------------------------------------------------------------------
-
-
-def _utc_now_iso() -> str:
-    """Return the current UTC time as an ISO-8601 string.
-
-    Centralises the ISO format timestamp used for database writes so all
-    callers produce a consistent format.
-
-    Returns:
-        Current UTC datetime as an ISO 8601 string (e.g., "2026-03-30T12:00:00+00:00").
-    """
-    return datetime.now(tz=UTC).isoformat()
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +221,7 @@ def _process_single_email(
                 if extracted:
                     body_text = extracted
                     # Cache the result
-                    now_iso = _utc_now_iso()
+                    now_iso = _now_utc_iso()
                     upsert_decision_cache(
                         db_conn,
                         {

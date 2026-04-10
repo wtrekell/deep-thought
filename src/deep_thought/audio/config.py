@@ -465,6 +465,12 @@ def validate_config(config: AudioConfig) -> list[str]:
     if config.limits.chunk_duration_minutes <= 0:
         issues.append(f"limits.chunk_duration_minutes must be positive, got: {config.limits.chunk_duration_minutes}.")
 
+    if config.hallucination.duration_chars_per_sec_min >= config.hallucination.duration_chars_per_sec_max:
+        issues.append(
+            f"hallucination duration_chars_per_sec_min ({config.hallucination.duration_chars_per_sec_min}) "
+            f"must be less than duration_chars_per_sec_max ({config.hallucination.duration_chars_per_sec_max})."
+        )
+
     return issues
 
 

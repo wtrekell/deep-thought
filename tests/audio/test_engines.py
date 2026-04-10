@@ -302,7 +302,7 @@ class TestMlxWhisperEngine:
         assert result.segments[0].text == "First chunk"
         assert result.segments[0].start == 0.0  # Chunk 0: no offset
         assert result.segments[1].text == "Second chunk"
-        assert result.segments[1].start == chunk_minutes * 60  # Chunk 1: offset by 300s
+        assert result.segments[1].start == 60.0  # Chunk 1: offset by measured chunk 0 duration (60s)
 
     def test_chunk_temp_files_cleaned_up(self, tmp_path: Path) -> None:
         """Temporary chunk files must be deleted after chunked transcription."""

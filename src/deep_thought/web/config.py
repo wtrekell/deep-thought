@@ -16,6 +16,14 @@ import yaml
 _VALID_MODES = {"blog", "documentation", "direct"}
 
 
+def _parse_bool(value: object, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() in ("true", "1", "yes")
+    return default
+
+
 @dataclass
 class CrawlConfig:
     """Configuration for the web crawl behaviour.
@@ -273,8 +281,8 @@ def _parse_crawl_config(raw: dict[str, Any]) -> CrawlConfig:
     raw_channel = raw.get("browser_channel")
     browser_channel: str | None = str(raw_channel) if raw_channel is not None else None
 
-    stealth: bool = bool(raw.get("stealth", False))
-    headless: bool = bool(raw.get("headless", True))
+    stealth: bool = _parse_bool(raw.get("stealth"), False)
+    headless: bool = _parse_bool(raw.get("headless"), True)
 
     raw_include = raw.get("include_patterns")
     include_patterns: list[str] = list(raw_include) if isinstance(raw_include, list) else []
@@ -285,8 +293,8 @@ def _parse_crawl_config(raw: dict[str, Any]) -> CrawlConfig:
     retry_attempts: int = int(raw.get("retry_attempts", 2))
     retry_delay: float = float(raw.get("retry_delay", 5.0))
     output_dir: str = str(raw.get("output_dir", "output/web/"))
-    extract_images: bool = bool(raw.get("extract_images", False))
-    generate_llms_files: bool = bool(raw.get("generate_llms_files", True))
+    extract_images: bool = _parse_bool(raw.get("extract_images"), False)
+    generate_llms_files: bool = _parse_bool(raw.get("generate_llms_files"), True)
     index_depth: int = int(raw.get("index_depth", 1))
     min_article_words: int = int(raw.get("min_article_words", 200))
 
@@ -296,7 +304,7 @@ def _parse_crawl_config(raw: dict[str, Any]) -> CrawlConfig:
     raw_strip_prefix = raw.get("strip_path_prefix")
     strip_path_prefix: str | None = str(raw_strip_prefix) if raw_strip_prefix is not None else None
 
-    strip_domain: bool = bool(raw.get("strip_domain", False))
+    strip_domain: bool = _parse_bool(raw.get("strip_domain"), False)
     llms_lookback_days: int = int(raw.get("llms_lookback_days", 30))
 
     raw_boilerplate = raw.get("strip_boilerplate")

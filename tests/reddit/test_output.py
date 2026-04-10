@@ -318,6 +318,7 @@ class TestWritePostFile:
             rule_name="test_rule",
             post_id="abc123",
             title="Test Post",
+            date_prefix="260101",
         )
         assert output_path.exists()
         assert output_path.parent == tmp_path / "test_rule"
@@ -331,6 +332,7 @@ class TestWritePostFile:
             rule_name="my_rule",
             post_id="xyz789",
             title="Python Tutorial Post",
+            date_prefix="260101",
         )
         assert "xyz789" in output_path.name
         assert "python" in output_path.name
@@ -344,6 +346,7 @@ class TestWritePostFile:
             rule_name="test_rule",
             post_id="abc123",
             title="A great post",
+            date_prefix="260101",
         )
         assert output_path.read_text(encoding="utf-8") == content
 
@@ -356,6 +359,7 @@ class TestWritePostFile:
             rule_name="rule",
             post_id="abc",
             title="test",
+            date_prefix="260101",
         )
         assert output_path.exists()
 

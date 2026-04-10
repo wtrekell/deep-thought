@@ -15,8 +15,8 @@ dependencies = [
     "playwright>=1.40.0",
     "html2text>=2020.1.16",
     "extract-msg>=0.50.0",
-    "mlx-whisper>=0.4.0",
-    "mlx-embeddings>=0.1.0",
+    "mlx-whisper>=0.4.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "mlx-embeddings>=0.1.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
     "qdrant-client>=1.9.0",
     "praw>=7.7.1",
     "google-api-python-client>=2.100.0",
@@ -69,7 +69,7 @@ select = [
     "B",      # flake8-bugbear
     "C4",     # flake8-comprehensions
     "SIM",    # flake8-simplify
-    "TCH",    # flake8-type-checking
+    "TC",     # flake8-type-checking
 ]
 ignore = []
 fixable = ["ALL"]
@@ -82,16 +82,9 @@ indent-style = "space"
 [tool.mypy]
 python_version = "3.12"
 strict = true
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
 disallow_any_unimported = true
 no_implicit_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
 warn_no_return = true
-check_untyped_defs = true
-strict_equality = true
 
 [[tool.mypy.overrides]]
 module = ["yaml"]
@@ -121,7 +114,7 @@ python_functions = ["test_*"]
 addopts = [
     "--strict-markers",
     "--strict-config",
-    "--cov=src",
+    "--cov=src/deep_thought",
     "--cov-report=term-missing",
     "--cov-report=html",
 ]

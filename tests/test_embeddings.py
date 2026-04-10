@@ -231,9 +231,9 @@ class TestSearchEmbeddings:
     """Tests for search_embeddings() — the shared Qdrant retrieval interface."""
 
     def _make_mock_client(self) -> MagicMock:
-        """Return a mock Qdrant client whose search() returns an empty list by default."""
+        """Return a mock Qdrant client whose query_points() returns an empty result by default."""
         mock_client = MagicMock()
-        mock_client.search.return_value = []
+        mock_client.query_points.return_value.points = []
         return mock_client
 
     def test_unfiltered_search_passes_no_query_filter(self) -> None:
@@ -245,7 +245,7 @@ class TestSearchEmbeddings:
         with patch("deep_thought.embeddings.embed_text", return_value=fake_vector):
             search_embeddings(query="async Rust patterns", model=mock_model, qdrant_client=mock_client)
 
-        call_kwargs = mock_client.search.call_args.kwargs
+        call_kwargs = mock_client.query_points.call_args.kwargs
         assert call_kwargs["query_filter"] is None
 
     def test_source_tool_filter_produces_correct_field_condition(self) -> None:
@@ -264,7 +264,7 @@ class TestSearchEmbeddings:
                 source_tool="reddit",
             )
 
-        call_kwargs = mock_client.search.call_args.kwargs
+        call_kwargs = mock_client.query_points.call_args.kwargs
         query_filter = call_kwargs["query_filter"]
         assert isinstance(query_filter, Filter)
         assert len(query_filter.must) == 1
@@ -289,7 +289,7 @@ class TestSearchEmbeddings:
                 source_type="research_deep",
             )
 
-        call_kwargs = mock_client.search.call_args.kwargs
+        call_kwargs = mock_client.query_points.call_args.kwargs
         query_filter = call_kwargs["query_filter"]
         assert isinstance(query_filter, Filter)
         assert len(query_filter.must) == 1
@@ -315,7 +315,7 @@ class TestSearchEmbeddings:
                 source_type="documentation",
             )
 
-        call_kwargs = mock_client.search.call_args.kwargs
+        call_kwargs = mock_client.query_points.call_args.kwargs
         query_filter = call_kwargs["query_filter"]
         assert isinstance(query_filter, Filter)
         assert len(query_filter.must) == 2
@@ -336,7 +336,7 @@ class TestSearchEmbeddings:
                 limit=25,
             )
 
-        call_kwargs = mock_client.search.call_args.kwargs
+        call_kwargs = mock_client.query_points.call_args.kwargs
         assert call_kwargs["limit"] == 25
 
     def test_default_collection_name_used_when_not_specified(self) -> None:
@@ -348,7 +348,7 @@ class TestSearchEmbeddings:
         with patch("deep_thought.embeddings.embed_text", return_value=fake_vector):
             search_embeddings(query="test query", model=mock_model, qdrant_client=mock_client)
 
-        call_kwargs = mock_client.search.call_args.kwargs
+        call_kwargs = mock_client.query_points.call_args.kwargs
         assert call_kwargs["collection_name"] == COLLECTION_NAME
 
     def test_query_vector_passed_to_client_search(self) -> None:
@@ -360,8 +360,8 @@ class TestSearchEmbeddings:
         with patch("deep_thought.embeddings.embed_text", return_value=distinctive_vector):
             search_embeddings(query="vector passthrough test", model=mock_model, qdrant_client=mock_client)
 
-        call_kwargs = mock_client.search.call_args.kwargs
-        assert call_kwargs["query_vector"] == distinctive_vector
+        call_kwargs = mock_client.query_points.call_args.kwargs
+        assert call_kwargs["query"] == distinctive_vector
 
     def test_results_returned_from_client_search(self) -> None:
         """The list returned by the Qdrant client search call must be returned to the caller."""
@@ -369,7 +369,7 @@ class TestSearchEmbeddings:
         mock_model = MagicMock()
         fake_vector = [0.1] * 384
         expected_results = [MagicMock(), MagicMock()]
-        mock_client.search.return_value = expected_results
+        mock_client.query_points.return_value.points = expected_results
 
         with patch("deep_thought.embeddings.embed_text", return_value=fake_vector):
             results = search_embeddings(query="return value test", model=mock_model, qdrant_client=mock_client)

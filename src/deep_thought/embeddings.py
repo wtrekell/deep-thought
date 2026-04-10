@@ -29,7 +29,7 @@ PAYLOAD_INDEX_FIELDS: dict[str, str] = {
 }
 
 
-def create_embedding_model() -> Any:
+def create_embedding_model() -> tuple[Any, Any]:
     """Load the MLX embedding model used for all document vectorization.
 
     Returns a ``(model, tokenizer)`` tuple that should be passed to
@@ -43,7 +43,7 @@ def create_embedding_model() -> Any:
     """
     import mlx_embeddings
 
-    embedding_model_and_tokenizer: Any = mlx_embeddings.load(EMBEDDING_MODEL_ID)
+    embedding_model_and_tokenizer: tuple[Any, Any] = mlx_embeddings.load(EMBEDDING_MODEL_ID)
     return embedding_model_and_tokenizer
 
 
@@ -63,7 +63,7 @@ def create_qdrant_client(host: str = "localhost", port: int = 6333) -> Any:
     return qdrant_connection
 
 
-def embed_text(text: str, model: Any) -> list[float]:
+def embed_text(text: str, model: tuple[Any, Any]) -> list[float]:
     """Generate an embedding vector for a single text string.
 
     Args:
@@ -241,10 +241,10 @@ def search_embeddings(
 
     query_filter: Any = Filter(must=must_conditions) if must_conditions else None
 
-    results: list[Any] = qdrant_client.search(
+    results: list[Any] = qdrant_client.query_points(
         collection_name=collection_name,
-        query_vector=query_vector,
+        query=query_vector,
         query_filter=query_filter,
         limit=limit,
-    )
+    ).points
     return results

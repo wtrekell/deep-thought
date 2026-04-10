@@ -503,11 +503,7 @@ class TestCmdInit:
 class TestGetVersion:
     def test_fallback_returns_default_version_string(self) -> None:
         """When importlib.metadata raises, _get_version must return '0.1.0'."""
-        with patch("deep_thought.file_txt.cli._get_version", side_effect=Exception("no metadata")):
-            # Call the real function directly to exercise the except branch
-            pass
-
-        # Test the actual fallback logic inline by calling the real function
+        # Test the fallback logic by calling the real function
         # with a patched importlib.metadata.version
         import importlib.metadata
 

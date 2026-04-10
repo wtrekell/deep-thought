@@ -48,20 +48,20 @@ Configuration lives at `src/config/todoist-configuration.yaml`. Key settings:
 
 ## Module Structure
 
-| Module        | Role                                                                                   |
-| ------------- | -------------------------------------------------------------------------------------- |
-| `cli.py`      | CLI entry point with argparse subcommands                                              |
-| `client.py`   | Thin wrapper around the Todoist SDK                                                    |
-| `config.py`   | YAML config loader with .env integration                                               |
-| `models.py`   | Local dataclasses mirroring SDK models                                                 |
-| `filters.py`  | Meta-based filter engine for pull/push                                                 |
-| `pull.py`     | API → models → filters → DB upsert → JSON snapshot                                     |
-| `push.py`     | DB diff → push filters → API calls → mark synced                                       |
-| `sync.py`     | Orchestrator: pull then push                                                           |
-| `export.py`   | DB → structured markdown files                                                         |
-| `create.py`   | Create a new task via API and write it to DB immediately                               |
-| `complete.py` | Close a task via API and update DB (is_completed, completed_at, updated_at, synced_at) |
-| `db/`         | SQLite schema, migrations, and query functions                                         |
+| Module       | Role                                                                              |
+| ------------ | --------------------------------------------------------------------------------- |
+| `cli.py`     | CLI entry point with argparse subcommands; `cmd_complete` handles task completion |
+| `client.py`  | Thin wrapper around the Todoist SDK                                               |
+| `config.py`  | YAML config loader with .env integration                                          |
+| `models.py`  | Local dataclasses mirroring SDK models                                            |
+| `filters.py` | Meta-based filter engine for pull/push                                            |
+| `pull.py`    | API → models → filters → DB upsert → JSON snapshot                                |
+| `push.py`    | DB diff → push filters → API calls → mark synced                                  |
+| `sync.py`    | Orchestrator: pull then push                                                      |
+| `export.py`  | DB → structured markdown files                                                    |
+| `create.py`  | Create a new task via API and write it to DB immediately                          |
+| `attach.py`  | Upload a local file and attach it to a task as a comment via the Sync API         |
+| `db/`        | SQLite schema, migrations, and query functions                                    |
 
 ## Data Storage
 

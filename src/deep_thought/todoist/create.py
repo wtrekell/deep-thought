@@ -204,7 +204,7 @@ def create_task(
     # Resolve labels if requested; build the full name→id map for upsert later
     label_name_to_id_map: dict[str, str] = {}
     if label_names:
-        _resolved_ids, label_name_to_id_map = _resolve_label_ids(conn, label_names)
+        _, label_name_to_id_map = _resolve_label_ids(conn, label_names)
 
     # Short-circuit for dry runs: resolution happened, but no writes
     if dry_run:

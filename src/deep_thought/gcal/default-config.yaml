@@ -2,7 +2,7 @@
 # See files/tools/gcal/260323-requirements.md for full documentation.
 
 # Auth
-credentials_path: "src/config/gmail/credentials.json" # Shared with Gmail
+credentials_path: "src/config/gcal/credentials.json" # Path to OAuth 2.0 client credentials (shared with Gmail if using the same Google Cloud project)
 token_path: "data/gcal/token.json"
 scopes:
   - "https://www.googleapis.com/auth/calendar"

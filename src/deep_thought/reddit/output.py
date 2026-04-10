@@ -319,10 +319,11 @@ def write_post_file(
     rule_name: str,
     post_id: str,
     title: str,
+    date_prefix: str,
 ) -> Path:
     """Write a post's markdown content to disk under the rule's output directory.
 
-    File naming: ``{date}_{post_id}_{title_slug}.md``
+    File naming: ``{date_prefix}-{post_id}_{title_slug}.md``
     Directory: ``{output_dir}/{rule_name}/``
 
     Args:
@@ -331,6 +332,9 @@ def write_post_file(
         rule_name: The name of the rule, used as a subdirectory name.
         post_id: The Reddit post ID, included in the filename.
         title: The post title, slugified for the filename.
+        date_prefix: Pre-computed YYMMDD date string from the caller. Shared
+            with ``_build_output_path`` so both functions produce identical
+            filenames and there is no midnight race between the two calls.
 
     Returns:
         The Path to the written markdown file.
@@ -338,7 +342,6 @@ def write_post_file(
     rule_output_dir = output_dir / rule_name
     rule_output_dir.mkdir(parents=True, exist_ok=True)
 
-    date_prefix = datetime.now(tz=UTC).strftime("%y%m%d")
     title_slug = slugify_title(title)
     filename = f"{date_prefix}-{post_id}_{title_slug}.md"
 

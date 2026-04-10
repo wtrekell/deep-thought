@@ -278,8 +278,6 @@ def validate_config(config: FileTxtConfig) -> list[str]:
         issues.append(f"max_file_size_mb must be greater than 0, got: {config.limits.max_file_size_mb}.")
 
     if not config.filter.allowed_extensions:
-        issues.append(
-            "allowed_extensions is empty — no files will be processed. Add at least one extension (e.g., '.pdf')."
-        )
+        issues.append("allowed_extensions is empty — no extension filter active — all files will be processed.")
 
     return issues
