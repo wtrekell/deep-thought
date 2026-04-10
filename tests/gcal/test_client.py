@@ -149,8 +149,11 @@ class TestGcalClientAuthenticate:
         client = self._make_client()
         assert isinstance(client, GcalClient)
 
+        from deep_thought.secrets import GOOGLE_OAUTH_SCOPES
+
         mock_credentials = MagicMock()
         mock_credentials.valid = True
+        mock_credentials.scopes = set(GOOGLE_OAUTH_SCOPES)
 
         with (
             patch("deep_thought.secrets.keychain_available", return_value=True),
@@ -165,6 +168,7 @@ class TestGcalClientAuthenticate:
     def test_refreshes_expired_token(self) -> None:
         """Should silently refresh an expired token that has a refresh_token."""
         from deep_thought.gcal.client import GcalClient
+        from deep_thought.secrets import GOOGLE_OAUTH_SCOPES
 
         client = self._make_client()
         assert isinstance(client, GcalClient)
@@ -173,6 +177,7 @@ class TestGcalClientAuthenticate:
         mock_credentials.valid = False
         mock_credentials.expired = True
         mock_credentials.refresh_token = "refresh_abc"
+        mock_credentials.scopes = set(GOOGLE_OAUTH_SCOPES)
 
         with (
             patch("deep_thought.secrets.keychain_available", return_value=True),

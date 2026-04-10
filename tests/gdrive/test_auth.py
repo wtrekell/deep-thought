@@ -18,9 +18,9 @@ from deep_thought.gdrive._auth import (
     _persist_credentials,
     get_credentials,
 )
-from deep_thought.secrets import _KEYRING_SERVICE_PREFIX, _OAUTH_ACCOUNT
+from deep_thought.secrets import _KEYRING_SERVICE_PREFIX, _OAUTH_ACCOUNT, GOOGLE_OAUTH_SCOPES, GOOGLE_SERVICE
 
-_KEYRING_SERVICE = f"{_KEYRING_SERVICE_PREFIX}gdrive"
+_KEYRING_SERVICE = f"{_KEYRING_SERVICE_PREFIX}{GOOGLE_SERVICE}"
 _KEYRING_ACCOUNT = _OAUTH_ACCOUNT
 
 if TYPE_CHECKING:
@@ -51,6 +51,7 @@ def _make_valid_credentials() -> MagicMock:
     creds.valid = True
     creds.expired = False
     creds.refresh_token = "fake-refresh-token"
+    creds.scopes = set(GOOGLE_OAUTH_SCOPES)
     creds.to_json.return_value = _FAKE_TOKEN_JSON
     return creds
 
@@ -61,6 +62,7 @@ def _make_expired_credentials() -> MagicMock:
     creds.valid = False
     creds.expired = True
     creds.refresh_token = "fake-refresh-token"
+    creds.scopes = set(GOOGLE_OAUTH_SCOPES)
     creds.to_json.return_value = _FAKE_TOKEN_JSON
     return creds
 
@@ -159,7 +161,7 @@ def test_get_credentials_refreshes_expired_keychain_token() -> None:
         result = get_credentials("/fake/credentials.json", "", _SCOPES)
 
     expired_creds.refresh.assert_called_once()
-    mock_save.assert_called_once_with("gdrive", expired_creds)
+    mock_save.assert_called_once_with(GOOGLE_SERVICE, expired_creds)
     assert result is expired_creds
 
 
@@ -185,7 +187,7 @@ def test_get_credentials_auto_migrates_file_token_to_keychain(tmp_path: Path) ->
         mock_creds_cls.from_authorized_user_file.return_value = valid_creds
         result = get_credentials("/fake/credentials.json", str(token_file), _SCOPES)
 
-    mock_save.assert_called_once_with("gdrive", valid_creds)
+    mock_save.assert_called_once_with(GOOGLE_SERVICE, valid_creds)
     assert not token_file.exists(), "File should have been deleted after migration."
     assert result is valid_creds
 
@@ -210,7 +212,7 @@ def test_get_credentials_falls_back_to_file_when_keychain_unavailable(tmp_path: 
         result = get_credentials("/fake/credentials.json", str(token_file), _SCOPES)
 
     assert result is valid_creds
-    mock_creds_cls.from_authorized_user_file.assert_called_once_with(str(token_file), _SCOPES)
+    mock_creds_cls.from_authorized_user_file.assert_called_once_with(str(token_file), GOOGLE_OAUTH_SCOPES)
 
 
 # ---------------------------------------------------------------------------
@@ -238,7 +240,7 @@ def test_get_credentials_runs_browser_flow_when_no_token_exists(tmp_path: Path) 
         result = get_credentials(str(credentials_file), "", _SCOPES)
 
     mock_flow.run_local_server.assert_called_once_with(port=0)
-    mock_save.assert_called_once_with("gdrive", new_creds)
+    mock_save.assert_called_once_with(GOOGLE_SERVICE, new_creds)
     assert result is new_creds
 
 

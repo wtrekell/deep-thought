@@ -10,6 +10,7 @@ import pytest
 
 from deep_thought.secrets import (
     _KEYRING_SERVICE_PREFIX,
+    GOOGLE_OAUTH_SCOPES,
     delete_secret,
     get_oauth_credentials,
     get_secret,
@@ -540,3 +541,98 @@ def test_get_oauth_credentials_raises_when_no_keychain_and_no_token(tmp_path: Pa
         pytest.raises(RuntimeError, match="interactive browser auth is disabled"),
     ):
         get_oauth_credentials("gcal", str(credentials_file), "", _SCOPES)
+
+
+# ---------------------------------------------------------------------------
+# Scope-upgrade path
+# ---------------------------------------------------------------------------
+
+
+def test_oauth_re_auths_when_loaded_token_has_insufficient_scopes(tmp_path: Path) -> None:
+    """When a valid token lacks required scopes, it is discarded and browser auth is triggered."""
+    credentials_file = tmp_path / "credentials.json"
+    credentials_file.write_text('{"installed": {}}')
+
+    # Build a valid credential whose scopes cover only calendar, not all GOOGLE_OAUTH_SCOPES.
+    narrow_scopes_creds = MagicMock()
+    narrow_scopes_creds.valid = True
+    narrow_scopes_creds.expired = False
+    narrow_scopes_creds.scopes = {"https://www.googleapis.com/auth/calendar"}  # missing gmail + drive
+
+    new_creds = _make_valid_credentials()
+
+    with (
+        patch("deep_thought.secrets.keychain_available", return_value=True),
+        patch("deep_thought.secrets._load_oauth_from_keychain", return_value=narrow_scopes_creds),
+        patch("deep_thought.secrets.InstalledAppFlow") as mock_flow_cls,
+        patch("deep_thought.secrets._save_oauth_to_keychain") as mock_save,
+    ):
+        mock_flow = MagicMock()
+        mock_flow.run_local_server.return_value = new_creds
+        mock_flow_cls.from_client_secrets_file.return_value = mock_flow
+
+        result = get_oauth_credentials(
+            "google",
+            str(credentials_file),
+            "",
+            GOOGLE_OAUTH_SCOPES,
+            required_scopes=GOOGLE_OAUTH_SCOPES,
+        )
+
+    # The narrow-scope token should have been rejected and a fresh browser flow run.
+    mock_flow.run_local_server.assert_called_once_with(port=0)
+    mock_save.assert_called_once_with("google", new_creds)
+    assert result is new_creds
+
+
+def test_oauth_re_auths_when_loaded_token_has_none_scopes(tmp_path: Path) -> None:
+    """When a valid token has scopes=None, it is treated as insufficient and re-auth is triggered."""
+    credentials_file = tmp_path / "credentials.json"
+    credentials_file.write_text('{"installed": {}}')
+
+    none_scopes_creds = MagicMock()
+    none_scopes_creds.valid = True
+    none_scopes_creds.expired = False
+    none_scopes_creds.scopes = None  # Scopes not populated — treat as insufficient.
+
+    new_creds = _make_valid_credentials()
+
+    with (
+        patch("deep_thought.secrets.keychain_available", return_value=True),
+        patch("deep_thought.secrets._load_oauth_from_keychain", return_value=none_scopes_creds),
+        patch("deep_thought.secrets.InstalledAppFlow") as mock_flow_cls,
+        patch("deep_thought.secrets._save_oauth_to_keychain") as mock_save,
+    ):
+        mock_flow = MagicMock()
+        mock_flow.run_local_server.return_value = new_creds
+        mock_flow_cls.from_client_secrets_file.return_value = mock_flow
+
+        result = get_oauth_credentials(
+            "google",
+            str(credentials_file),
+            "",
+            GOOGLE_OAUTH_SCOPES,
+            required_scopes=GOOGLE_OAUTH_SCOPES,
+        )
+
+    mock_flow.run_local_server.assert_called_once_with(port=0)
+    mock_save.assert_called_once_with("google", new_creds)
+    assert result is new_creds
+
+
+def test_oauth_skips_scope_check_when_required_scopes_is_none() -> None:
+    """When required_scopes=None, a valid token is returned without scope verification."""
+    # Credential with scopes=None would normally fail the scope check, but
+    # required_scopes=None means no check is performed.
+    valid_creds_no_scopes = MagicMock()
+    valid_creds_no_scopes.valid = True
+    valid_creds_no_scopes.expired = False
+    valid_creds_no_scopes.scopes = None
+
+    with (
+        patch("deep_thought.secrets.keychain_available", return_value=True),
+        patch("deep_thought.secrets._load_oauth_from_keychain", return_value=valid_creds_no_scopes),
+    ):
+        result = get_oauth_credentials("gmail", "/fake/creds.json", "", _SCOPES)
+
+    assert result is valid_creds_no_scopes

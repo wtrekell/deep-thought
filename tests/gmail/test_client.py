@@ -608,8 +608,11 @@ class TestGmailClientAuthenticate:
             scopes=["https://mail.google.com/"],
         )
 
+        from deep_thought.secrets import GOOGLE_OAUTH_SCOPES
+
         mock_creds = MagicMock()
         mock_creds.valid = True
+        mock_creds.scopes = set(GOOGLE_OAUTH_SCOPES)
 
         with (
             patch("deep_thought.secrets.keychain_available", return_value=True),
@@ -623,6 +626,7 @@ class TestGmailClientAuthenticate:
     def test_refreshes_expired_token(self, tmp_path: Path) -> None:
         """Should refresh expired credentials and re-persist them."""
         from deep_thought.gmail.client import GmailClient
+        from deep_thought.secrets import GOOGLE_OAUTH_SCOPES
 
         client = GmailClient(
             credentials_path=str(tmp_path / "credentials.json"),
@@ -634,6 +638,7 @@ class TestGmailClientAuthenticate:
         mock_creds.valid = False
         mock_creds.expired = True
         mock_creds.refresh_token = "refresh_tok"
+        mock_creds.scopes = set(GOOGLE_OAUTH_SCOPES)
         mock_creds.to_json.return_value = "{}"
 
         with (

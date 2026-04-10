@@ -41,6 +41,24 @@ logger = logging.getLogger(__name__)
 _KEYRING_SERVICE_PREFIX = "deep-thought-"
 _OAUTH_ACCOUNT = "oauth-token"
 
+# ---------------------------------------------------------------------------
+# Shared Google OAuth configuration
+# ---------------------------------------------------------------------------
+
+GOOGLE_OAUTH_SCOPES: list[str] = [
+    "https://mail.google.com/",
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/drive.file",
+]
+
+GOOGLE_SERVICE = "google"
+
+# Legacy per-tool service names used before the consolidated token was introduced.
+_GOOGLE_LEGACY_SERVICE_NAMES: list[str] = ["gmail", "gcal", "gdrive"]
+
+# Module-level flag so the cleanup runs at most once per process.
+_legacy_cleanup_done: bool = False
+
 
 # ---------------------------------------------------------------------------
 # Keychain availability
@@ -255,8 +273,34 @@ def _save_oauth_to_file(credentials: Credentials, token_path: Path) -> None:
     logger.debug("OAuth token saved to %s", token_path)
 
 
+def _cleanup_legacy_google_tokens() -> None:
+    """Remove per-tool Google OAuth tokens left over from before the shared token was introduced.
+
+    Deletes keychain entries for ``deep-thought-gmail/oauth-token``,
+    ``deep-thought-gcal/oauth-token``, and ``deep-thought-gdrive/oauth-token``
+    (silently ignores missing entries). Uses a module-level flag so the work
+    happens at most once per process.
+    """
+    global _legacy_cleanup_done  # noqa: PLW0603
+    if _legacy_cleanup_done:
+        return
+    _legacy_cleanup_done = True
+
+    if keychain_available():
+        for legacy_service_name in _GOOGLE_LEGACY_SERVICE_NAMES:
+            full_service = _service_name(legacy_service_name)
+            try:
+                keyring.delete_password(full_service, _OAUTH_ACCOUNT)
+                logger.info("Removed legacy Google OAuth token from keychain (service=%s).", full_service)
+            except keyring.errors.PasswordDeleteError:
+                pass  # Entry did not exist — nothing to clean up.
+
+
 def _persist_oauth(service: str, credentials: Credentials, token_path: str, use_keychain: bool) -> None:
     """Save OAuth credentials to the appropriate storage backend.
+
+    When ``service`` is ``"google"``, also triggers a one-time cleanup of
+    legacy per-tool keychain entries (gmail, gcal, gdrive).
 
     Args:
         service: Short tool identifier.
@@ -268,6 +312,9 @@ def _persist_oauth(service: str, credentials: Credentials, token_path: str, use_
     Raises:
         RuntimeError: If keychain is unavailable and no token_path is set.
     """
+    if service == GOOGLE_SERVICE:
+        _cleanup_legacy_google_tokens()
+
     if use_keychain:
         try:
             _save_oauth_to_keychain(service, credentials)
@@ -284,11 +331,24 @@ def _persist_oauth(service: str, credentials: Credentials, token_path: str, use_
         )
 
 
+def _has_required_scopes(credentials: Credentials, required_scopes: list[str]) -> bool:
+    """Return True if ``credentials`` covers all ``required_scopes``.
+
+    ``Credentials.scopes`` may be ``None`` (not yet populated) — treat that
+    as no scopes granted, so re-auth is required.
+    """
+    existing_scopes = credentials.scopes
+    if existing_scopes is None:
+        return False
+    return set(required_scopes) <= set(existing_scopes)
+
+
 def get_oauth_credentials(
     service: str,
     credentials_path: str,
     token_path: str,
     scopes: list[str],
+    required_scopes: list[str] | None = None,
 ) -> Credentials:
     """Load, refresh, or obtain OAuth 2.0 credentials.
 
@@ -297,18 +357,25 @@ def get_oauth_credentials(
        - If the keychain has no token but a token file exists, auto-migrate the
          file token to the keychain and delete the file.
     2. If no keychain backend is available, load from ``token_path`` on disk.
-    3. If the token is expired but has a refresh token, refresh it silently.
-    4. If no valid token exists, open a browser window for user consent.
-    5. Persist the (new or refreshed) token via the appropriate backend.
+    3. If ``required_scopes`` is provided, verify the loaded token covers them.
+       If any scope is missing, discard the token and fall through to browser auth.
+    4. If the token is expired but has a refresh token, refresh it silently.
+       After refresh, repeat the scope check if ``required_scopes`` is provided.
+    5. If no valid token exists, open a browser window for user consent.
+    6. Persist the (new or refreshed) token via the appropriate backend.
 
     Args:
-        service: Short tool identifier (e.g., ``"gmail"``, ``"gcal"``, ``"gdrive"``).
+        service: Short tool identifier (e.g., ``"google"``, ``"gmail"``, ``"gcal"``).
         credentials_path: Path to the OAuth client secret JSON file
                           (downloaded from Google Cloud Console).
         token_path: File path used as the fallback token store when no keychain
                     backend is available. May be an empty string when keychain
                     is the only configured backend.
-        scopes: List of OAuth scope URIs to request.
+        scopes: List of OAuth scope URIs to request during a new browser flow.
+        required_scopes: Optional list of scope URIs that a loaded token must
+                         cover. If any are missing the token is discarded and
+                         re-auth is triggered. Pass ``None`` (the default) to
+                         skip scope verification.
 
     Returns:
         A valid google.oauth2.credentials.Credentials object.
@@ -392,10 +459,17 @@ def get_oauth_credentials(
                 existing_credentials = None
 
     if existing_credentials is not None and existing_credentials.valid:
-        if migrated_file_to_delete is not None:
-            migrated_file_to_delete.unlink(missing_ok=True)
-            logger.info("Migrated token file deleted: %s", migrated_file_to_delete)
-        return existing_credentials
+        if required_scopes is not None and not _has_required_scopes(existing_credentials, required_scopes):
+            logger.warning(
+                "Loaded OAuth token for service '%s' is missing required scopes — re-authorizing.",
+                service,
+            )
+            existing_credentials = None
+        else:
+            if migrated_file_to_delete is not None:
+                migrated_file_to_delete.unlink(missing_ok=True)
+                logger.info("Migrated token file deleted: %s", migrated_file_to_delete)
+            return existing_credentials
 
     if existing_credentials is not None and existing_credentials.expired and existing_credentials.refresh_token:
         logger.debug("Refreshing expired OAuth token (service=%s).", service)
@@ -406,11 +480,18 @@ def get_oauth_credentials(
                 migrated_file_to_delete.unlink(missing_ok=True)
                 logger.info("Cleaned up migrated token file after refresh failure: %s", migrated_file_to_delete)
             raise
-        _persist_oauth(service, existing_credentials, token_path, use_keychain)
-        if migrated_file_to_delete is not None:
-            migrated_file_to_delete.unlink(missing_ok=True)
-            logger.info("Migrated token file deleted: %s", migrated_file_to_delete)
-        return existing_credentials
+        if required_scopes is not None and not _has_required_scopes(existing_credentials, required_scopes):
+            logger.warning(
+                "Refreshed OAuth token for service '%s' is still missing required scopes — re-authorizing.",
+                service,
+            )
+            existing_credentials = None
+        else:
+            _persist_oauth(service, existing_credentials, token_path, use_keychain)
+            if migrated_file_to_delete is not None:
+                migrated_file_to_delete.unlink(missing_ok=True)
+                logger.info("Migrated token file deleted: %s", migrated_file_to_delete)
+            return existing_credentials
 
     # No valid token — run the interactive browser consent flow.
     if os.environ.get("DEEP_THOUGHT_NO_KEYCHAIN") == "1":
