@@ -15,7 +15,15 @@ import keyring.backends.fail
 import keyring.errors
 from dotenv import dotenv_values
 
-from deep_thought.secrets import delete_secret, keychain_available, set_secret
+from deep_thought.secrets import (
+    _GOOGLE_LEGACY_SERVICE_NAMES,
+    _KEYRING_SERVICE_PREFIX,
+    _OAUTH_ACCOUNT,
+    GOOGLE_SERVICE,
+    delete_secret,
+    keychain_available,
+    set_secret,
+)
 
 # ---------------------------------------------------------------------------
 # Secret registry — maps tool names to (service, key_name, default_env_var)
@@ -78,6 +86,37 @@ def cmd_status(args: argparse.Namespace) -> None:  # noqa: ARG001
 
         location = ", ".join(location_parts) if location_parts else "MISSING"
         print(f"  {tool_name:10s}  {key_name:20s}  {env_var:25s}  {location}")
+
+    # Google OAuth token status (shared across gmail, gcal, gdrive).
+    print()
+    print("Google OAuth (shared token — covers gmail, gcal, gdrive):")
+    google_oauth_service = f"{_KEYRING_SERVICE_PREFIX}{GOOGLE_SERVICE}"
+    google_token_present = False
+    if has_keychain:
+        try:
+            google_token_value = keyring.get_password(google_oauth_service, _OAUTH_ACCOUNT)
+            google_token_present = google_token_value is not None and google_token_value != ""
+        except keyring.errors.KeyringLocked:
+            google_token_present = False
+    google_token_status = "present" if google_token_present else "MISSING (run: gmail auth / gcal auth / gdrive auth)"
+    print(f"  {'google':10s}  {'oauth-token':20s}  {google_oauth_service}  {google_token_status}")
+
+    # Warn about any legacy per-tool OAuth entries that should have been cleaned up.
+    legacy_entries_found: list[str] = []
+    if has_keychain:
+        for legacy_service_name in _GOOGLE_LEGACY_SERVICE_NAMES:
+            legacy_full_service = f"{_KEYRING_SERVICE_PREFIX}{legacy_service_name}"
+            try:
+                legacy_value = keyring.get_password(legacy_full_service, _OAUTH_ACCOUNT)
+                if legacy_value:
+                    legacy_entries_found.append(legacy_full_service)
+            except keyring.errors.KeyringLocked:
+                pass
+    if legacy_entries_found:
+        print()
+        print("  WARNING: legacy per-tool OAuth tokens still present in keychain:")
+        for legacy_entry in legacy_entries_found:
+            print(f"    {legacy_entry}/{_OAUTH_ACCOUNT}  (will be removed automatically on next auth)")
 
 
 def cmd_migrate(args: argparse.Namespace) -> None:  # noqa: ARG001

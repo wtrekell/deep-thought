@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from deep_thought.gcal._auth import get_credentials
+from deep_thought.secrets import GOOGLE_OAUTH_SCOPES, GOOGLE_SERVICE
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -20,16 +21,23 @@ def _make_valid_credentials() -> MagicMock:
     creds = MagicMock()
     creds.valid = True
     creds.expired = False
+    creds.scopes = set(GOOGLE_OAUTH_SCOPES)
     return creds
 
 
-def test_delegates_to_shared_oauth_with_gcal_service() -> None:
-    """get_credentials should delegate to secrets.get_oauth_credentials with service='gcal'."""
+def test_delegates_to_shared_oauth_with_google_service() -> None:
+    """get_credentials should delegate to secrets.get_oauth_credentials with service='google'."""
     valid_creds = _make_valid_credentials()
     with patch("deep_thought.gcal._auth.get_oauth_credentials", return_value=valid_creds) as mock_get:
         result = get_credentials("/creds.json", "/token.json", _SCOPES)
 
-    mock_get.assert_called_once_with("gcal", "/creds.json", "/token.json", _SCOPES)
+    mock_get.assert_called_once_with(
+        GOOGLE_SERVICE,
+        "/creds.json",
+        "/token.json",
+        GOOGLE_OAUTH_SCOPES,
+        required_scopes=GOOGLE_OAUTH_SCOPES,
+    )
     assert result is valid_creds
 
 
@@ -71,6 +79,6 @@ def test_auto_migrates_file_to_keychain(tmp_path: Path) -> None:
         mock_creds_cls.from_authorized_user_file.return_value = valid_creds
         result = get_credentials("/creds.json", str(token_file), _SCOPES)
 
-    mock_save.assert_called_once_with("gcal", valid_creds)
+    mock_save.assert_called_once_with(GOOGLE_SERVICE, valid_creds)
     assert not token_file.exists()
     assert result is valid_creds
