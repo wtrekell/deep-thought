@@ -20,6 +20,8 @@ Local Directory → File Walker → mtime Comparison → SQLite State → Upload
    gdrive auth
    ```
 
+   This runs a one-time browser consent flow and stores a shared token under the `deep-thought-google` keychain entry. The token covers Gmail, Calendar, and Drive scopes together, so running `gdrive auth` (or `gmail auth` or `gcal auth`) authenticates all three Google tools at once. You only need to run the auth command on one of them.
+
 2. Configure the source directory and Drive folder in `src/config/gdrive-configuration.yaml`.
 
 3. Initialize the database:
@@ -100,7 +102,7 @@ All paths are rooted at `data/gdrive/` by default. Set `DEEP_THOUGHT_DATA_DIR` t
 ## Tool-Specific Notes
 
 - **Incremental sync:** Only new or changed files are uploaded; mtime comparison avoids redundant API calls
-- **OAuth 2.0 flow:** Credentials cached locally; refresh tokens handled automatically
+- **OAuth 2.0 flow:** A single shared token (`deep-thought-google` keychain entry) covers Gmail, Calendar, and Drive. Authenticating via any of the three tools' `auth` command grants access to all three; refresh tokens are handled automatically
 - **Dry-run mode:** Preview all changes without uploading (use `--dry-run`)
 - **Force mode:** Reupload all files, ignoring mtime state (use `--force`)
 - **Rate limiting:** Drive API quotas respected; automatic backoff on 429 responses

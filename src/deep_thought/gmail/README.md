@@ -24,6 +24,8 @@ Gmail API → Fetch (by rule) → Clean HTML → [Optional: Gemini extraction] �
    gmail auth
    ```
 
+   This runs a one-time browser consent flow and stores a shared token under the `deep-thought-google` keychain entry. The token covers Gmail, Calendar, and Drive scopes together, so running `gmail auth` (or `gcal auth` or `gdrive auth`) authenticates all three Google tools at once. You only need to run the auth command on one of them.
+
 2. Configure which emails to fetch and actions to apply in `src/config/gmail-configuration.yaml`.
 
 3. Initialize the database:
@@ -106,7 +108,7 @@ All paths are rooted at `data/gmail/` by default. Set `DEEP_THOUGHT_DATA_DIR` to
 
 ## Tool-Specific Notes
 
-- **OAuth 2.0 flow:** Credentials are cached locally; refresh tokens handled automatically
+- **OAuth 2.0 flow:** A single shared token (`deep-thought-google` keychain entry) covers Gmail, Calendar, and Drive. Authenticating via any of the three tools' `auth` command grants access to all three; refresh tokens are handled automatically
 - **Rule-based collection:** Each rule is a Gmail query (e.g., `from:alice@example.com after:2025-01-01`)
 - **Gemini extraction:** Optional structured extraction (requires `google-genai` extra and API key); skipped gracefully if unavailable
 - **Post-actions:** Applied after markdown export; one failing action does not block others
