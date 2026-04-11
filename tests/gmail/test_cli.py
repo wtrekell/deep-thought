@@ -509,7 +509,7 @@ class TestCmdConfig:
             query="from:store@example.com",
             ai_instructions=None,
             actions=["archive"],
-            append_mode=False,
+            save_mode="individual",
         )
         sample_config = GmailConfig(
             credentials_path="src/config/gmail/credentials.json",
@@ -550,7 +550,7 @@ class TestCmdConfig:
             query="from:billing@example.com",
             ai_instructions=None,
             actions=[],
-            append_mode=False,
+            save_mode="individual",
         )
         sample_config = GmailConfig(
             credentials_path="src/config/gmail/credentials.json",

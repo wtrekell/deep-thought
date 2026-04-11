@@ -61,6 +61,12 @@ Outstanding issues from code reviews. Critical and high severity issues were res
 | T-09  | Test     | `tests/web/conftest.py`         | Unused fixtures `sample_html` and `blog_index_html`                                                                        | Removed both fixtures from `conftest.py`                                                                                                   |
 | \_VER | Medium   | `cli.py`                        | `_VERSION` was a hardcoded string instead of reading package metadata                                                      | Added `_get_version()` using `importlib.metadata.version("deep-thought")` with `PackageNotFoundError` fallback                             |
 
+## Resolved (2026-04-10)
+
+| ID   | Severity | File           | Issue                                                                                                                                                                                                                       | Resolution                                                                                                                                          |
+| ---- | -------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M-21 | Medium   | `processor.py` | `_build_lookback_summaries` joined `output_root` with a DB `output_path` that already contained the output directory prefix, doubling the path and causing `exists()` to fail — all historical pages silently dropped (#31) | Changed path resolution to try the stored path as-is first; falls back to joining with `output_root` only when the direct path does not exist |
+
 ## Resolved (2026-04-02)
 
 | ID   | Severity | File        | Issue                                                                                                                                                                                                                                              | Resolution                                                                                                                           |

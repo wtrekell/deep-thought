@@ -72,7 +72,7 @@ gmail --save-config PATH
 
 Configuration lives at `src/config/gmail-configuration.yaml`. Key settings:
 
-- **rules** — List of collection rules. Each rule has `name`, `query`, `ai_instructions` (or `null`), `actions`, and `append_mode`
+- **rules** — List of collection rules. Each rule has `name`, `query`, `ai_instructions` (or `null`), `actions`, and `save_mode` (`individual`, `append`, `both`, or `none`)
 - **max_emails_per_run** — Global cap on emails processed per invocation (must be > 0)
 - **clean_newsletters** — Strip tracking pixels, social buttons, and boilerplate from email bodies
 - **decision_cache_ttl** — Seconds to cache AI extraction decisions per message (0 disables caching)

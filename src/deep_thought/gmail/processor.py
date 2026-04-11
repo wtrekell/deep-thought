@@ -245,15 +245,19 @@ def _process_single_email(
         subject = _extract_header(message, "Subject") or "(no subject)"
         markdown_content = generate_email_markdown(message, body_text, rule_config.name, rule_config.actions)
 
-        # Write output (only when save_local is True)
+        # Write output based on save_mode
         date_str = datetime.now(tz=UTC).strftime("%y%m%d")
 
         if not dry_run:
-            if rule_config.save_local:
-                if rule_config.append_mode:
-                    output_path = append_to_rule_file(markdown_content, output_dir, rule_config.name)
-                else:
-                    output_path = write_email_file(markdown_content, output_dir, rule_config.name, subject, date_str)
+            if rule_config.save_mode == "individual":
+                output_path = write_email_file(markdown_content, output_dir, rule_config.name, subject, date_str)
+                output_path_str = str(output_path)
+            elif rule_config.save_mode == "append":
+                output_path = append_to_rule_file(markdown_content, output_dir, rule_config.name)
+                output_path_str = str(output_path)
+            elif rule_config.save_mode == "both":
+                output_path = write_email_file(markdown_content, output_dir, rule_config.name, subject, date_str)
+                append_to_rule_file(markdown_content, output_dir, rule_config.name)
                 output_path_str = str(output_path)
             else:
                 output_path_str = ""

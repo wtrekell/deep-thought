@@ -869,7 +869,7 @@ def _build_lookback_summaries(
             continue
 
         md_file = Path(output_path_value)
-        if not md_file.is_absolute():
+        if not md_file.is_absolute() and not md_file.exists():
             md_file = output_root / md_file
 
         if not md_file.exists():

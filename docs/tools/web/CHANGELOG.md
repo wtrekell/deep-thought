@@ -1,5 +1,14 @@
 # Changelog — Web Tool
 
+## [0.3.1] — 2026-04-10
+
+### Fixed
+
+- `_build_lookback_summaries()` doubled the output directory prefix when
+  resolving historical page paths from the database, causing all lookback
+  pages to be silently skipped. The `llms-full.txt` and `llms.txt` files
+  now correctly include historical pages within the lookback window.
+
 ## [0.3.0] — 2026-04-06
 
 ### Added

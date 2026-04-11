@@ -26,5 +26,4 @@ rules:
     actions:
       - archive
       - label:TestLabel
-    append_mode: false
-    save_local: true
+    save_mode: individual

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Replaced per-rule `save_local` (bool) and `append_mode` (bool) fields with a single `save_mode` string field. Valid values: `individual` (default, one file per email), `append` (single combined file per rule), `both` (individual files + combined file), `none` (no files written). Old fields still work with a deprecation warning (#32).
+
 ### Fixed
 
 - Global `gmail` entry point failed with `No module named 'keyring'` when the uv tool environment was stale. Resolved by reinstalling the global tool environment (#28).

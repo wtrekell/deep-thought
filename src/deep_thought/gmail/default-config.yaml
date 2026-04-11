@@ -35,8 +35,7 @@ rules:
     actions:
       - archive
       - label:Processed
-    append_mode: true # Append to existing file rather than create new
-    save_local: true # Write markdown to disk (default)
+    save_mode: append # All emails appended to single rule file (options: individual, append, both, none)
 
   - name: "receipts"
     query: "subject:receipt OR subject:invoice newer_than:7d"
@@ -44,8 +43,7 @@ rules:
     actions:
       - archive
       - label:Receipts
-    append_mode: false
-    save_local: true
+    save_mode: individual # One file per email (default)
 
   - name: "readwise"
     query: "label:newsletter -label:Forwarded newer_than:7d"
@@ -54,5 +52,4 @@ rules:
       - forward:yourname@feed.readwise.io
       - label:Forwarded
       - archive
-    append_mode: false
-    save_local: false # Action-only rule — no local file needed
+    save_mode: none # Action-only rule — no local file needed

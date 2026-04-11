@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 from dotenv import load_dotenv
+
+VALID_SAVE_MODES = {"individual", "append", "both", "none"}
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -22,8 +25,7 @@ class RuleConfig:
     query: str
     ai_instructions: str | None
     actions: list[str]
-    append_mode: bool
-    save_local: bool = True
+    save_mode: str = "individual"
 
 
 @dataclass
@@ -137,13 +139,42 @@ def _parse_rule_config(raw_rule: dict[str, Any]) -> RuleConfig:
     raw_actions = raw_rule.get("actions")
     actions: list[str] = list(raw_actions) if isinstance(raw_actions, list) else []
 
+    # --- save_mode resolution with backward compatibility ---
+    has_save_mode = "save_mode" in raw_rule
+    has_old_fields = "save_local" in raw_rule or "append_mode" in raw_rule
+
+    if has_save_mode:
+        save_mode = str(raw_rule["save_mode"])
+        if has_old_fields:
+            warnings.warn(
+                f"Rule '{rule_name}': 'save_mode' is set — ignoring deprecated "
+                f"'save_local'/'append_mode' fields. Remove the old fields to silence this warning.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+    elif has_old_fields:
+        old_save_local = bool(raw_rule.get("save_local", True))
+        old_append_mode = bool(raw_rule.get("append_mode", False))
+        if not old_save_local:
+            save_mode = "none"
+        elif old_append_mode:
+            save_mode = "append"
+        else:
+            save_mode = "individual"
+        warnings.warn(
+            f"Rule '{rule_name}': 'save_local'/'append_mode' are deprecated. Use 'save_mode: {save_mode}' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+    else:
+        save_mode = "individual"
+
     return RuleConfig(
         name=str(rule_name),
         query=str(query),
         ai_instructions=ai_instructions,
         actions=actions,
-        append_mode=bool(raw_rule.get("append_mode", False)),
-        save_local=bool(raw_rule.get("save_local", True)),
+        save_mode=save_mode,
     )
 
 
@@ -256,6 +287,12 @@ def validate_config(config: GmailConfig) -> list[str]:
         if rule.name in seen_rule_names:
             issues.append(f"Duplicate rule name: '{rule.name}'. Rule names must be unique.")
         seen_rule_names.add(rule.name)
+
+        if rule.save_mode not in VALID_SAVE_MODES:
+            issues.append(
+                f"Rule '{rule.name}': invalid save_mode '{rule.save_mode}'. "
+                f"Valid values: {', '.join(sorted(VALID_SAVE_MODES))}."
+            )
 
         for action in rule.actions:
             if not _is_valid_action(action):

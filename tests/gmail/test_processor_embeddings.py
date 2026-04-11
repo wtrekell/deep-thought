@@ -28,8 +28,7 @@ def _make_rule_config(name: str = "test_rule") -> RuleConfig:
         query="from:test@example.com",
         ai_instructions=None,
         actions=["archive"],
-        append_mode=False,
-        save_local=True,
+        save_mode="individual",
     )
 
 

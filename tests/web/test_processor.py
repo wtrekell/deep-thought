@@ -605,6 +605,40 @@ class TestBuildLookbackSummaries:
 
         assert len(result) == 0
 
+    def test_output_path_includes_output_root_prefix(self, in_memory_db: sqlite3.Connection, tmp_path: Path) -> None:
+        """Historical pages whose DB output_path already contains the output_root prefix are found."""
+        from datetime import UTC, datetime
+
+        output_root = tmp_path / "blog" / "site"
+        output_root.mkdir(parents=True)
+
+        # Write the .md file on disk at its real location
+        md_path = output_root / "my-article.md"
+        md_path.write_text("---\ntool: web\n---\n\nArticle content here.", encoding="utf-8")
+
+        # Store the FULL relative path (includes output_root prefix) — this is
+        # what happens in production when output_dir is a relative path.
+        stored_output_path = str(md_path.relative_to(tmp_path.parent))
+
+        now_iso = datetime.now(UTC).isoformat()
+        _insert_test_page(
+            in_memory_db, "https://example.com/my-article", "My Article", stored_output_path, 150, now_iso
+        )
+
+        # Run from the parent directory so the stored relative path resolves
+        import os
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path.parent)
+            result = _build_lookback_summaries(in_memory_db, [], output_root, lookback_days=30, mode="blog")
+        finally:
+            os.chdir(original_cwd)
+
+        assert len(result) == 1
+        assert result[0].url == "https://example.com/my-article"
+        assert "Article content here." in result[0].content
+
 
 # ---------------------------------------------------------------------------
 # TestModeRunners (T-06)

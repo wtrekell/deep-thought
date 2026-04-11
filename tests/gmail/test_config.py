@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from unittest.mock import patch
 
@@ -46,8 +47,7 @@ class TestLoadConfig:
         rule = config.rules[0]
         assert rule.ai_instructions == "Extract key points."
         assert rule.actions == ["archive", "label:TestLabel"]
-        assert rule.append_mode is False
-        assert rule.save_local is True
+        assert rule.save_mode == "individual"
 
     def test_parses_scopes(self) -> None:
         """Should parse the OAuth scopes list."""
@@ -103,19 +103,60 @@ class TestLoadConfig:
         with pytest.raises(ValueError, match="must have a 'query' field"):
             load_config(bad_file)
 
-    def test_save_local_defaults_to_true(self, tmp_path: Path) -> None:
-        """A rule without save_local should default to True."""
-        config_file = tmp_path / "no_save_local.yaml"
+    def test_save_mode_defaults_to_individual(self, tmp_path: Path) -> None:
+        """A rule without save_mode should default to 'individual'."""
+        config_file = tmp_path / "no_save_mode.yaml"
         config_file.write_text("rules:\n  - name: 'minimal'\n    query: 'label:test'\n")
         config = load_config(config_file)
-        assert config.rules[0].save_local is True
+        assert config.rules[0].save_mode == "individual"
 
-    def test_save_local_false_parsed(self, tmp_path: Path) -> None:
-        """A rule with save_local: false should set the field to False."""
-        config_file = tmp_path / "save_local_false.yaml"
-        config_file.write_text("rules:\n  - name: 'fwd_only'\n    query: 'label:test'\n    save_local: false\n")
-        config = load_config(config_file)
-        assert config.rules[0].save_local is False
+    def test_save_mode_values_parsed(self, tmp_path: Path) -> None:
+        """Each valid save_mode value should be parsed correctly."""
+        for mode in ("individual", "append", "both", "none"):
+            config_file = tmp_path / f"mode_{mode}.yaml"
+            config_file.write_text(f"rules:\n  - name: 'r'\n    query: 'label:test'\n    save_mode: {mode}\n")
+            config = load_config(config_file)
+            assert config.rules[0].save_mode == mode
+
+    def test_old_fields_produce_deprecation_warning(self, tmp_path: Path) -> None:
+        """Legacy save_local/append_mode fields should map to save_mode with a DeprecationWarning."""
+        config_file = tmp_path / "old_fields.yaml"
+        config_file.write_text(
+            "rules:\n  - name: 'old'\n    query: 'label:test'\n    save_local: false\n    append_mode: false\n"
+        )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            config = load_config(config_file)
+        assert config.rules[0].save_mode == "none"
+        deprecation_warnings = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+        assert len(deprecation_warnings) >= 1
+        assert "save_mode: none" in str(deprecation_warnings[0].message)
+
+    def test_old_append_mode_true_maps_to_append(self, tmp_path: Path) -> None:
+        """Legacy append_mode: true should map to save_mode 'append'."""
+        config_file = tmp_path / "old_append.yaml"
+        config_file.write_text("rules:\n  - name: 'old'\n    query: 'label:test'\n    append_mode: true\n")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            config = load_config(config_file)
+        assert config.rules[0].save_mode == "append"
+        deprecation_warnings = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+        assert len(deprecation_warnings) >= 1
+
+    def test_save_mode_wins_over_old_fields(self, tmp_path: Path) -> None:
+        """When save_mode and old fields are both present, save_mode wins."""
+        config_file = tmp_path / "both_fields.yaml"
+        config_file.write_text(
+            "rules:\n  - name: 'mixed'\n    query: 'label:test'\n"
+            "    save_mode: both\n    append_mode: true\n    save_local: false\n"
+        )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            config = load_config(config_file)
+        assert config.rules[0].save_mode == "both"
+        deprecation_warnings = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+        assert len(deprecation_warnings) >= 1
+        assert "ignoring deprecated" in str(deprecation_warnings[0].message).lower()
 
     def test_null_ai_instructions_parsed_as_none(self, tmp_path: Path) -> None:
         """A rule with ai_instructions: null should set the field to None."""
@@ -169,8 +210,7 @@ class TestValidateConfig:
                 query="label:dup",
                 ai_instructions=None,
                 actions=[],
-                append_mode=False,
-                save_local=True,
+                save_mode="individual",
             )
         )
         issues = validate_config(config)
@@ -203,6 +243,13 @@ class TestValidateConfig:
         config.retry_max_attempts = 0
         issues = validate_config(config)
         assert any("retry_max_attempts" in issue for issue in issues)
+
+    def test_catches_invalid_save_mode(self) -> None:
+        """Should report an issue for an invalid save_mode value."""
+        config = load_config(FIXTURES_DIR / "test_config.yaml")
+        config.rules[0].save_mode = "bogus"
+        issues = validate_config(config)
+        assert any("invalid save_mode 'bogus'" in issue for issue in issues)
 
 
 # ---------------------------------------------------------------------------

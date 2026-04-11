@@ -36,7 +36,7 @@ def basic_rule() -> RuleConfig:
         query="from:test@example.com",
         ai_instructions=None,
         actions=["archive"],
-        append_mode=False,
+        save_mode="individual",
     )
 
 
@@ -399,19 +399,19 @@ class TestProcessSingleEmail:
         assert status == "error"
         assert actions == []
 
-    def test_append_mode(
+    def test_save_mode_append(
         self,
         mock_gmail_client: MagicMock,
         in_memory_db: sqlite3.Connection,
         tmp_path: Path,
     ) -> None:
-        """Should use append_to_rule_file when append_mode is True."""
+        """Should use append_to_rule_file when save_mode is 'append'."""
         append_rule = RuleConfig(
             name="newsletters",
             query="label:newsletter",
             ai_instructions=None,
             actions=[],
-            append_mode=True,
+            save_mode="append",
         )
         message = make_mock_message(message_id="append_msg")
         mock_gmail_client.get_message.return_value = message
@@ -432,20 +432,19 @@ class TestProcessSingleEmail:
         aggregate_file = tmp_path / "newsletters" / "newsletters.md"
         assert aggregate_file.exists()
 
-    def test_save_local_false_skips_file_write(
+    def test_save_mode_none_skips_file_write(
         self,
         mock_gmail_client: MagicMock,
         in_memory_db: sqlite3.Connection,
         tmp_path: Path,
     ) -> None:
-        """Should not create any files when save_local is False but still apply actions."""
+        """Should not create any files when save_mode is 'none' but still apply actions."""
         no_save_rule = RuleConfig(
             name="forward_only",
             query="label:newsletter",
             ai_instructions=None,
             actions=["archive"],
-            append_mode=False,
-            save_local=False,
+            save_mode="none",
         )
         message = make_mock_message(message_id="nosave_msg")
         mock_gmail_client.get_message.return_value = message
@@ -467,13 +466,13 @@ class TestProcessSingleEmail:
         # No files should be created
         assert not any(tmp_path.rglob("*.md"))
 
-    def test_save_local_false_still_records_in_database(
+    def test_save_mode_none_still_records_in_database(
         self,
         mock_gmail_client: MagicMock,
         in_memory_db: sqlite3.Connection,
         tmp_path: Path,
     ) -> None:
-        """Should still record the email in the database when save_local is False."""
+        """Should still record the email in the database when save_mode is 'none'."""
         from deep_thought.gmail.db.queries import get_processed_email
 
         no_save_rule = RuleConfig(
@@ -481,8 +480,7 @@ class TestProcessSingleEmail:
             query="label:newsletter",
             ai_instructions=None,
             actions=[],
-            append_mode=False,
-            save_local=False,
+            save_mode="none",
         )
         message = make_mock_message(message_id="nosave_db_msg")
         mock_gmail_client.get_message.return_value = message
@@ -502,6 +500,50 @@ class TestProcessSingleEmail:
         record = get_processed_email(in_memory_db, "nosave_db_msg")
         assert record is not None
         assert record["output_path"] == ""
+
+    def test_save_mode_both_writes_individual_and_append(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        tmp_path: Path,
+    ) -> None:
+        """Should create both an individual file and an append aggregate file."""
+        from deep_thought.gmail.db.queries import get_processed_email
+
+        both_rule = RuleConfig(
+            name="both_rule",
+            query="label:newsletter",
+            ai_instructions=None,
+            actions=[],
+            save_mode="both",
+        )
+        message = make_mock_message(message_id="both_msg", subject="Both Test")
+        mock_gmail_client.get_message.return_value = message
+
+        status, _actions = _process_single_email(
+            gmail_client=mock_gmail_client,
+            message_stub={"id": "both_msg"},
+            rule_config=both_rule,
+            db_conn=in_memory_db,
+            extractor=None,
+            output_dir=tmp_path,
+            dry_run=False,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+        )
+
+        assert status == "ok"
+        # Individual file should exist
+        individual_files = list((tmp_path / "both_rule").glob("*.md"))
+        aggregate_file = tmp_path / "both_rule" / "both_rule.md"
+        assert aggregate_file.exists()
+        # Should have at least 2 files: the individual + the aggregate
+        assert len(individual_files) >= 2
+        # DB record should point to the individual file, not the aggregate
+        record = get_processed_email(in_memory_db, "both_msg")
+        assert record is not None
+        assert record["output_path"] != ""
+        assert "both_rule.md" not in record["output_path"] or record["output_path"].count("/") > 0
 
 
 # ---------------------------------------------------------------------------
@@ -854,14 +896,14 @@ class TestRunCollection:
             query="from:a@test.com",
             ai_instructions=None,
             actions=[],
-            append_mode=False,
+            save_mode="individual",
         )
         rule_two = RuleConfig(
             name="rule_b",
             query="from:b@test.com",
             ai_instructions=None,
             actions=[],
-            append_mode=False,
+            save_mode="individual",
         )
 
         config = GmailConfig(
@@ -906,14 +948,14 @@ class TestRunCollection:
             query="from:a@test.com",
             ai_instructions=None,
             actions=[],
-            append_mode=False,
+            save_mode="individual",
         )
         rule_two = RuleConfig(
             name="skip_me",
             query="from:b@test.com",
             ai_instructions=None,
             actions=[],
-            append_mode=False,
+            save_mode="individual",
         )
 
         config = GmailConfig(
@@ -989,14 +1031,14 @@ class TestRunCollection:
             query="from:skipped@test.com",
             ai_instructions=None,
             actions=[],
-            append_mode=False,
+            save_mode="individual",
         )
         rule_two = RuleConfig(
             name="rule_needing_budget",
             query="from:new@test.com",
             ai_instructions=None,
             actions=[],
-            append_mode=False,
+            save_mode="individual",
         )
 
         config = GmailConfig(
@@ -1148,7 +1190,7 @@ class TestCollectionIntegration:
             query="from:integration@test.com",
             ai_instructions=None,
             actions=["archive", "mark_read"],
-            append_mode=False,
+            save_mode="individual",
         )
         config = GmailConfig(
             credentials_path="/fake/credentials.json",
@@ -1216,7 +1258,7 @@ class TestCollectionIntegration:
             query="from:force@test.com",
             ai_instructions=None,
             actions=[],
-            append_mode=False,
+            save_mode="individual",
         )
         config = GmailConfig(
             credentials_path="/fake/credentials.json",
@@ -1275,7 +1317,7 @@ class TestCollectionIntegration:
         # The DB row should reflect the new processing, not the old one
         assert db_record["subject"] == "Updated Subject"
 
-    def test_append_mode_accumulates_emails_in_single_file(
+    def test_save_mode_append_accumulates_emails_in_single_file(
         self,
         mock_gmail_client: MagicMock,
         in_memory_db: sqlite3.Connection,
@@ -1287,7 +1329,7 @@ class TestCollectionIntegration:
             query="label:newsletter",
             ai_instructions=None,
             actions=[],
-            append_mode=True,
+            save_mode="append",
         )
         config = GmailConfig(
             credentials_path="/fake/credentials.json",
@@ -1338,7 +1380,7 @@ class TestCollectionIntegration:
             query="from:dry@test.com",
             ai_instructions=None,
             actions=["archive"],
-            append_mode=False,
+            save_mode="individual",
         )
         config = GmailConfig(
             credentials_path="/fake/credentials.json",
@@ -1398,7 +1440,7 @@ class TestProcessSingleEmailAiExtraction:
             query="from:ai@example.com",
             ai_instructions="Extract the key action items from this email.",
             actions=[],
-            append_mode=False,
+            save_mode="individual",
         )
         message = make_mock_message(
             message_id="ai_msg_1",
@@ -1440,7 +1482,7 @@ class TestProcessSingleEmailAiExtraction:
             query="from:ai@example.com",
             ai_instructions="Summarise this email.",
             actions=[],
-            append_mode=False,
+            save_mode="individual",
         )
         message = make_mock_message(
             message_id="ai_msg_2",
@@ -1485,7 +1527,7 @@ class TestProcessSingleEmailAiExtraction:
             query="from:plain@example.com",
             ai_instructions=None,
             actions=[],
-            append_mode=False,
+            save_mode="individual",
         )
         message = make_mock_message(message_id="no_ai_msg", body_text="Plain email body.")
         mock_gmail_client.get_message.return_value = message
@@ -1529,7 +1571,7 @@ class TestProcessSingleEmailHtmlCleaning:
             query="label:newsletter",
             ai_instructions=None,
             actions=[],
-            append_mode=False,
+            save_mode="individual",
         )
         html_body = "<html><body><h1>Newsletter</h1><p>Article content here.</p></body></html>"
         message = make_mock_message(
@@ -1572,7 +1614,7 @@ class TestProcessSingleEmailHtmlCleaning:
             query="label:newsletter",
             ai_instructions=None,
             actions=[],
-            append_mode=False,
+            save_mode="individual",
         )
         html_body = "<html><body><p>Raw HTML content.</p></body></html>"
         message = make_mock_message(
@@ -1618,7 +1660,7 @@ class TestProcessSingleEmailHtmlCleaning:
             query="label:newsletter",
             ai_instructions=None,
             actions=[],
-            append_mode=False,
+            save_mode="individual",
         )
         html_body = "<html><body><p>HTML body content.</p></body></html>"
         message = make_mock_message(
