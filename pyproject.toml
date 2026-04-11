@@ -40,6 +40,7 @@ gcal = "deep_thought.gcal.cli:main"
 gdrive = "deep_thought.gdrive.cli:main"
 search = "deep_thought.research.cli:search_main"
 research = "deep_thought.research.cli:research_main"
+stackexchange = "deep_thought.stackexchange.cli:main"
 secrets = "deep_thought.secrets_cli:main"
 
 [project.optional-dependencies]

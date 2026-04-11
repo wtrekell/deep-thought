@@ -1,0 +1,30 @@
+# Stack Exchange Tool Configuration
+
+# API — optional; 300 requests/day without key, 10,000/day with key
+api_key_env: "STACKEXCHANGE_API_KEY"
+
+# Collection
+max_questions_per_run: 500
+
+# Output
+output_dir: "data/stackexchange/export/"
+generate_llms_files: true
+qdrant_collection: "deep_thought_db"
+
+rules:
+  - name: "python_async"
+    site: "stackoverflow"
+    tags:
+      include: ["python", "asyncio"]
+      any: []
+    sort: "votes"
+    order: "desc"
+    min_score: 10
+    min_answers: 1
+    only_answered: true
+    max_age_days: 365
+    keywords: []
+    max_questions: 50
+    max_answers_per_question: 5
+    include_comments: true
+    max_comments_per_question: 30

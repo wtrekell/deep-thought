@@ -123,7 +123,7 @@ Not every section below applies to every tool type. Use this matrix to determine
 - Store tool-specific additional configs (alternative rule sets, batch configs, credentials) in `src/config/<tool>/`
 - Store data artifacts in `data/<tool>/`; support `DEEP_THOUGHT_DATA_DIR` env var to redirect the data root at runtime
 - Tools that accept local file input default to `data/<tool>/input/` so the input path benefits from `DEEP_THOUGHT_DATA_DIR` redirection; note that this convention places user-provided files alongside tool-generated artifacts — revisit per tool if the distinction matters
-- Place documentation in `files/tools/<tool>/`
+- Place documentation (CHANGELOG.md, ISSUES.md, requirements) in `docs/tools/<tool>/`
 - Include `models.py` for local dataclasses when the tool defines data models
 - Add test directory mirroring source structure
 
@@ -169,7 +169,7 @@ Not every section below applies to every tool type. Use this matrix to determine
 
 - Use SQLite with WAL mode and foreign keys
 - Store all IDs as TEXT (API string IDs)
-- Include `created_at` and `updated_at` on all tables; add `synced_at` only for bidirectional sync tools
+- Include `created_at` and `updated_at` on all tables; add `synced_at` only for bidirectional sync tools — Collectors and Generative tools must not include `synced_at`
 - Use `INSERT OR REPLACE` for upsert operations
 - Set `synced_at` locally on API sync; preserve API timestamps
 - Add indexes on all foreign key columns (relational schemas only)
@@ -277,4 +277,4 @@ Not every section below applies to every tool type. Use this matrix to determine
 - Document API model reference for SDK entities; link to official SDK documentation in requirements
 - Maintain changelog with unreleased section
 - Keep CLAUDE.md updated with tool-specific commands
-- Store all docs in `files/tools/<tool>/`
+- Store all docs in `docs/tools/<tool>/`
