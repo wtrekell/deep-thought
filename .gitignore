@@ -66,11 +66,11 @@ storage/
 .qdrant-initialized
 
 # Claude
-/CLAUDE.md
+CLAUDE.md
 .claude/*
 
-# Private (root-level only — do not match docs/tools/00-requirements/)
-/00-*
+# Private
+00-*
 
 # Credentials and secrets
 files/tools/
