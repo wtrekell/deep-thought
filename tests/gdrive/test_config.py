@@ -85,15 +85,24 @@ def test_load_config_raises_value_error_for_missing_credentials_file(tmp_path: P
         load_config(config_path)
 
 
-def test_load_config_allows_missing_token_file(tmp_path: Path) -> None:
-    """auth.token_file is optional — omitting it defaults to an empty string."""
+def test_load_config_raises_value_error_for_missing_token_file(tmp_path: Path) -> None:
+    """auth.token_file is required — omitting it raises ValueError."""
     config_data = _valid_config_dict()
     del config_data["auth"]["token_file"]  # type: ignore[index]
     config_path = _write_config(tmp_path, config_data)
 
-    config = load_config(config_path)
+    with pytest.raises(ValueError, match="auth.token_file"):
+        load_config(config_path)
 
-    assert config.token_file == ""
+
+def test_load_config_raises_value_error_for_empty_token_file(tmp_path: Path) -> None:
+    """auth.token_file must be non-empty — empty string raises ValueError."""
+    config_data = _valid_config_dict()
+    config_data["auth"]["token_file"] = ""  # type: ignore[index]
+    config_path = _write_config(tmp_path, config_data)
+
+    with pytest.raises(ValueError, match="auth.token_file must be a non-empty path"):
+        load_config(config_path)
 
 
 def test_load_config_raises_value_error_for_missing_scopes(tmp_path: Path) -> None:

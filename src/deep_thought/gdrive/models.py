@@ -62,8 +62,10 @@ class BackupResult:
     uploaded: int = 0
     updated: int = 0
     skipped: int = 0
+    vanished: int = 0
     errors: int = 0
     error_paths: list[str] = field(default_factory=list)
+    vanished_paths: list[str] = field(default_factory=list)
 
 
 @dataclass

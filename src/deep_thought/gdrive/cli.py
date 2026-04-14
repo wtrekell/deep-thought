@@ -39,10 +39,10 @@ logger = logging.getLogger(__name__)
 def _get_version() -> str:
     """Return the installed package version, falling back to 'unknown'."""
     try:
-        from importlib.metadata import version
+        from importlib.metadata import PackageNotFoundError, version  # noqa: PLC0415
 
         return version("deep-thought")
-    except Exception:
+    except PackageNotFoundError:
         return "unknown"
 
 
@@ -187,16 +187,17 @@ def cmd_auth(args: argparse.Namespace) -> None:
 
 
 def cmd_status(args: argparse.Namespace) -> None:
-    """Print file counts grouped by status from the database.
+    """Print file counts grouped by status and last run timestamp from the database.
 
     Args:
         args: Parsed argparse namespace.
     """
-    from deep_thought.gdrive.db.queries import count_by_status
+    from deep_thought.gdrive.db.queries import count_by_status, get_key_value
 
     connection = open_database()
     try:
         status_counts = count_by_status(connection)
+        last_run_at = get_key_value(connection, "last_run_at")
     finally:
         connection.close()
 
@@ -206,6 +207,7 @@ def cmd_status(args: argparse.Namespace) -> None:
 
     total = sum(status_counts.values())
     print("Backup status:")
+    print(f"  Last run:  {last_run_at or 'never'}")
     for status_name, file_count in sorted(status_counts.items()):
         print(f"  {status_name:<12} {file_count}")
     print(f"  {'total':<12} {total}")
@@ -259,6 +261,7 @@ def cmd_backup(args: argparse.Namespace) -> None:
                 print("Files with errors:")
                 for error_path in prune_result.error_paths:
                     print(f"  {error_path}")
+                # SystemExit propagates through finally: db_connection.close() still runs
                 sys.exit(2)
             return
 
@@ -279,7 +282,14 @@ def cmd_backup(args: argparse.Namespace) -> None:
     print(f"  Uploaded: {backup_result.uploaded}")
     print(f"  Updated:  {backup_result.updated}")
     print(f"  Skipped:  {backup_result.skipped}")
+    print(f"  Vanished: {backup_result.vanished}")
     print(f"  Errors:   {backup_result.errors}")
+
+    if backup_result.vanished > 0:
+        print()
+        print("Files that vanished during backup:")
+        for vanished_path in backup_result.vanished_paths:
+            print(f"  {vanished_path}")
 
     if backup_result.errors > 0:
         print()
@@ -424,6 +434,10 @@ def _handle_save_config(destination_path_str: str) -> None:
     example_config_content = """\
 # GDrive Tool — example configuration
 # Copy to src/config/gdrive-configuration.yaml and edit before first use.
+#
+# The OAuth token is stored as a plain JSON file at `auth.token_file`.
+# gdrive does not use the macOS keychain and does not share a token with
+# the gmail or gcal tools — auth.token_file is required.
 
 auth:
   credentials_file: "src/config/gdrive/credentials.json"

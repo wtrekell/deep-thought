@@ -7,6 +7,7 @@ record results. Returns a BackupResult summary.
 
 from __future__ import annotations
 
+import errno
 import logging
 import mimetypes
 from datetime import UTC, datetime
@@ -21,6 +22,7 @@ from deep_thought.gdrive.db.queries import (
     get_backed_up_file,
     get_drive_folder,
     mark_file_status,
+    set_key_value,
     upsert_backed_up_file,
     upsert_drive_folder,
 )
@@ -155,8 +157,7 @@ def run_backup(
         db_conn.commit()
 
     if not Path(config.source_dir).exists():
-        logger.warning("Source directory does not exist: %s — skipping backup.", config.source_dir)
-        return backup_result
+        raise FileNotFoundError(f"Source directory does not exist: {config.source_dir}")
 
     logger.info("Walking source directory: %s", config.source_dir)
     walked_files = walk_tree(config.source_dir, config.exclude_patterns)
@@ -246,6 +247,18 @@ def run_backup(
                     logger.debug("UPDATE %s", relative_file_path)
 
         except Exception as file_error:
+            # FileNotFoundError and OSError(ENOENT) indicate the file vanished between
+            # walk and upload — not a real error; log, count, and move on without DB writes.
+            file_vanished = isinstance(file_error, FileNotFoundError) or (
+                isinstance(file_error, OSError) and file_error.errno == errno.ENOENT
+            )
+
+            if file_vanished:
+                logger.warning("File vanished between walk and upload — skipping: %s", relative_file_path)
+                backup_result.vanished += 1
+                backup_result.vanished_paths.append(relative_file_path)
+                continue
+
             logger.error("Error processing %s: %s", relative_file_path, file_error)
             backup_result.errors += 1
             backup_result.error_paths.append(relative_file_path)
@@ -270,7 +283,12 @@ def run_backup(
                         mark_file_status(db_conn, relative_file_path, "error")
                     db_conn.commit()
             except Exception as mark_error:
-                logger.debug("Could not mark error status for %s: %s", relative_file_path, mark_error)
+                logger.warning("Could not mark error status for %s: %s", relative_file_path, mark_error)
+
+    # Record when this run completed so gdrive status can show recency
+    if not dry_run:
+        set_key_value(db_conn, "last_run_at", datetime.now(UTC).isoformat())
+        db_conn.commit()
 
     return backup_result
 

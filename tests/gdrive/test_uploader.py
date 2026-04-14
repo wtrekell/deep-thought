@@ -6,6 +6,8 @@ import sqlite3
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
+import pytest
+
 from deep_thought.gdrive.config import GDriveConfig
 from deep_thought.gdrive.db.queries import get_backed_up_file, upsert_backed_up_file
 from deep_thought.gdrive.db.schema import init_db
@@ -239,6 +241,69 @@ def test_per_file_error_is_recorded_without_halting_backup(tmp_path: Path) -> No
 
 
 # ---------------------------------------------------------------------------
+# Vanished-file race handling
+# ---------------------------------------------------------------------------
+
+
+def test_vanished_file_is_counted_as_vanished_not_error(tmp_path: Path) -> None:
+    """A file that disappears between walk and upload is counted as vanished, not as an error.
+
+    The Drive client is fully mocked so upload_file never calls MediaFileUpload.  To
+    simulate the real race (MediaFileUpload.__init__ raises FileNotFoundError because
+    os.path.getsize finds nothing), we configure upload_file to raise FileNotFoundError
+    directly and confirm it routes to the vanished bucket rather than the error bucket.
+    """
+    from unittest.mock import patch
+
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+
+    # Return a real-looking entry from walk_tree. The absolute path constructed inside
+    # run_backup does not exist on disk, but since upload_file is also mocked we need
+    # the FileNotFoundError to come from the mock itself.
+    nonexistent_relative_path = "source/ghost.md"
+    walked_file_tuples = [(nonexistent_relative_path, 1712345678.0, 1024)]
+
+    db = _make_db()
+    config = _make_config(str(source_dir))
+    mock_client = _make_mock_client()
+    # Simulate MediaFileUpload(local_path).__init__ raising FileNotFoundError.
+    mock_client.upload_file.side_effect = FileNotFoundError(
+        2, "No such file or directory", str(source_dir / "ghost.md")
+    )
+
+    # Patch the walk_tree symbol as imported into uploader (not the one in walker.py).
+    with patch("deep_thought.gdrive.uploader.walk_tree", return_value=walked_file_tuples):
+        result = run_backup(config, mock_client, db)
+
+    assert result.vanished == 1
+    assert result.errors == 0
+    assert nonexistent_relative_path in result.vanished_paths
+    assert nonexistent_relative_path not in result.error_paths
+
+    # No DB row should be written for a vanished file.
+    assert get_backed_up_file(db, nonexistent_relative_path) is None
+
+
+def test_permission_error_still_counts_as_error(tmp_path: Path) -> None:
+    """A PermissionError during upload is counted as an error, not as vanished."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "locked.txt").write_text("content")
+
+    db = _make_db()
+    config = _make_config(str(source_dir))
+    mock_client = _make_mock_client()
+    mock_client.upload_file.side_effect = PermissionError("Permission denied")
+
+    result = run_backup(config, mock_client, db)
+
+    assert result.errors == 1
+    assert result.vanished == 0
+    assert any("locked.txt" in path for path in result.error_paths)
+
+
+# ---------------------------------------------------------------------------
 # BackupResult counts
 # ---------------------------------------------------------------------------
 
@@ -434,3 +499,60 @@ def test_run_prune_returns_early_when_no_exclude_patterns() -> None:
     mock_client.delete_file.assert_not_called()
     assert prune_result.deleted == 0
     assert prune_result.errors == 0
+
+
+# ---------------------------------------------------------------------------
+# FileNotFoundError on missing source_dir
+# ---------------------------------------------------------------------------
+
+
+def test_missing_source_dir_raises_file_not_found_error(tmp_path: Path) -> None:
+    """run_backup raises FileNotFoundError when source_dir does not exist."""
+    nonexistent_source_dir = str(tmp_path / "does_not_exist")
+    config = _make_config(nonexistent_source_dir)
+    mock_client = _make_mock_client()
+    db = _make_db()
+
+    with pytest.raises(FileNotFoundError, match="does_not_exist"):
+        run_backup(config, mock_client, db)
+
+
+# ---------------------------------------------------------------------------
+# last_run_at persistence
+# ---------------------------------------------------------------------------
+
+
+def test_backup_records_last_run_at(tmp_path: Path) -> None:
+    """run_backup writes last_run_at to the key_value table after completion."""
+    from deep_thought.gdrive.db.queries import get_key_value
+
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "doc.txt").write_text("content")
+
+    db = _make_db()
+    config = _make_config(str(source_dir))
+    mock_client = _make_mock_client()
+
+    run_backup(config, mock_client, db)
+
+    last_run_at_value = get_key_value(db, "last_run_at")
+    assert last_run_at_value is not None, "last_run_at must be written to key_value after a real backup run"
+
+
+def test_dry_run_does_not_record_last_run_at(tmp_path: Path) -> None:
+    """run_backup does NOT write last_run_at in dry-run mode."""
+    from deep_thought.gdrive.db.queries import get_key_value
+
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "doc.txt").write_text("content")
+
+    db = _make_db()
+    config = _make_config(str(source_dir))
+    mock_client = _make_mock_client()
+
+    run_backup(config, mock_client, db, dry_run=True)
+
+    last_run_at_value = get_key_value(db, "last_run_at")
+    assert last_run_at_value is None, "last_run_at must not be written to key_value in dry-run mode"

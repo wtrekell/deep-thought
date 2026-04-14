@@ -9,6 +9,7 @@ All notable changes to the gdrive tool will be documented in this file.
 - Secret retrieval now checks macOS Keychain first, falling back to environment variables. Uses the shared `deep_thought.secrets` module.
 - OAuth token management refactored to delegate to the shared `deep_thought.secrets` module (behavior unchanged).
 - Google OAuth token is now shared across gmail, gcal, and gdrive — one auth flow covers all three tools. Token stored under `deep-thought-google` keychain entry with combined Gmail + Calendar + Drive scopes.
+- **gdrive OAuth reverted to a self-contained plain-file flow.** `gdrive/_auth.py` no longer calls `deep_thought.secrets` and no longer touches the macOS keychain. The OAuth token is read from and written to the path set in `auth.token_file` (plain JSON, mode `0o600`), with `google-auth` handling refresh and `google-auth-oauthlib` running the browser consent flow when needed. `auth.token_file` is now required (empty or missing values are rejected by config validation). Gmail and gcal continue to use the shared keychain-backed token and are unaffected. After upgrading, run `gdrive auth` once to populate the token file.
 
 ### Added
 
@@ -16,6 +17,16 @@ All notable changes to the gdrive tool will be documented in this file.
 
 ### Fixed
 
+- SQLite sidecar files (`*.db-wal`, `*.db-shm`, `*.db-journal`) are now hard-excluded in `walker.py`. These are ephemeral runtime artifacts that mutate on every database connection — including the gdrive tool's own `gdrive.db-wal` / `gdrive.db-shm` files — which caused every backup run to re-upload two files that carry no user content. The exclusion lives alongside `_EXCLUDED_DIR_NAMES` and cannot be disabled via config because backing these files up is never meaningful.
+- Files deleted or renamed between walker enumeration and the upload step are now logged at WARNING and counted in a new `BackupResult.vanished` field instead of being recorded as errors that flip the exit code to 2. The backup summary prints a `Vanished:` count and, when non-zero, lists the affected paths. Real OS errors (permission denied, etc.) continue to be counted as errors and still exit 2. No DB row is written for vanished files. Resolves issue #34.
+- Post-commit hook now sends a macOS notification on backup failure instead of silently discarding the exit code.
+- Missing `source_dir` now raises `FileNotFoundError` (exit code 1) instead of returning empty success.
+- `gdrive status` now displays `last_run_at` timestamp so stale backups are immediately visible.
+- DB error-status write failures now logged at WARNING instead of DEBUG.
+- `walker.py` now logs WARNING for `stat()` errors other than `FileNotFoundError` instead of silently skipping.
+- `upload_file` and `update_file` now stream from disk via `MediaFileUpload` instead of buffering entire files in memory.
+- `_project_root` fallback corrected from `parents[5]` to `parents[4]`.
+- `_get_version` bare `except Exception` narrowed to `except PackageNotFoundError`.
 - Skipped files now write a `"skipped"` status row to `backed_up_files` on each run, so `gdrive status` accurately reflects which files were evaluated and left unchanged (previously skipped files retained their last `"uploaded"` or `"updated"` status indefinitely).
 - `upload_file()` in `client.py` now uses `Path(local_path).name` to extract the filename instead of `local_path.split("/")[-1]`, consistent with the rest of the codebase.
 

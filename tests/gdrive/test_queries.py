@@ -17,7 +17,9 @@ from deep_thought.gdrive.db.queries import (
     get_all_backed_up_files,
     get_backed_up_file,
     get_drive_folder,
+    get_key_value,
     mark_file_status,
+    set_key_value,
     upsert_backed_up_file,
     upsert_drive_folder,
 )
@@ -211,3 +213,31 @@ def test_clear_drive_folders_removes_all_rows(db: sqlite3.Connection) -> None:
     cursor = db.execute("SELECT COUNT(*) as cnt FROM drive_folders;")
     row = cursor.fetchone()
     assert row["cnt"] == 0
+
+
+# ---------------------------------------------------------------------------
+# key_value store
+# ---------------------------------------------------------------------------
+
+
+def test_get_key_value_returns_none_for_missing_key(db: sqlite3.Connection) -> None:
+    """get_key_value returns None when the key has never been written."""
+    result = get_key_value(db, "nonexistent_key")
+    assert result is None
+
+
+def test_set_and_get_key_value(db: sqlite3.Connection) -> None:
+    """set_key_value writes a value that get_key_value subsequently returns."""
+    set_key_value(db, "last_run_at", "2026-04-11T12:00:00+00:00")
+
+    retrieved_value = get_key_value(db, "last_run_at")
+    assert retrieved_value == "2026-04-11T12:00:00+00:00"
+
+
+def test_set_key_value_overwrites_existing(db: sqlite3.Connection) -> None:
+    """A second set_key_value call updates the stored value for the same key."""
+    set_key_value(db, "last_run_at", "2026-04-10T08:00:00+00:00")
+    set_key_value(db, "last_run_at", "2026-04-11T12:00:00+00:00")
+
+    retrieved_value = get_key_value(db, "last_run_at")
+    assert retrieved_value == "2026-04-11T12:00:00+00:00"

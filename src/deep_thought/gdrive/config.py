@@ -28,7 +28,7 @@ class GDriveConfig:
     """
 
     credentials_file: str
-    token_file: str  # optional — empty string when keychain is the storage backend
+    token_file: str  # required — path to the OAuth token JSON file on disk
     scopes: list[str]
     source_dir: str
     drive_folder_id: str
@@ -102,10 +102,14 @@ def load_config(config_path: Path | None = None) -> GDriveConfig:
     if not isinstance(raw_credentials_file, str):
         raise ValueError(f"auth.credentials_file must be a string, got: {type(raw_credentials_file).__name__}")
 
-    # token_file is optional — defaults to "" when keychain is the storage backend
-    raw_token_file = auth_section.get("token_file", "")
+    # token_file is required — the OAuth token is stored as a plain JSON file on disk
+    raw_token_file = auth_section.get("token_file")
+    if raw_token_file is None:
+        raise ValueError("Missing required config field: auth.token_file")
     if not isinstance(raw_token_file, str):
         raise ValueError(f"auth.token_file must be a string, got: {type(raw_token_file).__name__}")
+    if not raw_token_file:
+        raise ValueError("auth.token_file must be a non-empty path")
 
     # scopes — required list
     raw_scopes = auth_section.get("scopes")

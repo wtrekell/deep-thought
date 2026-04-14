@@ -223,3 +223,41 @@ def clear_drive_folders(conn: sqlite3.Connection) -> None:
         conn: An open SQLite connection.
     """
     conn.execute("DELETE FROM drive_folders;")
+
+
+# ---------------------------------------------------------------------------
+# key_value store
+# ---------------------------------------------------------------------------
+
+
+def get_key_value(conn: sqlite3.Connection, key: str) -> str | None:
+    """Read a value from the key_value store.
+
+    Args:
+        conn: An open SQLite connection.
+        key: The key to look up (e.g., 'last_run_at').
+
+    Returns:
+        The stored string value, or None if the key does not exist.
+    """
+    cursor = conn.execute("SELECT value FROM key_value WHERE key = ?;", (key,))
+    row = cursor.fetchone()
+    return row["value"] if row is not None else None
+
+
+def set_key_value(conn: sqlite3.Connection, key: str, value: str) -> None:
+    """Write or overwrite a value in the key_value store.
+
+    Args:
+        conn: An open SQLite connection.
+        key: The key to write.
+        value: The string value to store.
+    """
+    conn.execute(
+        """
+        INSERT INTO key_value (key, value, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at;
+        """,
+        (key, value, _now_utc_iso()),
+    )

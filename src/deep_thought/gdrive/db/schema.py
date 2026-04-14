@@ -29,8 +29,8 @@ def _project_root() -> Path:
     for parent in current.parents:
         if (parent / "pyproject.toml").exists():
             return parent
-    # Fallback: five levels up (migrations/ -> db/ -> gdrive/ -> deep_thought/ -> src/ -> root)
-    return current.parents[5]
+    # Fallback: four levels up (db/ -> gdrive/ -> deep_thought/ -> src/ -> root)
+    return current.parents[4]
 
 
 def get_data_dir() -> Path:

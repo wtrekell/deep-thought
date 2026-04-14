@@ -1,15 +1,19 @@
 """Directory tree walker for the GDrive backup tool.
 
 Provides walk_tree(), which traverses a source directory and returns metadata
-(relative path, mtime, size) for each eligible file. Hidden files/directories
-and common generated directories (e.g. .git, __pycache__) are excluded.
+(relative path, mtime, size) for each eligible file. Hidden files/directories,
+common generated directories (e.g. .git, __pycache__), and SQLite sidecar
+files (.db-wal, .db-shm, .db-journal) are excluded.
 """
 
 from __future__ import annotations
 
 import fnmatch
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Directory names to skip entirely during traversal
 _EXCLUDED_DIR_NAMES: frozenset[str] = frozenset(
@@ -20,6 +24,17 @@ _EXCLUDED_DIR_NAMES: frozenset[str] = frozenset(
         "node_modules",
         ".mypy_cache",
     }
+)
+
+# File name suffixes to skip entirely during traversal. These are ephemeral
+# runtime artifacts (SQLite WAL / shared-memory / rollback journal files) that
+# live alongside a primary .db file, mutate on every connection, and must
+# never be backed up — they are always paired with the .db file and only
+# meaningful to the SQLite process that owns them.
+_EXCLUDED_FILE_SUFFIXES: tuple[str, ...] = (
+    ".db-wal",
+    ".db-shm",
+    ".db-journal",
 )
 
 
@@ -106,6 +121,11 @@ def walk_tree(source_dir: str, exclude_patterns: list[str] | None = None) -> lis
             if file_name.startswith("."):
                 continue
 
+            # Skip SQLite sidecar files (WAL / shared-memory / rollback journal).
+            # These mutate on every DB connection and must never be backed up.
+            if file_name.endswith(_EXCLUDED_FILE_SUFFIXES):
+                continue
+
             absolute_file_path = current_directory / file_name
 
             # Skip files matching user-configured exclude_patterns.
@@ -116,9 +136,11 @@ def walk_tree(source_dir: str, exclude_patterns: list[str] | None = None) -> lis
 
             try:
                 file_stat = absolute_file_path.stat()
-            except OSError:
-                # File may have disappeared between the directory listing and
-                # the stat call — skip it gracefully.
+            except FileNotFoundError:
+                # File disappeared between directory listing and stat() — genuine race condition.
+                continue
+            except OSError as stat_error:
+                logger.warning("Could not stat %s: %s — skipping file.", absolute_file_path, stat_error)
                 continue
 
             relative_file_path = absolute_file_path.relative_to(parent_path)

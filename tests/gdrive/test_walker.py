@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 
@@ -88,6 +89,26 @@ def test_walk_tree_skips_excluded_directories(tmp_path: Path, excluded_dir_name:
     assert not any(excluded_dir_name in path for path in relative_paths)
 
 
+@pytest.mark.parametrize(
+    "sqlite_sidecar_file_name",
+    ["app.db-wal", "app.db-shm", "app.db-journal", "gdrive.db-wal", "gdrive.db-shm"],
+)
+def test_walk_tree_skips_sqlite_sidecar_files(tmp_path: Path, sqlite_sidecar_file_name: str) -> None:
+    """walk_tree skips ephemeral SQLite sidecar files (-wal, -shm, -journal)."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "app.db").write_text("primary database")
+    (source_dir / sqlite_sidecar_file_name).write_text("ephemeral sqlite state")
+    (source_dir / "keep.md").write_text("regular file")
+
+    results = walk_tree(str(source_dir))
+    relative_paths = {entry[0] for entry in results}
+
+    assert "source/app.db" in relative_paths
+    assert "source/keep.md" in relative_paths
+    assert f"source/{sqlite_sidecar_file_name}" not in relative_paths
+
+
 def test_walk_tree_returns_mtime_and_size(temp_source_dir: Path) -> None:
     """walk_tree entries include mtime (float) and size_bytes (int)."""
     results = walk_tree(str(temp_source_dir))
@@ -126,3 +147,26 @@ def test_walk_tree_returns_empty_list_for_empty_directory(tmp_path: Path) -> Non
 
     results = walk_tree(str(source_dir))
     assert results == []
+
+
+def test_walk_tree_logs_warning_on_permission_error(tmp_path: Path) -> None:
+    """walk_tree logs WARNING for OSError other than FileNotFoundError."""
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    target_file = source_dir / "unreadable.txt"
+    target_file.write_text("content")
+
+    permission_error = PermissionError("Permission denied")
+
+    with (
+        patch("deep_thought.gdrive.walker.Path.stat", side_effect=permission_error),
+        patch("deep_thought.gdrive.walker.logger") as mock_logger,
+    ):
+        results = walk_tree(str(source_dir))
+
+    # The file is skipped — no entries returned
+    assert results == []
+    # A WARNING must have been emitted (not silently dropped)
+    mock_logger.warning.assert_called_once()
+    warning_call_args = mock_logger.warning.call_args
+    assert "unreadable.txt" in str(warning_call_args) or "Could not stat" in str(warning_call_args[0])

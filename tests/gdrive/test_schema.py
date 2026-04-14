@@ -274,3 +274,19 @@ class TestSplitSqlStatements:
         sql_input = "-- Just a comment\n-- Another comment\n"
         result = _split_sql_statements(sql_input)
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# _project_root
+# ---------------------------------------------------------------------------
+
+
+def test_project_root_finds_pyproject_toml() -> None:
+    """_project_root returns a directory containing pyproject.toml."""
+    from deep_thought.gdrive.db.schema import _project_root
+
+    root = _project_root()
+
+    assert (root / "pyproject.toml").exists(), (
+        f"_project_root() returned {root!r} but no pyproject.toml was found there"
+    )

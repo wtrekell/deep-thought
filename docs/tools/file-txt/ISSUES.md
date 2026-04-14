@@ -1,9 +1,11 @@
 # File-Txt Tool — Issues
 
-No outstanding issues. Last verified 2026-04-03.
+This file is a working scratch-pad for observations about the file-txt tool that have not yet been triaged. When an entry is reviewed it is handled in whichever way fits best:
 
-## Resolved (2026-04-02)
+- Filed as a GitHub issue if it's an actionable bug or feature gap worth tracking separately.
+- Folded into `CHANGELOG.md` if it's being addressed in the current work cycle.
+- Resolved inline here with a short note if it turns out to be intentional behavior, a documented limitation, or not reproducible.
 
-| ID   | Severity | File                     | Issue                                                                                                                                                                                 | Resolution                                               |
-| ---- | -------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| A-01 | Low      | engines/marker_engine.py | Dead code: marker_engine.py remained in the repository after the PDF engine was switched from marker-pdf to pymupdf4llm. The file was never imported or reachable from any code path. | Deleted. Active PDF engine is engines/pymupdf_engine.py. |
+No entries at this time. Add new observations below as they come up.
+
+See also: https://github.com/wtrekell/deep-thought/issues

@@ -234,6 +234,81 @@ def test_delete_file_calls_drive_api_delete() -> None:
     mock_delete_request.execute.assert_called_once()
 
 
+def test_upload_file_uses_media_file_upload(tmp_path: Path) -> None:
+    """upload_file uses MediaFileUpload (streaming) not MediaIoBaseUpload (buffered)."""
+    test_file = tmp_path / "large_file.txt"
+    test_file.write_text("file content")
+
+    client = _make_client()
+    mock_service = MagicMock()
+    client._service = mock_service  # type: ignore[attr-defined]
+
+    mock_create_request = MagicMock()
+    mock_create_request.execute.return_value = {"id": "streamed-file-id"}
+    mock_service.files.return_value.create.return_value = mock_create_request
+
+    captured_media_objects: list[object] = []
+
+    original_create = mock_service.files.return_value.create
+
+    def capture_create(**kwargs: object) -> MagicMock:
+        captured_media_objects.append(kwargs.get("media_body"))
+        return mock_create_request
+
+    mock_service.files.return_value.create.side_effect = capture_create
+
+    client.upload_file(
+        local_path=str(test_file),
+        drive_folder_id="parent-folder-id",
+        mime_type="text/plain",
+    )
+
+    assert len(captured_media_objects) == 1
+    from googleapiclient.http import MediaFileUpload  # type: ignore[import-untyped]
+
+    assert isinstance(captured_media_objects[0], MediaFileUpload), (
+        "upload_file must pass a MediaFileUpload (streaming) not MediaIoBaseUpload (buffered)"
+    )
+
+    # Restore so later tests are unaffected
+    mock_service.files.return_value.create.side_effect = None
+    mock_service.files.return_value.create = original_create
+
+
+def test_update_file_uses_media_file_upload(tmp_path: Path) -> None:
+    """update_file uses MediaFileUpload (streaming) not MediaIoBaseUpload (buffered)."""
+    test_file = tmp_path / "updated_file.txt"
+    test_file.write_text("updated content")
+
+    client = _make_client()
+    mock_service = MagicMock()
+    client._service = mock_service  # type: ignore[attr-defined]
+
+    mock_update_request = MagicMock()
+    mock_update_request.execute.return_value = {}
+
+    captured_media_objects: list[object] = []
+
+    def capture_update(**kwargs: object) -> MagicMock:
+        captured_media_objects.append(kwargs.get("media_body"))
+        return mock_update_request
+
+    mock_service.files.return_value.update.side_effect = capture_update
+
+    client.update_file(
+        drive_file_id="existing-file-id",
+        local_path=str(test_file),
+        mime_type="text/plain",
+    )
+
+    assert len(captured_media_objects) == 1
+    from googleapiclient.http import MediaFileUpload  # type: ignore[import-untyped]
+
+    assert isinstance(captured_media_objects[0], MediaFileUpload), (
+        "update_file must pass a MediaFileUpload (streaming) not MediaIoBaseUpload (buffered)"
+    )
+
+
 def test_rate_limiting_sleeps_between_calls(tmp_path: Path) -> None:
     """DriveClient sleeps to respect the configured rate limit."""
     test_file = tmp_path / "file.txt"

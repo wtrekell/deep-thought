@@ -7,7 +7,6 @@ approach and retry with exponential backoff on transient errors.
 
 from __future__ import annotations
 
-import io
 import logging
 import time
 from pathlib import Path
@@ -15,7 +14,7 @@ from typing import Any
 
 from googleapiclient.discovery import build  # type: ignore[import-untyped]
 from googleapiclient.errors import HttpError  # type: ignore[import-untyped]
-from googleapiclient.http import MediaIoBaseUpload  # type: ignore[import-untyped]
+from googleapiclient.http import MediaFileUpload  # type: ignore[import-untyped]
 
 from deep_thought.gdrive._auth import get_credentials
 
@@ -196,10 +195,7 @@ class DriveClient:
             "parents": [drive_folder_id],
         }
 
-        with open(local_path, "rb") as file_handle:
-            file_bytes = file_handle.read()
-
-        media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type, resumable=True)
+        media = MediaFileUpload(local_path, mimetype=mime_type, resumable=True)
 
         request = self._service.files().create(
             body=file_metadata,
@@ -226,10 +222,7 @@ class DriveClient:
             RuntimeError: If authenticate() has not been called.
             HttpError: If the API call fails after all retries.
         """
-        with open(local_path, "rb") as file_handle:
-            file_bytes = file_handle.read()
-
-        media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type, resumable=True)
+        media = MediaFileUpload(local_path, mimetype=mime_type, resumable=True)
 
         request = self._service.files().update(
             fileId=drive_file_id,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import contextlib
 import sys
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -320,3 +320,25 @@ def test_main_save_config_calls_handle_save_config(monkeypatch: pytest.MonkeyPat
     main()
 
     assert captured_paths == [target_path]
+
+
+# ---------------------------------------------------------------------------
+# _get_version
+# ---------------------------------------------------------------------------
+
+
+def test_get_version_returns_unknown_on_package_not_found() -> None:
+    """_get_version returns 'unknown' when the package is not installed.
+
+    Patches importlib.metadata.version (the function _get_version imports
+    locally) to raise PackageNotFoundError, exercising the narrowed except
+    clause added in the source fix.
+    """
+    from importlib.metadata import PackageNotFoundError
+
+    from deep_thought.gdrive.cli import _get_version
+
+    with patch("importlib.metadata.version", side_effect=PackageNotFoundError("deep-thought")):
+        result = _get_version()
+
+    assert result == "unknown"
