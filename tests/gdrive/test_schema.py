@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import pathlib
 import sqlite3
 from typing import TYPE_CHECKING
 
@@ -58,7 +59,7 @@ def test_init_db_sets_schema_version_to_current() -> None:
     cursor = conn.execute("SELECT value FROM key_value WHERE key = 'schema_version';")
     row = cursor.fetchone()
     assert row is not None
-    assert row["value"] == "2"
+    assert row["value"] == "3"
 
 
 def test_init_db_is_idempotent() -> None:
@@ -290,3 +291,115 @@ def test_project_root_finds_pyproject_toml() -> None:
     assert (root / "pyproject.toml").exists(), (
         f"_project_root() returned {root!r} but no pyproject.toml was found there"
     )
+
+
+# ---------------------------------------------------------------------------
+# TestSchemaVersionUpdatedAt
+# ---------------------------------------------------------------------------
+
+
+class TestSchemaVersionUpdatedAt:
+    """Verify that the schema_version row in key_value always has a non-NULL updated_at.
+
+    These tests cover:
+    1. A fresh DB initialized through all migrations has a non-NULL updated_at.
+    2. Simulating an old DB (version 2, updated_at NULL) and asserting that
+       running migration 003 backfills the updated_at column.
+    """
+
+    def test_fresh_db_schema_version_row_has_non_null_updated_at(self) -> None:
+        """After full init_db on a fresh DB, schema_version.updated_at must not be NULL."""
+        connection = sqlite3.connect(":memory:")
+        connection.row_factory = sqlite3.Row
+        init_db(connection)
+
+        cursor = connection.execute("SELECT updated_at FROM key_value WHERE key = 'schema_version';")
+        row = cursor.fetchone()
+        assert row is not None, "schema_version row must exist after init_db"
+        assert row["updated_at"] is not None, "schema_version.updated_at must not be NULL after all migrations have run"
+        connection.close()
+
+    def test_set_schema_version_writes_updated_at_for_version_2_and_above(self, tmp_path: pathlib.Path) -> None:
+        """_set_schema_version must write updated_at when version >= 2."""
+        real_migrations_dir = (
+            pathlib.Path(__file__).parents[2] / "src" / "deep_thought" / "gdrive" / "db" / "migrations"
+        )
+
+        # Build a migrations dir with only 001 and 002 so we can test _set_schema_version
+        # at version 2 explicitly without migration 003 running automatically.
+        first_two_dir = tmp_path / "first_two_migrations"
+        first_two_dir.mkdir()
+        for migration_file in sorted(real_migrations_dir.glob("*.sql")):
+            numeric_prefix = migration_file.stem.split("_")[0]
+            try:
+                migration_number = int(numeric_prefix)
+            except ValueError:
+                continue
+            if migration_number <= 2:
+                (first_two_dir / migration_file.name).write_text(
+                    migration_file.read_text(encoding="utf-8"), encoding="utf-8"
+                )
+
+        connection = sqlite3.connect(":memory:")
+        connection.row_factory = sqlite3.Row
+        _run_migrations(connection, first_two_dir)
+
+        # After migrations 001+002, _set_schema_version(conn, 2) must have
+        # written updated_at (the new behavior).
+        cursor = connection.execute("SELECT updated_at FROM key_value WHERE key = 'schema_version';")
+        row = cursor.fetchone()
+        assert row is not None
+        assert row["updated_at"] is not None, "_set_schema_version(conn, 2) must write updated_at"
+        connection.close()
+
+    def test_migration_003_backfills_null_updated_at_on_schema_version_row(self, tmp_path: pathlib.Path) -> None:
+        """Migration 003 must set updated_at on schema_version rows where it is NULL.
+
+        Simulates an old DB that was initialized through migration 002 without
+        the updated_at fix: the schema_version row has updated_at = NULL.
+        Running the real migrations directory (which now includes 003) through
+        _run_migrations must leave updated_at populated.
+        """
+        real_migrations_dir = (
+            pathlib.Path(__file__).parents[2] / "src" / "deep_thought" / "gdrive" / "db" / "migrations"
+        )
+
+        # Build a partial migrations dir containing only 001 and 002 to simulate
+        # a DB that was last touched before 003 existed.
+        pre_003_dir = tmp_path / "pre_003_migrations"
+        pre_003_dir.mkdir()
+        for migration_file in sorted(real_migrations_dir.glob("*.sql")):
+            numeric_prefix = migration_file.stem.split("_")[0]
+            try:
+                migration_number = int(numeric_prefix)
+            except ValueError:
+                continue
+            if migration_number <= 2:
+                (pre_003_dir / migration_file.name).write_text(
+                    migration_file.read_text(encoding="utf-8"), encoding="utf-8"
+                )
+
+        # Apply migrations 001 + 002 — schema_version row gets updated_at = NULL
+        # because the old _set_schema_version used a two-column INSERT.
+        connection = sqlite3.connect(":memory:")
+        connection.row_factory = sqlite3.Row
+        _run_migrations(connection, pre_003_dir)
+
+        # Manually force updated_at to NULL to simulate the legacy state.
+        connection.execute("UPDATE key_value SET updated_at = NULL WHERE key = 'schema_version';")
+        connection.commit()
+
+        null_check_cursor = connection.execute("SELECT updated_at FROM key_value WHERE key = 'schema_version';")
+        null_row = null_check_cursor.fetchone()
+        assert null_row["updated_at"] is None, "Pre-condition: updated_at must be NULL before running 003"
+
+        # Now run the full real migrations directory (includes 003).
+        _run_migrations(connection, real_migrations_dir)
+
+        backfill_cursor = connection.execute("SELECT updated_at FROM key_value WHERE key = 'schema_version';")
+        backfilled_row = backfill_cursor.fetchone()
+        assert backfilled_row is not None
+        assert backfilled_row["updated_at"] is not None, (
+            "Migration 003 must backfill updated_at on the schema_version row"
+        )
+        connection.close()

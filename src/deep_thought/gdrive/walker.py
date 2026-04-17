@@ -4,6 +4,13 @@ Provides walk_tree(), which traverses a source directory and returns metadata
 (relative path, mtime, size) for each eligible file. Hidden files/directories,
 common generated directories (e.g. .git, __pycache__), and SQLite sidecar
 files (.db-wal, .db-shm, .db-journal) are excluded.
+
+Symlinked directories are intentionally NOT followed (followlinks=False) to
+prevent infinite loops from circular symlinks. When a symlinked directory is
+detected during the walk, an INFO log is emitted so the user can see what was
+excluded. This is logged via os.scandir() on each visited directory after
+os.walk() has already pruned the subdirectory list, so only symlinks that
+would have been traversed are reported — not symlinks to excluded dirs.
 """
 
 from __future__ import annotations
@@ -115,6 +122,40 @@ def walk_tree(source_dir: str, exclude_patterns: list[str] | None = None) -> lis
                 for subdir_name in subdirectory_names
                 if not _is_excluded(subdir_name, str(relative_current / subdir_name), active_patterns)
             ]
+
+        # Detect and log symlinked directories that os.walk includes in subdirs
+        # but will not recurse into (followlinks=False is the default).
+        #
+        # os.walk puts symlinked directories in subdirectory_names but silently
+        # skips them during traversal — the user has no way to know their content
+        # was excluded. We scan each visited directory for symlinks whose target
+        # is a directory and log them at INFO so the exclusion is visible.
+        #
+        # Note: entry.is_dir(follow_symlinks=False) returns False for a symlink
+        # even when its target is a directory (the symlink itself is not a dir).
+        # entry.is_dir(follow_symlinks=True) — the default — returns True when
+        # the target is a directory, which is the correct check here.
+        pruned_subdirectory_set: set[str] = set(subdirectory_names)
+        try:
+            with os.scandir(str(current_directory)) as directory_entries:
+                for directory_entry in directory_entries:
+                    if (
+                        directory_entry.is_symlink()
+                        and directory_entry.is_dir()
+                        and directory_entry.name in pruned_subdirectory_set
+                    ):
+                        symlink_absolute_path = current_directory / directory_entry.name
+                        logger.info(
+                            "Skipping symlinked directory (followlinks=False): %s",
+                            symlink_absolute_path,
+                        )
+                        # Remove from subdirectory_names so os.walk does not
+                        # attempt (and silently skip) the symlink subtree.
+                        subdirectory_names.remove(directory_entry.name)
+        except OSError:
+            # Directory may have disappeared between os.walk and os.scandir —
+            # skip gracefully.
+            pass
 
         for file_name in file_names:
             # Skip hidden files

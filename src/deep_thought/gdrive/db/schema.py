@@ -140,19 +140,32 @@ def _set_schema_version(conn: sqlite3.Connection, version: int) -> None:
     """Persist the current schema version into key_value.
 
     Uses INSERT OR REPLACE so this is safe to call whether or not a version
-    row already exists. The key_value table in migration 001 has only (key,
-    value) columns; updated_at is added by migration 002 as a nullable column,
-    so it is intentionally omitted here to keep this function compatible across
-    all migration steps.
+    row already exists.
+
+    For migration 001 the key_value table has only (key, value) columns, so
+    the updated_at expression is omitted on that step. From migration 002
+    onward — when updated_at exists — the column is written with the current
+    UTC timestamp so the schema_version row is consistent with the non-null
+    convention applied to all other rows.
+
+    The current migration number is inspected at call time to decide which
+    INSERT form to use. Any version >= 2 gets the updated_at column written;
+    version 1 uses the two-column form that was valid when 001 ran.
 
     Args:
         conn: An open SQLite connection (within an active transaction).
         version: The migration number that was just applied.
     """
-    conn.execute(
-        "INSERT OR REPLACE INTO key_value (key, value) VALUES (?, ?);",
-        (_SCHEMA_VERSION_KEY, str(version)),
-    )
+    if version >= 2:
+        conn.execute(
+            "INSERT OR REPLACE INTO key_value (key, value, updated_at) VALUES (?, ?, datetime('now'));",
+            (_SCHEMA_VERSION_KEY, str(version)),
+        )
+    else:
+        conn.execute(
+            "INSERT OR REPLACE INTO key_value (key, value) VALUES (?, ?);",
+            (_SCHEMA_VERSION_KEY, str(version)),
+        )
 
 
 def _run_migrations(conn: sqlite3.Connection, migrations_dir: Path) -> None:

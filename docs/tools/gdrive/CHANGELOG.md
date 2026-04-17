@@ -6,7 +6,9 @@ All notable changes to the gdrive tool will be documented in this file.
 
 ### Fixed
 
-- `ensure_folder()` in `client.py` now issues a post-create re-query to detect TOCTOU duplicates. If two same-named folders are found under the same parent after a create (caused by a concurrent run or an external Drive create), a `WARNING` is logged identifying the duplicate IDs and the oldest folder (by `createdTime`, ID as tiebreak) is returned as the deterministic winner. Previously the race was silent — no error, no log, no exit-code change.
+- `ensure_folder()` in `client.py` now issues a post-create re-query to detect TOCTOU duplicates. If two same-named folders are found under the same parent after a create (caused by a concurrent run or an external Drive create), a `WARNING` is logged identifying the duplicate IDs and the oldest folder (by `createdTime`, ID as tiebreak) is returned as the deterministic winner. Previously the race was silent — no error, no log, no exit-code change. (#38)
+- `walker.py`: Symlinked directories inside `source_dir` are now detected and logged at INFO (e.g. `Skipping symlinked directory (followlinks=False): /path/to/link`) instead of being silently excluded. Symlinks are still not followed (cycle safety preserved). The symlink is also pruned from the traversal set so `os.walk` does not attempt the subtree. (#39)
+- `db/schema.py` + new migration `003_backfill_schema_version_updated_at.sql`: The `schema_version` row in `key_value` now always has a non-NULL `updated_at`. `_set_schema_version()` writes `updated_at = datetime('now')` for version >= 2 (version 1 predates the column). Migration 003 backfills existing databases where migration 002 left `updated_at` NULL on that row. (#39)
 
 ### Changed
 

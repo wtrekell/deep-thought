@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import TYPE_CHECKING
 from unittest.mock import patch
@@ -170,3 +171,47 @@ def test_walk_tree_logs_warning_on_permission_error(tmp_path: Path) -> None:
     mock_logger.warning.assert_called_once()
     warning_call_args = mock_logger.warning.call_args
     assert "unreadable.txt" in str(warning_call_args) or "Could not stat" in str(warning_call_args[0])
+
+
+def test_walk_tree_logs_info_when_symlinked_directory_is_skipped(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """walk_tree emits an INFO log when a symlinked directory is encountered and skipped.
+
+    os.walk(followlinks=False) silently omits symlink subtrees; we expect at
+    least one INFO-level message from the deep_thought.gdrive.walker logger
+    that contains the absolute path of the symlinked directory.
+    """
+    # Build a real target directory with a file in it.
+    target_directory = tmp_path / "link_target"
+    target_directory.mkdir()
+    (target_directory / "inside.txt").write_text("content inside symlinked directory")
+
+    # Build the source tree and place a symlink to target_directory inside it.
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    (source_dir / "real_file.txt").write_text("real content")
+
+    symlinked_dir = source_dir / "external_link"
+    symlinked_dir.symlink_to(target_directory)
+
+    with caplog.at_level(logging.INFO, logger="deep_thought.gdrive.walker"):
+        results = walk_tree(str(source_dir))
+
+    # The file inside the symlinked directory must NOT appear in results.
+    result_paths = {entry[0] for entry in results}
+    assert "source/real_file.txt" in result_paths
+    assert not any("inside.txt" in path for path in result_paths), (
+        "Files inside a symlinked directory must not be collected"
+    )
+
+    # An INFO log must have been emitted that contains the symlink path.
+    symlink_log_records = [
+        record
+        for record in caplog.records
+        if record.levelno == logging.INFO and str(symlinked_dir) in record.getMessage()
+    ]
+    assert len(symlink_log_records) >= 1, (
+        f"Expected at least one INFO log mentioning {symlinked_dir!s}; "
+        f"got records: {[r.getMessage() for r in caplog.records]}"
+    )
