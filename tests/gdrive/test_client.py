@@ -200,22 +200,35 @@ def test_ensure_folder_returns_existing_folder_id() -> None:
 
 
 def test_ensure_folder_creates_folder_when_not_found() -> None:
-    """ensure_folder creates a new folder when none exists with that name."""
+    """ensure_folder creates a new folder when none exists with that name.
+
+    The realistic flow: initial list returns empty → create → post-create
+    re-query returns exactly the folder we just created. Uses distinct mocks
+    for the two list calls so we exercise the clean-create branch, not the
+    degenerate "re-query returns empty" branch.
+    """
     client = _make_client()
     mock_service = MagicMock()
     client._service = mock_service  # type: ignore[attr-defined]
 
-    mock_list_request = MagicMock()
-    mock_list_request.execute.return_value = {"files": []}
-    mock_service.files.return_value.list.return_value = mock_list_request
+    mock_list_empty = MagicMock()
+    mock_list_empty.execute.return_value = {"files": []}
+
+    mock_list_single = MagicMock()
+    mock_list_single.execute.return_value = {
+        "files": [{"id": "new-folder-id", "name": "new-folder", "createdTime": "2026-04-16T10:00:00.000Z"}]
+    }
 
     mock_create_request = MagicMock()
     mock_create_request.execute.return_value = {"id": "new-folder-id"}
+
+    mock_service.files.return_value.list.side_effect = [mock_list_empty, mock_list_single]
     mock_service.files.return_value.create.return_value = mock_create_request
 
     folder_id = client.ensure_folder(folder_name="new-folder", parent_folder_id="parent-id")
 
     assert folder_id == "new-folder-id"
+    assert mock_service.files.return_value.list.call_count == 2
     mock_service.files.return_value.create.assert_called_once()
 
 
@@ -351,6 +364,61 @@ def test_ensure_folder_toctou_race_id_tiebreak_for_same_created_time() -> None:
 
     # Smallest ID wins the tiebreak
     assert folder_id == "aaa-folder-id"
+
+
+def test_ensure_folder_paginates_post_create_re_query() -> None:
+    """ensure_folder follows nextPageToken when the duplicate re-query spans multiple pages.
+
+    Simulates the extreme case where >100 same-named folders exist under the
+    same parent (two pages). The tiebreak must consider every folder from
+    every page, so the oldest folder on page 2 wins over newer folders on
+    page 1.
+    """
+    client = _make_client()
+    mock_service = MagicMock()
+    client._service = mock_service  # type: ignore[attr-defined]
+
+    mock_list_empty = MagicMock()
+    mock_list_empty.execute.return_value = {"files": []}
+
+    # Post-create re-query, page 1: newer folders, signals more pages via token
+    mock_list_page_one = MagicMock()
+    mock_list_page_one.execute.return_value = {
+        "nextPageToken": "page-2-token",
+        "files": [
+            {"id": "newer-id-1", "name": "dup", "createdTime": "2026-04-16T10:00:05.000Z"},
+            {"id": "newer-id-2", "name": "dup", "createdTime": "2026-04-16T10:00:06.000Z"},
+        ],
+    }
+
+    # Post-create re-query, page 2: contains the OLDEST folder (should win)
+    mock_list_page_two = MagicMock()
+    mock_list_page_two.execute.return_value = {
+        "files": [{"id": "oldest-id", "name": "dup", "createdTime": "2026-04-16T10:00:00.000Z"}]
+    }
+
+    mock_create_request = MagicMock()
+    mock_create_request.execute.return_value = {"id": "newer-id-1"}
+
+    # Sequence: initial list (empty, one page) → create → post-create page 1 → post-create page 2
+    mock_service.files.return_value.list.side_effect = [
+        mock_list_empty,
+        mock_list_page_one,
+        mock_list_page_two,
+    ]
+    mock_service.files.return_value.create.return_value = mock_create_request
+
+    folder_id = client.ensure_folder(folder_name="dup", parent_folder_id="parent-id")
+
+    # The oldest folder from page 2 must win, proving the tiebreak saw every page.
+    assert folder_id == "oldest-id"
+    # Three list calls total: one initial + two pages of the re-query.
+    assert mock_service.files.return_value.list.call_count == 3
+    # The second and third list calls must have supplied the correct pageToken.
+    list_call_kwargs = [call.kwargs for call in mock_service.files.return_value.list.call_args_list]
+    assert list_call_kwargs[0]["pageToken"] is None
+    assert list_call_kwargs[1]["pageToken"] is None
+    assert list_call_kwargs[2]["pageToken"] == "page-2-token"
 
 
 def test_delete_file_calls_drive_api_delete() -> None:

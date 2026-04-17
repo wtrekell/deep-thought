@@ -135,6 +135,12 @@ def walk_tree(source_dir: str, exclude_patterns: list[str] | None = None) -> lis
         # even when its target is a directory (the symlink itself is not a dir).
         # entry.is_dir(follow_symlinks=True) — the default — returns True when
         # the target is a directory, which is the correct check here.
+        #
+        # Intentional: this scan runs AFTER exclude-pattern pruning, so a symlink
+        # whose name also matches an exclude pattern is already gone from
+        # subdirectory_names and will not be logged. That is deliberate — the
+        # INFO log is meant to surface silent exclusions, and an exclude-pattern
+        # hit is not silent (it was caused by an explicit user config entry).
         pruned_subdirectory_set: set[str] = set(subdirectory_names)
         try:
             with os.scandir(str(current_directory)) as directory_entries:

@@ -245,6 +245,27 @@ class DriveClient:
         self._execute(request)
         logger.debug("Deleted Drive file ID %s", drive_file_id)
 
+    def _list_all_folders(self, query: str) -> list[dict[str, Any]]:
+        # Paginate through all files.list pages for the given query. Needed so
+        # ensure_folder() can detect duplicates even when >100 same-named
+        # folders share a parent (the default page size). Returns every folder
+        # matching the query across all pages.
+        collected_folders: list[dict[str, Any]] = []
+        next_page_token: str | None = None
+        while True:
+            list_request = self._service.files().list(
+                q=query,
+                fields="nextPageToken, files(id, name, createdTime)",
+                spaces="drive",
+                pageSize=100,
+                pageToken=next_page_token,
+            )
+            list_response: dict[str, Any] = self._execute(list_request)
+            collected_folders.extend(list_response.get("files", []))
+            next_page_token = list_response.get("nextPageToken")
+            if not next_page_token:
+                return collected_folders
+
     def ensure_folder(self, folder_name: str, parent_folder_id: str) -> str:
         """Return the Drive folder ID for folder_name under parent_folder_id.
 
@@ -279,13 +300,7 @@ class DriveClient:
             f"and trashed = false"
         )
 
-        initial_list_request = self._service.files().list(
-            q=duplicate_detection_query,
-            fields="files(id, name, createdTime)",
-            spaces="drive",
-        )
-        initial_list_response: dict[str, Any] = self._execute(initial_list_request)
-        initial_folders: list[dict[str, Any]] = initial_list_response.get("files", [])
+        initial_folders: list[dict[str, Any]] = self._list_all_folders(duplicate_detection_query)
 
         if initial_folders:
             found_folder_id: str = initial_folders[0]["id"]
@@ -311,13 +326,7 @@ class DriveClient:
         # calls, both folders now exist. Surface the race as a WARNING and pick
         # the oldest folder as the deterministic winner so callers always cache
         # the same ID.
-        post_create_list_request = self._service.files().list(
-            q=duplicate_detection_query,
-            fields="files(id, name, createdTime)",
-            spaces="drive",
-        )
-        post_create_list_response: dict[str, Any] = self._execute(post_create_list_request)
-        all_folders_after_create: list[dict[str, Any]] = post_create_list_response.get("files", [])
+        all_folders_after_create: list[dict[str, Any]] = self._list_all_folders(duplicate_detection_query)
 
         if len(all_folders_after_create) <= 1:
             return created_folder_id
