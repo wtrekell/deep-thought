@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
@@ -216,6 +217,140 @@ def test_ensure_folder_creates_folder_when_not_found() -> None:
 
     assert folder_id == "new-folder-id"
     mock_service.files.return_value.create.assert_called_once()
+
+
+def test_ensure_folder_no_race_returns_created_id() -> None:
+    """ensure_folder returns the newly created ID when the post-create re-query finds only one folder."""
+    client = _make_client()
+    mock_service = MagicMock()
+    client._service = mock_service  # type: ignore[attr-defined]
+
+    mock_list_empty = MagicMock()
+    mock_list_empty.execute.return_value = {"files": []}
+
+    mock_list_single = MagicMock()
+    mock_list_single.execute.return_value = {
+        "files": [{"id": "new-folder-id", "name": "notes", "createdTime": "2026-04-16T10:00:00.000Z"}]
+    }
+
+    mock_create_request = MagicMock()
+    mock_create_request.execute.return_value = {"id": "new-folder-id"}
+
+    # Call sequence: initial list (empty) → create → post-create list (one result)
+    mock_service.files.return_value.list.side_effect = [mock_list_empty, mock_list_single]
+    mock_service.files.return_value.create.return_value = mock_create_request
+
+    folder_id = client.ensure_folder(folder_name="notes", parent_folder_id="parent-id")
+
+    assert folder_id == "new-folder-id"
+    assert mock_service.files.return_value.list.call_count == 2
+    mock_service.files.return_value.create.assert_called_once()
+
+
+def test_ensure_folder_toctou_race_logs_warning_and_picks_oldest() -> None:
+    """ensure_folder detects a TOCTOU race when the post-create re-query returns two folders.
+
+    Simulates the case where an external process created the same folder between
+    our initial list (empty) and our create call. After the create, the re-query
+    returns both folders. The function should log a WARNING and return the oldest
+    folder by createdTime.
+    """
+    client = _make_client()
+    mock_service = MagicMock()
+    client._service = mock_service  # type: ignore[attr-defined]
+
+    mock_list_empty = MagicMock()
+    mock_list_empty.execute.return_value = {"files": []}
+
+    # Two folders — our newly created one and an externally created duplicate.
+    # The external one is older (earlier createdTime) and should win.
+    mock_list_duplicates = MagicMock()
+    mock_list_duplicates.execute.return_value = {
+        "files": [
+            {"id": "our-folder-id", "name": "notes", "createdTime": "2026-04-16T10:00:02.000Z"},
+            {"id": "external-folder-id", "name": "notes", "createdTime": "2026-04-16T10:00:00.000Z"},
+        ]
+    }
+
+    mock_create_request = MagicMock()
+    mock_create_request.execute.return_value = {"id": "our-folder-id"}
+
+    # Call sequence: initial list (empty) → create → post-create list (two results)
+    mock_service.files.return_value.list.side_effect = [mock_list_empty, mock_list_duplicates]
+    mock_service.files.return_value.create.return_value = mock_create_request
+
+    folder_id = client.ensure_folder(folder_name="notes", parent_folder_id="parent-id")
+
+    # The external (older) folder should win
+    assert folder_id == "external-folder-id"
+    assert mock_service.files.return_value.list.call_count == 2
+
+
+def test_ensure_folder_toctou_race_warning_message(caplog: pytest.LogCaptureFixture) -> None:
+    """ensure_folder emits a WARNING when duplicates are detected after create."""
+    client = _make_client()
+    mock_service = MagicMock()
+    client._service = mock_service  # type: ignore[attr-defined]
+
+    mock_list_empty = MagicMock()
+    mock_list_empty.execute.return_value = {"files": []}
+
+    mock_list_duplicates = MagicMock()
+    mock_list_duplicates.execute.return_value = {
+        "files": [
+            {"id": "folder-newer", "name": "archive", "createdTime": "2026-04-16T10:00:05.000Z"},
+            {"id": "folder-older", "name": "archive", "createdTime": "2026-04-16T10:00:01.000Z"},
+        ]
+    }
+
+    mock_create_request = MagicMock()
+    mock_create_request.execute.return_value = {"id": "folder-newer"}
+
+    mock_service.files.return_value.list.side_effect = [mock_list_empty, mock_list_duplicates]
+    mock_service.files.return_value.create.return_value = mock_create_request
+
+    with caplog.at_level(logging.WARNING, logger="deep_thought.gdrive.client"):
+        folder_id = client.ensure_folder(folder_name="archive", parent_folder_id="parent-id")
+
+    # Oldest wins
+    assert folder_id == "folder-older"
+    # At least one WARNING was emitted
+    warning_messages = [record.message for record in caplog.records if record.levelno == logging.WARNING]
+    assert len(warning_messages) >= 1
+    # The warning should mention the duplicate count and folder name
+    combined_warning_text = " ".join(warning_messages)
+    assert "archive" in combined_warning_text
+    assert "2" in combined_warning_text  # found 2 folders
+
+
+def test_ensure_folder_toctou_race_id_tiebreak_for_same_created_time() -> None:
+    """ensure_folder breaks createdTime ties by picking the smallest folder ID."""
+    client = _make_client()
+    mock_service = MagicMock()
+    client._service = mock_service  # type: ignore[attr-defined]
+
+    same_timestamp = "2026-04-16T10:00:00.000Z"
+    mock_list_empty = MagicMock()
+    mock_list_empty.execute.return_value = {"files": []}
+
+    mock_list_duplicates = MagicMock()
+    mock_list_duplicates.execute.return_value = {
+        "files": [
+            {"id": "zzz-folder-id", "name": "notes", "createdTime": same_timestamp},
+            {"id": "aaa-folder-id", "name": "notes", "createdTime": same_timestamp},
+        ]
+    }
+
+    mock_create_request = MagicMock()
+    mock_create_request.execute.return_value = {"id": "zzz-folder-id"}
+
+    mock_service.files.return_value.list.side_effect = [mock_list_empty, mock_list_duplicates]
+    mock_service.files.return_value.create.return_value = mock_create_request
+
+    folder_id = client.ensure_folder(folder_name="notes", parent_folder_id="parent-id")
+
+    # Smallest ID wins the tiebreak
+    assert folder_id == "aaa-folder-id"
 
 
 def test_delete_file_calls_drive_api_delete() -> None:

@@ -4,6 +4,10 @@ All notable changes to the gdrive tool will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- `ensure_folder()` in `client.py` now issues a post-create re-query to detect TOCTOU duplicates. If two same-named folders are found under the same parent after a create (caused by a concurrent run or an external Drive create), a `WARNING` is logged identifying the duplicate IDs and the oldest folder (by `createdTime`, ID as tiebreak) is returned as the deterministic winner. Previously the race was silent — no error, no log, no exit-code change.
+
 ### Changed
 
 - Secret retrieval now checks macOS Keychain first, falling back to environment variables. Uses the shared `deep_thought.secrets` module.

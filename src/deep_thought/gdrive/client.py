@@ -249,8 +249,15 @@ class DriveClient:
         """Return the Drive folder ID for folder_name under parent_folder_id.
 
         Searches for an existing folder with that name in the parent. If none
-        is found, creates it. This is idempotent — repeated calls with the
-        same arguments return the same folder ID without creating duplicates.
+        is found, creates it.
+
+        After creating a folder, a second list query is issued to detect the
+        TOCTOU race where an external process (or concurrent run) created the
+        same folder between the initial list and the create call. If duplicates
+        are detected a WARNING is logged and the oldest folder (by createdTime,
+        falling back to smallest ID for ties) is returned as the deterministic
+        winner. The caller's cache should store this winning ID so subsequent
+        calls do not re-enter the create path.
 
         Args:
             folder_name: The display name of the folder to find or create.
@@ -265,23 +272,23 @@ class DriveClient:
         """
         # Escape single quotes in folder name for the query string
         escaped_folder_name = folder_name.replace("'", "\\'")
-        query = (
+        duplicate_detection_query = (
             f"name = '{escaped_folder_name}' "
             f"and mimeType = 'application/vnd.google-apps.folder' "
             f"and '{parent_folder_id}' in parents "
             f"and trashed = false"
         )
 
-        list_request = self._service.files().list(
-            q=query,
-            fields="files(id, name)",
+        initial_list_request = self._service.files().list(
+            q=duplicate_detection_query,
+            fields="files(id, name, createdTime)",
             spaces="drive",
         )
-        list_response: dict[str, Any] = self._execute(list_request)
-        existing_folders: list[dict[str, Any]] = list_response.get("files", [])
+        initial_list_response: dict[str, Any] = self._execute(initial_list_request)
+        initial_folders: list[dict[str, Any]] = initial_list_response.get("files", [])
 
-        if existing_folders:
-            found_folder_id: str = existing_folders[0]["id"]
+        if initial_folders:
+            found_folder_id: str = initial_folders[0]["id"]
             logger.debug("Found existing Drive folder '%s' → ID %s", folder_name, found_folder_id)
             return found_folder_id
 
@@ -296,6 +303,52 @@ class DriveClient:
             fields="id",
         )
         create_response: dict[str, Any] = self._execute(create_request)
-        new_folder_id: str = create_response["id"]
-        logger.debug("Created Drive folder '%s' → ID %s", folder_name, new_folder_id)
-        return new_folder_id
+        created_folder_id: str = create_response["id"]
+        logger.debug("Created Drive folder '%s' → ID %s", folder_name, created_folder_id)
+
+        # Post-create re-query to detect TOCTOU duplicates: if another process
+        # created a folder with the same name+parent between our list and create
+        # calls, both folders now exist. Surface the race as a WARNING and pick
+        # the oldest folder as the deterministic winner so callers always cache
+        # the same ID.
+        post_create_list_request = self._service.files().list(
+            q=duplicate_detection_query,
+            fields="files(id, name, createdTime)",
+            spaces="drive",
+        )
+        post_create_list_response: dict[str, Any] = self._execute(post_create_list_request)
+        all_folders_after_create: list[dict[str, Any]] = post_create_list_response.get("files", [])
+
+        if len(all_folders_after_create) <= 1:
+            return created_folder_id
+
+        # Multiple folders found — TOCTOU race detected
+        duplicate_folder_ids = [folder["id"] for folder in all_folders_after_create]
+        logger.warning(
+            "Duplicate Drive folders detected for '%s' under parent '%s'. "
+            "This indicates a TOCTOU race (concurrent run or external create). "
+            "Found %d folders: %s. Picking the oldest as the canonical folder.",
+            folder_name,
+            parent_folder_id,
+            len(all_folders_after_create),
+            duplicate_folder_ids,
+        )
+
+        # Sort by createdTime ascending (oldest first), break ties by ID for
+        # a stable, deterministic ordering across runs.
+        def _folder_sort_key(folder_record: dict[str, Any]) -> tuple[str, str]:
+            created_time: str = folder_record.get("createdTime", "")
+            folder_id: str = folder_record.get("id", "")
+            return (created_time, folder_id)
+
+        sorted_folders = sorted(all_folders_after_create, key=_folder_sort_key)
+        winning_folder_id: str = sorted_folders[0]["id"]
+        logger.warning(
+            "Selected folder ID %s as the canonical winner for '%s'. "
+            "The remaining %d folder(s) are orphaned in Drive and must be "
+            "cleaned up manually.",
+            winning_folder_id,
+            folder_name,
+            len(all_folders_after_create) - 1,
+        )
+        return winning_folder_id
