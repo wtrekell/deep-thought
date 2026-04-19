@@ -501,6 +501,89 @@ class TestProcessSingleEmail:
         assert record is not None
         assert record["output_path"] == ""
 
+    def test_save_mode_raw_writes_body_text_as_bare_txt(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        tmp_path: Path,
+    ) -> None:
+        """save_mode: raw must write the bare body_text (no frontmatter) to a .txt file."""
+        raw_rule = RuleConfig(
+            name="article_hunter",
+            query="label:newsletter",
+            ai_instructions=None,
+            actions=[],
+            save_mode="raw",
+        )
+        message = make_mock_message(
+            message_id="raw_msg",
+            body_text="https://example.com/a\nhttps://example.com/b",
+        )
+        mock_gmail_client.get_message.return_value = message
+
+        status, _actions = _process_single_email(
+            gmail_client=mock_gmail_client,
+            message_stub={"id": "raw_msg"},
+            rule_config=raw_rule,
+            db_conn=in_memory_db,
+            extractor=None,
+            output_dir=tmp_path,
+            dry_run=False,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+        )
+
+        assert status == "ok"
+        raw_file = tmp_path / "article_hunter" / "article_hunter.txt"
+        assert raw_file.exists()
+        text = raw_file.read_text()
+        assert "---" not in text  # no YAML frontmatter
+        assert "tool: gmail" not in text  # no frontmatter keys
+        assert text == "https://example.com/a\nhttps://example.com/b\n"
+        # No markdown file should have been written for this rule.
+        assert not any(tmp_path.rglob("*.md"))
+
+    def test_save_mode_raw_skips_embedding(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        tmp_path: Path,
+    ) -> None:
+        """save_mode: raw should not call the embedding writer (line-oriented data is not semantic)."""
+        from unittest.mock import MagicMock as _MagicMock
+        from unittest.mock import patch as _patch
+
+        raw_rule = RuleConfig(
+            name="article_hunter",
+            query="label:newsletter",
+            ai_instructions=None,
+            actions=[],
+            save_mode="raw",
+        )
+        message = make_mock_message(message_id="raw_embed_msg", body_text="https://example.com/a")
+        mock_gmail_client.get_message.return_value = message
+
+        mock_embedding_model = _MagicMock()
+        mock_qdrant_client = _MagicMock()
+
+        with _patch("deep_thought.gmail.embeddings.write_embedding") as mock_write_embedding:
+            _process_single_email(
+                gmail_client=mock_gmail_client,
+                message_stub={"id": "raw_embed_msg"},
+                rule_config=raw_rule,
+                db_conn=in_memory_db,
+                extractor=None,
+                output_dir=tmp_path,
+                dry_run=False,
+                clean_newsletters=False,
+                decision_cache_ttl=3600,
+                embedding_model=mock_embedding_model,
+                embedding_qdrant_client=mock_qdrant_client,
+                qdrant_collection="deep_thought_db",
+            )
+
+        mock_write_embedding.assert_not_called()
+
     def test_save_mode_both_writes_individual_and_append(
         self,
         mock_gmail_client: MagicMock,
@@ -583,6 +666,68 @@ class TestProcessRule:
 
         assert result.processed == 2
         assert result.errors == 0
+
+    def test_include_spam_trash_threaded_into_list_messages(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        tmp_path: Path,
+    ) -> None:
+        """Rule-level include_spam_trash must flow into the list_messages call."""
+        cleanup_rule = RuleConfig(
+            name="trash_cleanup",
+            query="in:trash older_than:2w",
+            ai_instructions=None,
+            actions=[],
+            save_mode="none",
+            include_spam_trash=True,
+        )
+        mock_gmail_client.list_messages.return_value = []
+
+        process_rule(
+            gmail_client=mock_gmail_client,
+            rule_config=cleanup_rule,
+            db_conn=in_memory_db,
+            extractor=None,
+            output_dir=tmp_path,
+            dry_run=False,
+            force=False,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+            global_email_count=0,
+            max_emails_per_run=100,
+        )
+
+        mock_gmail_client.list_messages.assert_called_once()
+        call_kwargs = mock_gmail_client.list_messages.call_args.kwargs
+        assert call_kwargs["include_spam_trash"] is True
+
+    def test_include_spam_trash_defaults_false_in_list_messages_call(
+        self,
+        mock_gmail_client: MagicMock,
+        in_memory_db: sqlite3.Connection,
+        basic_rule: RuleConfig,
+        tmp_path: Path,
+    ) -> None:
+        """Existing rules without include_spam_trash must continue to pass False."""
+        mock_gmail_client.list_messages.return_value = []
+
+        process_rule(
+            gmail_client=mock_gmail_client,
+            rule_config=basic_rule,
+            db_conn=in_memory_db,
+            extractor=None,
+            output_dir=tmp_path,
+            dry_run=False,
+            force=False,
+            clean_newsletters=False,
+            decision_cache_ttl=3600,
+            global_email_count=0,
+            max_emails_per_run=100,
+        )
+
+        call_kwargs = mock_gmail_client.list_messages.call_args.kwargs
+        assert call_kwargs["include_spam_trash"] is False
 
     def test_skips_already_processed(
         self,

@@ -457,6 +457,7 @@ def cmd_search(args: argparse.Namespace) -> None:
     markdown_content = generate_research_markdown(search_result)
     written_file_path = write_research_file(markdown_content, resolved_output_dir, search_result)
 
+    _qdrant_client = None
     try:
         from deep_thought.embeddings import (  # noqa: PLC0415
             create_embedding_model,
@@ -479,6 +480,12 @@ def cmd_search(args: argparse.Namespace) -> None:
         )
     except Exception as embed_err:
         logger.warning("Embedding failed for query '%s': %s", search_result.query, embed_err)
+    finally:
+        if _qdrant_client is not None:
+            try:
+                _qdrant_client.close()
+            except Exception as qdrant_close_err:
+                logger.debug("QdrantClient close() raised: %s", qdrant_close_err)
 
     print("Search complete:")
     print(f"  File:    {written_file_path}")
@@ -539,6 +546,7 @@ def cmd_research(args: argparse.Namespace) -> None:
     markdown_content = generate_research_markdown(research_result)
     written_file_path = write_research_file(markdown_content, resolved_output_dir, research_result)
 
+    _qdrant_client = None
     try:
         from deep_thought.embeddings import (  # noqa: PLC0415
             create_embedding_model,
@@ -561,6 +569,12 @@ def cmd_research(args: argparse.Namespace) -> None:
         )
     except Exception as embed_err:
         logger.warning("Embedding failed for query '%s': %s", research_result.query, embed_err)
+    finally:
+        if _qdrant_client is not None:
+            try:
+                _qdrant_client.close()
+            except Exception as qdrant_close_err:
+                logger.debug("QdrantClient close() raised: %s", qdrant_close_err)
 
     print("Research complete:")
     print(f"  File:    {written_file_path}")

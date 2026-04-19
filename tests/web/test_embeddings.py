@@ -97,6 +97,13 @@ class TestWriteEmbeddingCallsSharedFunction:
         call_kwargs = mock_shared.call_args.kwargs
         assert call_kwargs["output_path"] == page.output_path
 
+    def test_write_embedding_canonical_id_is_url(self) -> None:
+        """The canonical_id kwarg must be the page URL — stable across file moves."""
+        page = _make_crawled_page()
+        mock_shared = _call_write_embedding(page)
+        call_kwargs = mock_shared.call_args.kwargs
+        assert call_kwargs["canonical_id"] == page.url
+
     def test_source_type_blog(self) -> None:
         """Mode 'blog' must map to source_type='blog_post'."""
         page = _make_crawled_page()

@@ -190,7 +190,12 @@ class GmailClient:
     # Message operations
     # -----------------------------------------------------------------------
 
-    def list_messages(self, query: str, max_results: int = 100) -> list[dict[str, Any]]:
+    def list_messages(
+        self,
+        query: str,
+        max_results: int = 100,
+        include_spam_trash: bool = False,
+    ) -> list[dict[str, Any]]:
         """Search Gmail with a query string and return all matching message stubs.
 
         Collapses pagination into a flat list. Each stub contains 'id' and
@@ -199,6 +204,10 @@ class GmailClient:
         Args:
             query: Gmail search query (same syntax as the Gmail search bar).
             max_results: Maximum number of messages to return.
+            include_spam_trash: When True, include messages in Spam and Trash in
+                results (passed to the Gmail API as ``includeSpamTrash``).
+                Required for any query that targets ``in:trash`` or ``in:spam``.
+                Defaults to False to preserve existing collection behavior.
 
         Returns:
             A list of message stub dicts with 'id' and 'threadId'.
@@ -218,6 +227,7 @@ class GmailClient:
                     q=query,
                     maxResults=page_size,
                     pageToken=page_token,
+                    includeSpamTrash=include_spam_trash,
                 )
             )
             response = self._execute(request)

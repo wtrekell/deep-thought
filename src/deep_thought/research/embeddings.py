@@ -28,9 +28,10 @@ def write_embedding(
     """Embed a research result and upsert it into the specified Qdrant collection.
 
     Constructs the payload from the result's metadata fields and calls the shared
-    ``deep_thought.embeddings.write_embedding()`` function. The ``output_path``
-    field is injected automatically by that function — do not include it in the
-    payload dict here.
+    ``deep_thought.embeddings.write_embedding()`` function. The canonical
+    identifier is ``"{mode}:{query}@{processed_date}"`` — every research run is
+    a distinct event, so the timestamp is part of the identity. ``output_path``
+    is passed as advisory metadata only.
 
     The research tool has no rule system, so ``rule_name`` is always the empty
     string. ``source_type`` is determined by the result's mode field:
@@ -69,9 +70,12 @@ def write_embedding(
     if result.recency is not None:
         research_payload["recency"] = result.recency
 
+    canonical_id: str = f"{result.mode}:{result.query}@{result.processed_date}"
+
     _shared_write_embedding(
         content=content,
         payload=research_payload,
+        canonical_id=canonical_id,
         output_path=output_path,
         model=model,
         qdrant_client=qdrant_client,

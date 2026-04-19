@@ -31,7 +31,12 @@ from deep_thought.web.converter import (
 )
 from deep_thought.web.crawler import CrawlerConfig, PageResult, WebCrawler
 from deep_thought.web.db import queries
-from deep_thought.web.filters import extract_internal_links, is_url_allowed
+from deep_thought.web.filters import (
+    canonicalize_url,
+    extract_internal_links,
+    has_markdown_link_corruption,
+    is_url_allowed,
+)
 from deep_thought.web.image_extractor import download_images, extract_image_urls
 from deep_thought.web.llms import PageSummary, strip_frontmatter, write_llms_full, write_llms_index
 from deep_thought.web.models import CrawledPageLocal
@@ -142,6 +147,10 @@ def _process_page(
     """
     now_iso = _now_iso()
 
+    # Canonicalize the URL stored in the DB so trailing-slash / www. variants
+    # collapse to a single dedup key across runs.
+    canonical_page_url = canonicalize_url(page_result.url)
+
     html_title = extract_title(page_result.html) or page_result.title
     page_html = page_result.html
     if config.crawl.unwrap_tags:
@@ -160,7 +169,7 @@ def _process_page(
             config.crawl.min_article_words,
         )
         skip_model = CrawledPageLocal(
-            url=page_result.url,
+            url=canonical_page_url,
             rule_name=rule_name,
             title=html_title,
             status_code=page_result.status_code,
@@ -183,7 +192,7 @@ def _process_page(
             )
         )
         page_model = CrawledPageLocal(
-            url=page_result.url,
+            url=canonical_page_url,
             rule_name=rule_name,
             title=html_title,
             status_code=page_result.status_code,
@@ -214,7 +223,7 @@ def _process_page(
             download_images(image_urls, images_output_dir)
 
     page_model = CrawledPageLocal(
-        url=page_result.url,
+        url=canonical_page_url,
         rule_name=rule_name,
         title=html_title,
         status_code=page_result.status_code,
@@ -280,7 +289,7 @@ def _record_error_page(
     """
     now_iso = _now_iso()
     error_model = CrawledPageLocal(
-        url=url,
+        url=canonicalize_url(url),
         rule_name=rule_name,
         title=None,
         status_code=0,
@@ -294,6 +303,77 @@ def _record_error_page(
     logger.error("Failed to fetch %s: %s", url, error)
     queries.upsert_crawled_page(conn, error_model.to_dict())
     conn.commit()
+
+
+def _fetch_process_and_record(
+    page_url: str,
+    crawler: WebCrawler,
+    config: WebConfig,
+    conn: sqlite3.Connection,
+    output_root: Path,
+    rule_name: str | None,
+    dry_run: bool,
+    embedding_model: Any | None,
+    embedding_qdrant_client: Any | None,
+    qdrant_collection: str | None,
+) -> tuple[str, PageSummary | None, PageResult | None]:
+    """Fetch, process, upsert, and error-handle a single URL.
+
+    Encapsulates the per-URL work that was previously duplicated in each mode
+    runner: fetch → convert → upsert → map exceptions → return outcome. Mode
+    runners retain responsibility for building their URL list (blog collects
+    article URLs via index traversal; documentation uses BFS; direct reads a
+    file) and for any mode-specific follow-up (documentation enqueues child
+    links on success).
+
+    Args:
+        page_url: The URL to fetch and process.
+        crawler: An active WebCrawler context manager instance.
+        config: The WebConfig controlling filtering and output.
+        conn: An open SQLite connection.
+        output_root: Root directory for output files.
+        rule_name: Optional batch rule name that triggered this crawl.
+        dry_run: If True, skip writing files to disk.
+        embedding_model: Optional MLX embedding model.
+        embedding_qdrant_client: Optional Qdrant client.
+        qdrant_collection: The Qdrant collection name to write embeddings into.
+
+    Returns:
+        A tuple of ``(status, page_summary, page_result)`` where:
+
+        - ``status`` is one of ``"success"``, ``"skipped"``, or ``"failed"``.
+        - ``page_summary`` is the PageSummary for llms aggregate files, or None
+          when the page was skipped/failed or when dry_run produced no summary.
+        - ``page_result`` is the fetched PageResult on success or skipped, or
+          None on failure. Documentation mode uses this to extract child links.
+    """
+    try:
+        page_result = crawler.fetch_page(page_url)
+
+        page_model, page_summary = _process_page(
+            page_result=page_result,
+            config=config,
+            output_root=output_root,
+            rule_name=rule_name,
+            dry_run=dry_run,
+            embedding_model=embedding_model,
+            embedding_qdrant_client=embedding_qdrant_client,
+            qdrant_collection=qdrant_collection,
+        )
+        queries.upsert_crawled_page(conn, page_model.to_dict())
+        conn.commit()
+
+        if page_model.status == "skipped":
+            return "skipped", None, page_result
+        return "success", page_summary, page_result
+
+    except (PlaywrightError, ConnectionError) as fetch_error:
+        _record_error_page(page_url, rule_name, fetch_error, conn)
+        return "failed", None, None
+    except Exception as unexpected_error:
+        logger.error("Unexpected error processing %s: %s", page_url, unexpected_error)
+        _record_error_page(page_url, rule_name, unexpected_error, conn)
+        return "failed", None, None
 
 
 def _collect_article_urls(
@@ -435,10 +515,11 @@ def run_blog_mode(
     skipped_count = 0
     summaries: list[PageSummary] = []
 
-    visited: set[str] = {root_url}
+    canonical_root_url = canonicalize_url(root_url)
+    visited: set[str] = {canonical_root_url}
     article_urls = _collect_article_urls(
         crawler=crawler,
-        url=root_url,
+        url=canonical_root_url,
         include_patterns=config.crawl.include_patterns,
         exclude_patterns=config.crawl.exclude_patterns,
         remaining_depth=config.crawl.index_depth,
@@ -456,42 +537,33 @@ def run_blog_mode(
             unique_article_urls.append(article_url)
 
     for page_url in track_items(unique_article_urls, description="Crawling pages"):
+        canonical_page_url = canonicalize_url(page_url)
         if not force:
-            existing_row = queries.get_crawled_page(conn, page_url)
+            existing_row = queries.get_crawled_page(conn, canonical_page_url)
             if existing_row is not None and existing_row.get("status") == "success":
                 skipped_count += 1
-                logger.debug("Skipping already-crawled URL: %s", page_url)
+                logger.debug("Skipping already-crawled URL: %s", canonical_page_url)
                 continue
 
-        try:
-            page_result = crawler.fetch_page(page_url)
-
-            page_model, page_summary = _process_page(
-                page_result=page_result,
-                config=config,
-                output_root=output_root,
-                rule_name=rule_name,
-                dry_run=dry_run,
-                embedding_model=embedding_model,
-                embedding_qdrant_client=embedding_qdrant_client,
-                qdrant_collection=qdrant_collection,
-            )
-            queries.upsert_crawled_page(conn, page_model.to_dict())
-            conn.commit()
-
-            if page_model.status == "skipped":
-                skipped_count += 1
-            else:
-                succeeded_count += 1
-                if page_summary is not None:
-                    summaries.append(page_summary)
-
-        except (PlaywrightError, ConnectionError) as fetch_error:
-            _record_error_page(page_url, rule_name, fetch_error, conn)
-            failed_count += 1
-        except Exception as unexpected_error:
-            logger.error("Unexpected error processing %s: %s", page_url, unexpected_error)
-            _record_error_page(page_url, rule_name, unexpected_error, conn)
+        status, page_summary, _ = _fetch_process_and_record(
+            page_url=page_url,
+            crawler=crawler,
+            config=config,
+            conn=conn,
+            output_root=output_root,
+            rule_name=rule_name,
+            dry_run=dry_run,
+            embedding_model=embedding_model,
+            embedding_qdrant_client=embedding_qdrant_client,
+            qdrant_collection=qdrant_collection,
+        )
+        if status == "skipped":
+            skipped_count += 1
+        elif status == "success":
+            succeeded_count += 1
+            if page_summary is not None:
+                summaries.append(page_summary)
+        else:
             failed_count += 1
 
     total_count = succeeded_count + failed_count + skipped_count
@@ -567,6 +639,8 @@ def run_documentation_mode(
     skipped_count = 0
     summaries: list[PageSummary] = []
 
+    canonical_root_url = canonicalize_url(root_url)
+
     # Determine which URLs the changelog says have changed (for incremental re-crawl)
     changelog_changed_urls: set[str] = set()
     existing_pages = queries.get_all_crawled_pages(conn)
@@ -574,14 +648,14 @@ def run_documentation_mode(
 
     if config.crawl.changelog_url is not None and has_prior_crawl and not force:
         logger.debug("Fetching changelog to determine changed pages: %s", config.crawl.changelog_url)
-        changelog_changed_urls = _get_changelog_changed_urls(crawler, config.crawl.changelog_url, root_url)
+        changelog_changed_urls = _get_changelog_changed_urls(crawler, config.crawl.changelog_url, canonical_root_url)
         if changelog_changed_urls:
             logger.debug("Changelog lists %d changed pages for re-crawl", len(changelog_changed_urls))
 
     visited_urls: set[str] = set()
     url_queue: deque[tuple[str, int]] = deque()
-    url_queue.append((root_url, 0))
-    visited_urls.add(root_url)
+    url_queue.append((canonical_root_url, 0))
+    visited_urls.add(canonical_root_url)
 
     use_progress = sys.stderr.isatty()
     bfs_progress = create_progress() if use_progress else None
@@ -612,56 +686,49 @@ def run_documentation_mode(
                         # Still enqueue children so the BFS graph stays complete
                         if current_depth < config.crawl.max_depth:
                             _enqueue_children_from_db(
-                                existing_row, url_queue, visited_urls, config, root_url, current_depth
+                                existing_row, url_queue, visited_urls, config, canonical_root_url, current_depth
                             )
                         if bfs_progress is not None and bfs_task_id is not None:
                             bfs_progress.advance(bfs_task_id)
                         continue
 
-            try:
-                page_result = crawler.fetch_page(current_url)
+            status, page_summary, page_result = _fetch_process_and_record(
+                page_url=current_url,
+                crawler=crawler,
+                config=config,
+                conn=conn,
+                output_root=output_root,
+                rule_name=rule_name,
+                dry_run=dry_run,
+                embedding_model=embedding_model,
+                embedding_qdrant_client=embedding_qdrant_client,
+                qdrant_collection=qdrant_collection,
+            )
+            if status == "skipped":
+                skipped_count += 1
+            elif status == "success":
+                succeeded_count += 1
+                if page_summary is not None:
+                    summaries.append(page_summary)
+            else:
+                failed_count += 1
 
-                page_model, page_summary = _process_page(
-                    page_result=page_result,
-                    config=config,
-                    output_root=output_root,
-                    rule_name=rule_name,
-                    dry_run=dry_run,
-                    embedding_model=embedding_model,
-                    embedding_qdrant_client=embedding_qdrant_client,
-                    qdrant_collection=qdrant_collection,
-                )
-                queries.upsert_crawled_page(conn, page_model.to_dict())
+            # Enqueue child links if the fetch succeeded (or was a content-skip) and
+            # we have not reached max depth. ``extract_internal_links`` already
+            # canonicalizes and drops corrupted URLs, so queue/visited sets hold
+            # canonical forms.
+            if page_result is not None and current_depth < config.crawl.max_depth:
+                child_links = extract_internal_links(page_result.html, current_url)
+                queries.update_page_child_links(conn, current_url, json.dumps(list(child_links)))
                 conn.commit()
-
-                if page_model.status == "skipped":
-                    skipped_count += 1
-                else:
-                    succeeded_count += 1
-                    if page_summary is not None:
-                        summaries.append(page_summary)
-
-                # Enqueue child links if we have not reached max depth
-                if current_depth < config.crawl.max_depth:
-                    child_links = extract_internal_links(page_result.html, current_url)
-                    queries.update_page_child_links(conn, current_url, json.dumps(list(child_links)))
-                    conn.commit()
-                    for child_url in child_links:
-                        if child_url not in visited_urls and is_url_allowed(
-                            child_url,
-                            config.crawl.include_patterns,
-                            config.crawl.exclude_patterns,
-                        ):
-                            visited_urls.add(child_url)
-                            url_queue.append((child_url, current_depth + 1))
-
-            except (PlaywrightError, ConnectionError) as fetch_error:
-                _record_error_page(current_url, rule_name, fetch_error, conn)
-                failed_count += 1
-            except Exception as unexpected_error:
-                logger.error("Unexpected error processing %s: %s", current_url, unexpected_error)
-                _record_error_page(current_url, rule_name, unexpected_error, conn)
-                failed_count += 1
+                for child_url in child_links:
+                    if child_url not in visited_urls and is_url_allowed(
+                        child_url,
+                        config.crawl.include_patterns,
+                        config.crawl.exclude_patterns,
+                    ):
+                        visited_urls.add(child_url)
+                        url_queue.append((child_url, current_depth + 1))
 
             if bfs_progress is not None and bfs_task_id is not None:
                 bfs_progress.advance(bfs_task_id)
@@ -770,8 +837,16 @@ def run_direct_mode(
     urls_to_crawl: list[str] = []
     for line in url_lines:
         stripped_line = line.strip()
-        if stripped_line and not stripped_line.startswith("#"):
-            urls_to_crawl.append(stripped_line)
+        if not stripped_line or stripped_line.startswith("#"):
+            continue
+        if has_markdown_link_corruption(stripped_line):
+            logger.warning(
+                "Dropping URL with markdown-link corruption from %s: %s",
+                url_file,
+                stripped_line,
+            )
+            continue
+        urls_to_crawl.append(canonicalize_url(stripped_line))
 
     succeeded_count = 0
     failed_count = 0
@@ -786,35 +861,25 @@ def run_direct_mode(
                 logger.debug("Skipping already-crawled URL: %s", page_url)
                 continue
 
-        try:
-            page_result = crawler.fetch_page(page_url)
-
-            page_model, page_summary = _process_page(
-                page_result=page_result,
-                config=config,
-                output_root=output_root,
-                rule_name=rule_name,
-                dry_run=dry_run,
-                embedding_model=embedding_model,
-                embedding_qdrant_client=embedding_qdrant_client,
-                qdrant_collection=qdrant_collection,
-            )
-            queries.upsert_crawled_page(conn, page_model.to_dict())
-            conn.commit()
-
-            if page_model.status == "skipped":
-                skipped_count += 1
-            else:
-                succeeded_count += 1
-                if page_summary is not None:
-                    summaries.append(page_summary)
-
-        except (PlaywrightError, ConnectionError) as fetch_error:
-            _record_error_page(page_url, rule_name, fetch_error, conn)
-            failed_count += 1
-        except Exception as unexpected_error:
-            logger.error("Unexpected error processing %s: %s", page_url, unexpected_error)
-            _record_error_page(page_url, rule_name, unexpected_error, conn)
+        status, page_summary, _ = _fetch_process_and_record(
+            page_url=page_url,
+            crawler=crawler,
+            config=config,
+            conn=conn,
+            output_root=output_root,
+            rule_name=rule_name,
+            dry_run=dry_run,
+            embedding_model=embedding_model,
+            embedding_qdrant_client=embedding_qdrant_client,
+            qdrant_collection=qdrant_collection,
+        )
+        if status == "skipped":
+            skipped_count += 1
+        elif status == "success":
+            succeeded_count += 1
+            if page_summary is not None:
+                summaries.append(page_summary)
+        else:
             failed_count += 1
 
     total_count = succeeded_count + failed_count + skipped_count

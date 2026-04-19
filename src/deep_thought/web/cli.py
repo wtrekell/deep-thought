@@ -357,6 +357,11 @@ def cmd_crawl(args: argparse.Namespace) -> None:
             total_skipped = crawl_result.skipped
     finally:
         conn.close()
+        if embedding_qdrant_client is not None:
+            try:
+                embedding_qdrant_client.close()
+            except Exception as qdrant_close_err:
+                logger.debug("QdrantClient close() raised: %s", qdrant_close_err)
 
     dry_run_prefix = "[dry-run] " if dry_run else ""
     print(f"{dry_run_prefix}Crawl complete:")

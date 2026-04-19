@@ -108,6 +108,14 @@ class TestWriteEmbeddingCallsSharedFunction:
         call_kwargs = mock_shared.call_args.kwargs
         assert call_kwargs["output_path"] == expected_output_path
 
+    def test_write_embedding_canonical_id_combines_mode_query_and_date(self) -> None:
+        """The canonical_id encodes mode + query + processed_date — each research run is unique."""
+        result = _make_research_result()
+        mock_shared = _call_write_embedding(result)
+        call_kwargs = mock_shared.call_args.kwargs
+        expected = f"{result.mode}:{result.query}@{result.processed_date}"
+        assert call_kwargs["canonical_id"] == expected
+
     def test_source_type_research_deep(self) -> None:
         """Mode 'research' must map to source_type='research_deep'."""
         result = _make_research_result(mode="research")

@@ -37,9 +37,10 @@ def write_embedding(
     """Embed a crawled web page and upsert it into the specified Qdrant collection.
 
     Constructs the payload from the page's metadata fields and calls the shared
-    ``deep_thought.embeddings.write_embedding()`` function. The ``output_path``
-    field is injected automatically by that function — do not include it in the
-    payload dict here.
+    ``deep_thought.embeddings.write_embedding()`` function. The page URL is the
+    canonical identifier — re-crawls of the same URL update the same chunks
+    rather than creating duplicates. ``output_path`` is passed as advisory
+    metadata only.
 
     Args:
         content: The text to embed (typically title + stripped markdown body).
@@ -78,6 +79,7 @@ def write_embedding(
     _shared_write_embedding(
         content=content,
         payload=page_payload,
+        canonical_id=page.url,
         output_path=page.output_path,
         model=model,
         qdrant_client=qdrant_client,

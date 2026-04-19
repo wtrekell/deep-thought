@@ -116,6 +116,20 @@ class TestWriteEmbedding:
         call_kwargs = mock_shared.call_args.kwargs
         assert call_kwargs["output_path"] == question.output_path
 
+    def test_canonical_id_is_question_link(self) -> None:
+        """The canonical_id kwarg must be the question's canonical link URL — stable across file moves."""
+        question = _make_collected_question()
+        mock_shared = _call_write_embedding(question)
+        call_kwargs = mock_shared.call_args.kwargs
+        assert call_kwargs["canonical_id"] == question.link
+
+    def test_payload_contains_url_field(self) -> None:
+        """The payload must include a 'url' field with the question's link for downstream consumers."""
+        question = _make_collected_question()
+        mock_shared = _call_write_embedding(question)
+        payload = mock_shared.call_args.kwargs["payload"]
+        assert payload["url"] == question.link
+
     def test_payload_contains_required_fields(self) -> None:
         """The payload must contain all fields required by the shared embedding infrastructure."""
         question = _make_collected_question()

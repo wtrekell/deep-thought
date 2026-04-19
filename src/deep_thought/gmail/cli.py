@@ -262,6 +262,8 @@ def cmd_collect(args: argparse.Namespace) -> None:
         config.max_emails_per_run = args.max_emails
 
     connection = initialize_database()
+    embedding_model = None
+    embedding_qdrant_client = None
     try:
         # Purge expired AI decision cache entries before each collection run
         expired_count = delete_expired_cache(connection)
@@ -285,8 +287,6 @@ def cmd_collect(args: argparse.Namespace) -> None:
                 logger.warning("AI extraction will be skipped for this run.")
 
         # Set up embedding infrastructure (non-fatal if unavailable)
-        embedding_model = None
-        embedding_qdrant_client = None
         if not args.dry_run:
             try:
                 from deep_thought.embeddings import (  # noqa: PLC0415
@@ -317,6 +317,11 @@ def cmd_collect(args: argparse.Namespace) -> None:
         connection.commit()
     finally:
         connection.close()
+        if embedding_qdrant_client is not None:
+            try:
+                embedding_qdrant_client.close()
+            except Exception as qdrant_close_err:
+                logger.debug("QdrantClient close() raised: %s", qdrant_close_err)
 
     dry_run_prefix = "[dry-run] " if args.dry_run else ""
     print(f"{dry_run_prefix}Collection complete:")

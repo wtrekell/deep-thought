@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 from deep_thought.gmail.output import (
+    append_raw_to_rule_file,
     append_to_rule_file,
     extract_body_text,
     generate_email_markdown,
@@ -203,3 +204,62 @@ class TestAppendToRuleFile:
         assert "First email" in content
         assert "---" in content
         assert "Second email" in content
+
+
+class TestAppendRawToRuleFile:
+    """Tests for append_raw_to_rule_file (save_mode: raw handoff file)."""
+
+    def test_writes_bare_content_with_txt_extension(self, tmp_path: Path) -> None:
+        """Should write only the input content to {rule_name}.txt — no frontmatter or separators."""
+        file_path = append_raw_to_rule_file(
+            content="https://example.com/a\nhttps://example.com/b",
+            output_dir=tmp_path,
+            rule_name="article_hunter",
+        )
+        assert file_path is not None
+        assert file_path.name == "article_hunter.txt"
+        text = file_path.read_text()
+        assert "---" not in text
+        assert "tool: gmail" not in text
+        assert text == "https://example.com/a\nhttps://example.com/b\n"
+
+    def test_appends_without_markdown_separator(self, tmp_path: Path) -> None:
+        """Repeated calls should accumulate lines, not insert `---` separators."""
+        append_raw_to_rule_file("https://one.example", tmp_path, "article_hunter")
+        file_path = append_raw_to_rule_file("https://two.example", tmp_path, "article_hunter")
+
+        assert file_path is not None
+        text = file_path.read_text()
+        assert "---" not in text
+        assert text == "https://one.example\nhttps://two.example\n"
+
+    def test_dedupes_lines_preserving_first_seen_order(self, tmp_path: Path) -> None:
+        """Each unique line should appear once, in the order it was first seen."""
+        append_raw_to_rule_file("https://a.example\nhttps://b.example", tmp_path, "article_hunter")
+        file_path = append_raw_to_rule_file(
+            "https://b.example\nhttps://c.example\nhttps://a.example",
+            tmp_path,
+            "article_hunter",
+        )
+
+        assert file_path is not None
+        text = file_path.read_text()
+        assert text == "https://a.example\nhttps://b.example\nhttps://c.example\n"
+
+    def test_skips_empty_content(self, tmp_path: Path) -> None:
+        """Empty or whitespace-only input should not create or modify any file."""
+        result_empty = append_raw_to_rule_file("", tmp_path, "article_hunter")
+        result_whitespace = append_raw_to_rule_file("   \n  \n", tmp_path, "article_hunter")
+
+        assert result_empty is None
+        assert result_whitespace is None
+        assert not (tmp_path / "article_hunter" / "article_hunter.txt").exists()
+
+    def test_empty_input_does_not_disturb_existing_file(self, tmp_path: Path) -> None:
+        """An empty follow-up write should leave an existing file untouched."""
+        append_raw_to_rule_file("https://kept.example", tmp_path, "article_hunter")
+        result = append_raw_to_rule_file("", tmp_path, "article_hunter")
+
+        assert result is None
+        file_path = tmp_path / "article_hunter" / "article_hunter.txt"
+        assert file_path.read_text() == "https://kept.example\n"

@@ -152,6 +152,49 @@ class TestGmailClientListMessages:
         result = client.list_messages("label:test", max_results=5)
         assert len(result) == 5
 
+    def test_defaults_include_spam_trash_false(self) -> None:
+        """Default calls should pass includeSpamTrash=False to the Gmail API."""
+        from deep_thought.gmail.client import GmailClient
+
+        client = GmailClient.__new__(GmailClient)
+        client._rate_limit_rpm = 0
+        client._retry_max_attempts = 1
+        client._retry_base_delay = 0.0
+        client._last_request_time = 0.0
+
+        mock_service = MagicMock()
+        mock_list = MagicMock()
+        mock_list.execute.return_value = {"messages": [{"id": "m1"}]}
+        mock_service.users().messages().list.return_value = mock_list
+        client._service = mock_service
+
+        client.list_messages("label:test", max_results=1)
+
+        call_kwargs = mock_service.users().messages().list.call_args.kwargs
+        assert call_kwargs["includeSpamTrash"] is False
+
+    def test_passes_include_spam_trash_true(self) -> None:
+        """include_spam_trash=True must be forwarded as includeSpamTrash=True to the API."""
+        from deep_thought.gmail.client import GmailClient
+
+        client = GmailClient.__new__(GmailClient)
+        client._rate_limit_rpm = 0
+        client._retry_max_attempts = 1
+        client._retry_base_delay = 0.0
+        client._last_request_time = 0.0
+
+        mock_service = MagicMock()
+        mock_list = MagicMock()
+        mock_list.execute.return_value = {"messages": [{"id": "m1"}]}
+        mock_service.users().messages().list.return_value = mock_list
+        client._service = mock_service
+
+        client.list_messages("in:trash older_than:2w", max_results=1, include_spam_trash=True)
+
+        call_kwargs = mock_service.users().messages().list.call_args.kwargs
+        assert call_kwargs["includeSpamTrash"] is True
+        assert call_kwargs["q"] == "in:trash older_than:2w"
+
 
 class TestGmailClientGetMessage:
     """Tests for GmailClient.get_message."""

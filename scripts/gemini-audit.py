@@ -29,25 +29,39 @@ Exit codes:
       will block the commit.
 
 Secrets:
-  The Gemini API key is loaded via ``deep_thought.secrets.get_secret`` with
-  service ``"gemini"``, key ``"api-key"``, and environment variable fallback
-  ``GEMINI_API_KEY``. Store the key once with::
+  The script forces ``DEEP_THOUGHT_NO_KEYCHAIN=1`` and loads
+  ``deep-thought/.env`` on startup, so the Gemini API key is read from the
+  ``GEMINI_API_KEY`` entry in that ``.env`` file — never from the macOS
+  keychain. This is deliberate: git hooks run non-interactively and must
+  never block on a keychain password prompt. Set the key with::
 
-      python -c "import keyring; keyring.set_password('deep-thought-gemini', 'api-key', 'YOUR_KEY')"
+      GEMINI_API_KEY="..."   # in deep-thought/.env
 
-  or set ``GEMINI_API_KEY=...`` in ``.env``. A free-tier key from
-  https://aistudio.google.com/apikey is plenty for pre-commit rate.
+  A free-tier key from https://aistudio.google.com/apikey is plenty for
+  pre-commit rate.
 """
 
 from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 from typing import NoReturn
+
+from dotenv import load_dotenv
+
+# Suppress macOS keychain prompts before any keychain-aware code is imported
+# or called. Git hooks run non-interactively and must never block on a UI
+# prompt, so the audit relies exclusively on GEMINI_API_KEY from .env.
+os.environ.setdefault("DEEP_THOUGHT_NO_KEYCHAIN", "1")
+
+# Load deep-thought/.env so GEMINI_API_KEY is available via os.environ for
+# get_secret()'s env-var fallback path. Path: scripts/../.env = deep-thought/.env.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # The hook runs this script via ``.venv/bin/python``, so ``deep_thought`` and
 # ``google.genai`` are both on sys.path without any manipulation here.
-from deep_thought.secrets import get_secret
+from deep_thought.secrets import get_secret  # noqa: E402 — import after env setup
 
 _MODEL_NAME = "gemini-2.5-flash"
 
@@ -88,11 +102,6 @@ def main() -> None:
         api_key = get_secret("gemini", "api-key", env_var="GEMINI_API_KEY")
     except OSError as secret_error:
         _emit_failure(f"API key not found ({secret_error})")
-
-    # Suppress macOS keychain prompts for any other keychain lookups that
-    # might happen during SDK initialization — this script runs inside a
-    # git hook and must never block on a UI prompt.
-    os.environ.setdefault("DEEP_THOUGHT_NO_KEYCHAIN", "1")
 
     try:
         import google.genai  # noqa: PLC0415 — deferred until after the secret lookup

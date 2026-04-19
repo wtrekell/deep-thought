@@ -47,6 +47,31 @@ _HTML_WITH_DUPLICATE_IMAGES = """<!DOCTYPE html>
 </body>
 </html>"""
 
+_HTML_WITH_IMG_SRCSET = """<!DOCTYPE html>
+<html><body>
+<img src="/hero-small.jpg"
+     srcset="/hero-small.jpg 1x, /hero-medium.jpg 2x, /hero-large.jpg 3x"
+     alt="Hero">
+</body></html>"""
+
+_HTML_WITH_PICTURE = """<!DOCTYPE html>
+<html><body>
+<picture>
+  <source media="(min-width: 1200px)" srcset="/wide-1x.jpg 1x, /wide-2x.jpg 2x">
+  <source media="(min-width: 600px)" srcset="/mid-800.jpg 800w, /mid-1600.jpg 1600w">
+  <img src="/fallback.jpg" alt="Picture fallback">
+</picture>
+</body></html>"""
+
+_HTML_WITH_SOURCE_OUTSIDE_PICTURE = """<!DOCTYPE html>
+<html><body>
+<video>
+  <source src="/movie.mp4" type="video/mp4">
+  <source srcset="/should-not-be-treated-as-image.jpg 1x">
+</video>
+<img src="/actual-image.jpg" alt="Real image">
+</body></html>"""
+
 
 # ---------------------------------------------------------------------------
 # TestExtractImageUrls
@@ -92,6 +117,34 @@ class TestExtractImageUrls:
         """The return type must be a list (preserving insertion order for determinism)."""
         result = extract_image_urls(_HTML_WITH_TWO_IMAGES, "https://example.com/")
         assert isinstance(result, list)
+
+    def test_extracts_largest_variant_from_img_srcset(self) -> None:
+        """An <img srcset> must contribute its largest variant in addition to src."""
+        result = extract_image_urls(_HTML_WITH_IMG_SRCSET, "https://example.com/")
+
+        assert "https://example.com/hero-small.jpg" in result
+        assert "https://example.com/hero-large.jpg" in result
+        # Smaller srcset variants must not appear (only the largest is picked)
+        assert "https://example.com/hero-medium.jpg" not in result
+
+    def test_extracts_srcset_variants_from_picture_source(self) -> None:
+        """<picture>/<source srcset> tags must contribute one variant per source plus fallback."""
+        result = extract_image_urls(_HTML_WITH_PICTURE, "https://example.com/")
+
+        assert "https://example.com/fallback.jpg" in result
+        assert "https://example.com/wide-2x.jpg" in result
+        assert "https://example.com/mid-1600.jpg" in result
+        # Smaller variants from each source must not appear
+        assert "https://example.com/wide-1x.jpg" not in result
+        assert "https://example.com/mid-800.jpg" not in result
+
+    def test_ignores_source_tags_outside_picture(self) -> None:
+        """<source> inside <video>/<audio> must not be treated as image sources."""
+        result = extract_image_urls(_HTML_WITH_SOURCE_OUTSIDE_PICTURE, "https://example.com/")
+
+        assert "https://example.com/actual-image.jpg" in result
+        assert "https://example.com/should-not-be-treated-as-image.jpg" not in result
+        assert "https://example.com/movie.mp4" not in result
 
 
 # ---------------------------------------------------------------------------

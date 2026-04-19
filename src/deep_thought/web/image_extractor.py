@@ -41,31 +41,117 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+def _pick_largest_srcset_variant(srcset_value: str) -> str | None:
+    """Return the URL with the largest size descriptor from a srcset value.
+
+    Parses the ``srcset`` attribute grammar (comma-separated ``url descriptor``
+    pairs where descriptors look like ``2x``, ``1.5x``, ``800w``, ``100h``).
+    When multiple variants are declared, the one with the highest numeric
+    descriptor wins; unitless or unparseable descriptors score as 1 so they
+    can still be compared among themselves.
+
+    Args:
+        srcset_value: The raw ``srcset`` attribute value.
+
+    Returns:
+        The URL of the largest variant, or None if no parseable URL is found.
+    """
+    if not srcset_value:
+        return None
+
+    best_url: str | None = None
+    best_score = -1.0
+
+    for candidate in srcset_value.split(","):
+        candidate_parts = candidate.strip().split()
+        if not candidate_parts:
+            continue
+        candidate_url = candidate_parts[0]
+        candidate_descriptor = candidate_parts[1] if len(candidate_parts) > 1 else ""
+
+        score = 1.0
+        if candidate_descriptor:
+            numeric_portion = candidate_descriptor.rstrip("xwh")
+            try:
+                score = float(numeric_portion)
+            except ValueError:
+                score = 1.0
+
+        if score > best_score:
+            best_score = score
+            best_url = candidate_url
+
+    return best_url
+
+
 class _ImageSrcParser(HTMLParser):
-    """Minimal HTMLParser subclass that collects src attributes from <img> tags."""
+    """Collects image URLs from ``<img>``, ``<img srcset>``, and ``<picture>/<source>``.
+
+    Responsive image patterns handled:
+
+    - ``<img src>`` — the classic case.
+    - ``<img srcset="url 1x, url 2x">`` — the largest variant is selected.
+    - ``<picture><source srcset=...><img ...></picture>`` — each ``<source>``
+      inside a ``<picture>`` contributes its largest variant; the fallback
+      ``<img>`` continues to contribute via ``src``/``srcset`` as usual.
+
+    CSS ``background-image: url(...)`` is intentionally not handled — inline
+    ``<style>`` and external stylesheets require a CSS parser and a stylesheet
+    loader, which is out of scope for a conservative HTMLParser subclass.
+    """
 
     def __init__(self) -> None:
         super().__init__()
         self.src_values: list[str] = []
+        self._picture_depth: int = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        """Collect src attribute values from image tags.
+        """Collect candidate image URLs from image-carrying tags.
 
         Args:
             tag: The HTML tag name.
             attrs: List of (name, value) attribute pairs for the tag.
         """
-        if tag.lower() == "img":
-            for attr_name, attr_value in attrs:
-                if attr_name.lower() == "src" and attr_value:
-                    self.src_values.append(attr_value)
+        tag_lower = tag.lower()
+        attrs_map = {attr_name.lower(): attr_value for attr_name, attr_value in attrs if attr_value is not None}
+
+        if tag_lower == "picture":
+            self._picture_depth += 1
+            return
+
+        if tag_lower == "img":
+            src_value = attrs_map.get("src")
+            if src_value:
+                self.src_values.append(src_value)
+            srcset_value = attrs_map.get("srcset")
+            if srcset_value:
+                best_variant = _pick_largest_srcset_variant(srcset_value)
+                if best_variant:
+                    self.src_values.append(best_variant)
+            return
+
+        if tag_lower == "source" and self._picture_depth > 0:
+            # Inside <picture>, <source srcset> is a responsive variant of the
+            # outer image. Outside <picture>, <source> belongs to <video>/<audio>.
+            srcset_value = attrs_map.get("srcset")
+            if srcset_value:
+                best_variant = _pick_largest_srcset_variant(srcset_value)
+                if best_variant:
+                    self.src_values.append(best_variant)
+
+    def handle_endtag(self, tag: str) -> None:
+        """Track exit from ``<picture>`` so outer ``<source>`` tags are ignored."""
+        if tag.lower() == "picture" and self._picture_depth > 0:
+            self._picture_depth -= 1
 
 
 def extract_image_urls(html: str, base_url: str) -> list[str]:
     """Extract all image URLs from an HTML document.
 
-    Finds all <img src> attributes, resolves relative URLs against base_url,
-    deduplicates, and returns a list of absolute URLs.
+    Finds ``<img src>``, ``<img srcset>``, and ``<picture>/<source srcset>``
+    references, resolves relative URLs against base_url, deduplicates while
+    preserving first-seen order, and returns absolute URLs. ``data:`` URIs
+    are skipped.
 
     Args:
         html: Raw HTML content.

@@ -215,3 +215,55 @@ def append_to_rule_file(
         file_path.write_text(content, encoding="utf-8")
 
     return file_path
+
+
+def append_raw_to_rule_file(
+    content: str,
+    output_dir: Path,
+    rule_name: str,
+) -> Path | None:
+    """Append bare content to a line-oriented aggregate file for a rule.
+
+    Intended for chaining the Gmail tool's AI-extracted output into other
+    deep-thought tools (for example, a URL list consumed by
+    ``web crawl --mode direct --input-file``). Unlike ``append_to_rule_file``,
+    no YAML frontmatter, markdown heading, or horizontal-rule separator is
+    written, and the file extension is ``.txt`` to signal that the payload is
+    not markdown.
+
+    Lines are deduplicated across the full file contents after concatenation,
+    preserving first-seen order. Empty or whitespace-only input is a no-op
+    (no file is created or modified) and the function returns ``None`` so the
+    caller can decide not to record an output path.
+
+    Args:
+        content: The bare text to append. Typically the AI extractor's output.
+        output_dir: The root output directory.
+        rule_name: The rule name (used as subdirectory and filename stem).
+
+    Returns:
+        The Path to the aggregate file when content was written, or ``None``
+        if the input was empty after stripping whitespace.
+    """
+    if not content.strip():
+        return None
+
+    rule_dir = output_dir / rule_name
+    rule_dir.mkdir(parents=True, exist_ok=True)
+
+    file_path = rule_dir / f"{rule_name}.txt"
+
+    existing = file_path.read_text(encoding="utf-8") if file_path.exists() else ""
+    combined_lines = existing.splitlines() + content.splitlines()
+
+    seen: dict[str, None] = {}
+    for line in combined_lines:
+        if line not in seen:
+            seen[line] = None
+
+    final = "\n".join(seen.keys())
+    if final:
+        final += "\n"
+
+    file_path.write_text(final, encoding="utf-8")
+    return file_path

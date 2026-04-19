@@ -93,6 +93,13 @@ class TestWriteEmbeddingCallsSharedFunction:
         call_kwargs = mock_shared.call_args.kwargs
         assert call_kwargs["output_path"] == post.output_path
 
+    def test_write_embedding_canonical_id_is_post_url(self) -> None:
+        """The canonical_id kwarg must be the post's permalink URL — stable across file moves."""
+        post = _make_collected_post()
+        mock_shared = _call_write_embedding(post)
+        call_kwargs = mock_shared.call_args.kwargs
+        assert call_kwargs["canonical_id"] == post.url
+
     def test_source_type_is_forum_post(self) -> None:
         """Reddit always uses source_type='forum_post'."""
         post = _make_collected_post()

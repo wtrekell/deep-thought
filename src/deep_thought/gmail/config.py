@@ -10,7 +10,7 @@ from typing import Any
 import yaml
 from dotenv import load_dotenv
 
-VALID_SAVE_MODES = {"individual", "append", "both", "none"}
+VALID_SAVE_MODES = {"individual", "append", "both", "none", "raw"}
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -26,6 +26,7 @@ class RuleConfig:
     ai_instructions: str | None
     actions: list[str]
     save_mode: str = "individual"
+    include_spam_trash: bool = False
 
 
 @dataclass
@@ -169,12 +170,15 @@ def _parse_rule_config(raw_rule: dict[str, Any]) -> RuleConfig:
     else:
         save_mode = "individual"
 
+    include_spam_trash = bool(raw_rule.get("include_spam_trash", False))
+
     return RuleConfig(
         name=str(rule_name),
         query=str(query),
         ai_instructions=ai_instructions,
         actions=actions,
         save_mode=save_mode,
+        include_spam_trash=include_spam_trash,
     )
 
 

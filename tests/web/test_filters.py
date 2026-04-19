@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 from deep_thought.web.filters import (
+    canonicalize_url,
     extract_internal_links,
+    has_markdown_link_corruption,
     is_same_domain,
     is_url_allowed,
     matches_any_pattern,
@@ -192,3 +194,103 @@ class TestExtractInternalLinks:
 
         assert not any("github.com" in url for url in result)
         assert len(result) == 2
+
+    def test_canonicalizes_trailing_slash_duplicates(self) -> None:
+        """Links differing only by trailing slash must collapse to a single canonical entry."""
+        html_content = """
+            <a href="/foo">no slash</a>
+            <a href="/foo/">trailing slash</a>
+        """
+        root_url = "https://example.com/"
+
+        result = extract_internal_links(html_content, root_url)
+
+        assert result == ["https://example.com/foo"]
+
+    def test_canonicalizes_www_and_apex_duplicates(self) -> None:
+        """Links to www and apex variants of the same host must collapse."""
+        html_content = """
+            <a href="https://www.example.com/page">www variant</a>
+            <a href="https://example.com/page">apex variant</a>
+        """
+        root_url = "https://example.com/"
+
+        result = extract_internal_links(html_content, root_url)
+
+        assert result == ["https://example.com/page"]
+
+    def test_drops_links_with_markdown_link_corruption(self) -> None:
+        """Links whose path contains raw or encoded markdown-link brackets must be dropped."""
+        html_content = """
+            <a href="/components/accordion/%5Bhttps:/example.com/guide%5D(https:/example.com/guide)">broken</a>
+            <a href="/components/checkbox/code">clean</a>
+        """
+        root_url = "https://example.com/"
+
+        result = extract_internal_links(html_content, root_url)
+
+        assert result == ["https://example.com/components/checkbox/code"]
+
+
+# ---------------------------------------------------------------------------
+# TestCanonicalizeUrl
+# ---------------------------------------------------------------------------
+
+
+class TestCanonicalizeUrl:
+    def test_strips_trailing_slash_from_non_root_path(self) -> None:
+        """A trailing slash on a non-root path must be stripped."""
+        assert canonicalize_url("https://example.com/foo/") == "https://example.com/foo"
+
+    def test_preserves_root_slash(self) -> None:
+        """The single trailing slash on a root URL must be preserved."""
+        assert canonicalize_url("https://example.com/") == "https://example.com/"
+
+    def test_folds_www_to_apex(self) -> None:
+        """A leading www. on the netloc must fold to the apex domain."""
+        assert canonicalize_url("https://www.example.com/foo") == "https://example.com/foo"
+
+    def test_lowercases_scheme_and_netloc(self) -> None:
+        """Scheme and netloc must be lowercased per RFC 3986."""
+        assert canonicalize_url("HTTPS://Example.COM/foo") == "https://example.com/foo"
+
+    def test_preserves_query_string(self) -> None:
+        """Query strings must not be altered — they can be semantically significant."""
+        assert canonicalize_url("https://example.com/foo?x=1") == "https://example.com/foo?x=1"
+
+    def test_preserves_path_case(self) -> None:
+        """Path case must not change."""
+        assert canonicalize_url("https://example.com/Foo/Bar") == "https://example.com/Foo/Bar"
+
+    def test_idempotent(self) -> None:
+        """Canonicalizing an already-canonical URL must return the same string."""
+        once = canonicalize_url("https://www.example.com/Foo/")
+        twice = canonicalize_url(once)
+        assert once == twice
+
+
+# ---------------------------------------------------------------------------
+# TestHasMarkdownLinkCorruption
+# ---------------------------------------------------------------------------
+
+
+class TestHasMarkdownLinkCorruption:
+    def test_returns_false_for_clean_url(self) -> None:
+        """A normal URL must not be flagged."""
+        assert has_markdown_link_corruption("https://example.com/foo/bar") is False
+
+    def test_detects_percent_encoded_bracket(self) -> None:
+        """A %5B or %5D anywhere in path or query must be flagged."""
+        assert has_markdown_link_corruption("https://example.com/x/%5Bhttps:/y%5D(z)") is True
+
+    def test_detects_lowercase_percent_encoded_bracket(self) -> None:
+        """Lowercase %5b / %5d must also be flagged."""
+        assert has_markdown_link_corruption("https://example.com/x/%5bhttps:/y%5d(z)") is True
+
+    def test_detects_literal_brackets(self) -> None:
+        """Raw square brackets in the path must be flagged."""
+        assert has_markdown_link_corruption("https://example.com/x/[y](z)") is True
+
+    def test_query_only_bracket_is_flagged(self) -> None:
+        """Brackets appearing only in the query string must still be flagged."""
+        assert has_markdown_link_corruption("https://example.com/x?ref=%5Bhttps:/y%5D") is True

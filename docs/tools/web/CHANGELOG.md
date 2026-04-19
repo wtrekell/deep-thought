@@ -1,5 +1,21 @@
 # Changelog — Web Tool
 
+## Unreleased
+
+### Added
+
+- URL canonicalization (`canonicalize_url`) applied before the dedup key is looked up or written to SQLite. Trailing slashes on non-root paths are stripped (`/foo/` → `/foo`), a leading `www.` in the netloc folds to the apex (`www.example.com` → `example.com`), and scheme + netloc are lowercased. Query strings, fragments, and path case are preserved. Previously, `/foo` and `/foo/` (and `www.` vs apex variants) produced duplicate DB rows, markdown files, and embeddings on sites that link to both forms — observed during a Carbon Design System crawl (#42).
+- URL sanity gate (`has_markdown_link_corruption`) that rejects any link whose path or query contains raw or percent-encoded square brackets (`[`, `]`, `%5B`, `%5D`). These are markdown-link debris (`[text](url)` mis-parsed as a URL segment) and never resolve on the target site. Applied inside `extract_internal_links` and at the `run_direct_mode` URL-file intake; dropped URLs log at WARN so the extractor bug remains visible (#42).
+- `<img srcset>` and `<picture>/<source srcset>` support in the image extractor. The largest variant from each `srcset` is picked and resolved against the base URL alongside the classic `<img src>`. `<source>` tags outside `<picture>` (e.g. inside `<video>`/`<audio>`) are ignored. CSS `background-image` is still not handled (#40 L-09).
+
+### Changed
+
+- Extracted a shared `_fetch_process_and_record()` helper that owns the per-URL fetch → convert → upsert → error-map loop previously duplicated across `run_blog_mode`, `run_documentation_mode`, and `run_direct_mode`. Each mode runner remains responsible for building its URL list and for mode-specific follow-up (documentation mode still enqueues BFS children from the returned `PageResult`) (#40 L-06).
+
+### Fixed
+
+- `QdrantClient` created in `cmd_crawl` is now closed explicitly in the `finally` block alongside the SQLite connection, eliminating the `RuntimeWarning: Implicitly cleaning up` that Qdrant's `__del__` emits at interpreter shutdown. Close failures are logged at DEBUG rather than surfaced to the user (#37).
+
 ## [0.3.1] — 2026-04-10
 
 ### Fixed

@@ -266,6 +266,11 @@ def cmd_collect(args: argparse.Namespace) -> None:
         connection.commit()
     finally:
         connection.close()
+        if embedding_qdrant_client is not None:
+            try:
+                embedding_qdrant_client.close()
+            except Exception as qdrant_close_err:
+                logger.debug("QdrantClient close() raised: %s", qdrant_close_err)
 
     dry_run_prefix = "[dry-run] " if args.dry_run else ""
     print(f"{dry_run_prefix}Collection complete:")

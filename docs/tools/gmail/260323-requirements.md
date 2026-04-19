@@ -254,6 +254,15 @@ rules:
 | `trash`               | Move to Gmail Trash                                                                                           |
 | `delete`              | Permanently delete (bypasses Trash — requires `https://mail.google.com/` scope)                               |
 
+### Per-rule Fields
+
+| Field                | Type     | Default        | Description                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------------- | -------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `save_mode`          | string   | `"individual"` | Output mode. One of `individual` (one markdown file per email), `append` (all emails appended to `{rule_name}.md` with `---` separators and frontmatter), `both` (individual + append), `none` (no file written; actions still apply), or `raw` (bare AI output written to `{rule_name}.txt` with line-level dedup — no frontmatter or markdown; intended for handoff to other tools).   |
+| `include_spam_trash` | bool     | `false`        | When `true`, the Gmail API is called with `includeSpamTrash=True`, which surfaces messages in Trash and Spam. Required for any query that targets `in:trash` or `in:spam` (e.g., a scheduled cleanup rule that deletes trashed mail older than two weeks). Leave at `false` for collection rules — enabling it will include trashed/spammed mail in normal output.                       |
+
+`raw` note: when `ai_instructions` is `null`, `raw` writes the cleaned email body verbatim — typically not useful. Combine `raw` with explicit `ai_instructions` that produce line-oriented output (one URL per line, one line-item per line, etc.). Embeddings are not written for `raw` rules. The `.txt` extension is deliberate to signal the output is not markdown.
+
 ### Forward Implementation
 
 The `forward:{address}` action must preserve the original email without mangling HTML, inline images, or attachments. To achieve this:

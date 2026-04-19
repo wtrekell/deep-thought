@@ -26,6 +26,7 @@ from deep_thought.gmail.db.queries import (
 from deep_thought.gmail.filters import is_already_processed, is_within_max_emails
 from deep_thought.gmail.models import CollectResult, ProcessedEmailLocal, SendResult, _extract_header
 from deep_thought.gmail.output import (
+    append_raw_to_rule_file,
     append_to_rule_file,
     extract_body_text,
     generate_email_markdown,
@@ -259,11 +260,15 @@ def _process_single_email(
                 output_path = write_email_file(markdown_content, output_dir, rule_config.name, subject, date_str)
                 append_to_rule_file(markdown_content, output_dir, rule_config.name)
                 output_path_str = str(output_path)
+            elif rule_config.save_mode == "raw":
+                raw_output_path = append_raw_to_rule_file(body_text, output_dir, rule_config.name)
+                output_path_str = str(raw_output_path) if raw_output_path is not None else ""
             else:
                 output_path_str = ""
 
-            # Embed into Qdrant
-            if embedding_model is not None and embedding_qdrant_client is not None:
+            # Embed into Qdrant. Skip raw mode — its output is line-oriented handoff
+            # data (e.g., URL lists), not semantic content suitable for vector search.
+            if rule_config.save_mode != "raw" and embedding_model is not None and embedding_qdrant_client is not None:
                 try:
                     from deep_thought.embeddings import strip_frontmatter as _strip_frontmatter  # noqa: PLC0415
                     from deep_thought.gmail.embeddings import (  # noqa: PLC0415
@@ -365,7 +370,11 @@ def process_rule(
 
     # Query Gmail
     remaining = max_emails_per_run - global_email_count
-    message_stubs = gmail_client.list_messages(rule_config.query, max_results=remaining)
+    message_stubs = gmail_client.list_messages(
+        rule_config.query,
+        max_results=remaining,
+        include_spam_trash=rule_config.include_spam_trash,
+    )
     logger.info("Rule '%s': found %d messages", rule_config.name, len(message_stubs))
 
     for message_stub in track_items(message_stubs, description=f"Rule: {rule_config.name}"):

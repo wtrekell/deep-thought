@@ -28,9 +28,10 @@ def write_embedding(
     """Embed a collected Reddit post and upsert it into the specified Qdrant collection.
 
     Constructs the payload from the post's metadata fields and calls the shared
-    ``deep_thought.embeddings.write_embedding()`` function. The ``output_path``
-    field is injected automatically by that function — do not include it in the
-    payload dict here.
+    ``deep_thought.embeddings.write_embedding()`` function. The Reddit post URL
+    is the canonical identifier — re-collecting the same post updates the same
+    chunks rather than creating duplicates. ``output_path`` is passed as
+    advisory metadata only.
 
     Args:
         content: The text to embed (typically title + stripped markdown body).
@@ -70,6 +71,7 @@ def write_embedding(
     _shared_write_embedding(
         content=content,
         payload=post_payload,
+        canonical_id=post.url,
         output_path=post.output_path,
         model=model,
         qdrant_client=qdrant_client,

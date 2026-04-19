@@ -6,6 +6,10 @@ All notable changes to the Reddit Tool will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- `QdrantClient` created in `cmd_collect` is now closed explicitly in the `finally` block alongside the SQLite connection, eliminating the `RuntimeWarning: Unable to close http connection` that Qdrant's `__del__` emits at interpreter shutdown. Close failures are logged at DEBUG rather than surfaced to the user (#37).
+
 ### Changed
 
 - Secret retrieval now checks macOS Keychain first, falling back to environment variables. Uses the shared `deep_thought.secrets` module.

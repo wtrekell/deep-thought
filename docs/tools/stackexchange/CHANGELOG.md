@@ -1,5 +1,11 @@
 # Stack Exchange Tool Changelog
 
+## Unreleased
+
+### Fixed
+
+- `QdrantClient` created in `cmd_collect` is now closed explicitly in the `finally` block alongside the SQLite connection, eliminating the `RuntimeWarning: Unable to close http connection` that Qdrant's `__del__` emits at interpreter shutdown. Close failures are logged at DEBUG rather than surfaced to the user (#37).
+
 ## 0.1.0 (2026-04-11)
 
 - Initial release: rule-based Q&A collection from Stack Exchange API v2.3

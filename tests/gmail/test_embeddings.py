@@ -85,6 +85,13 @@ class TestWriteEmbeddingCallsSharedFunction:
         call_kwargs = mock_shared.call_args.kwargs
         assert call_kwargs["output_path"] == email.output_path
 
+    def test_write_embedding_canonical_id_is_message_id(self) -> None:
+        """The canonical_id kwarg must be the Gmail message-id — stable across file moves."""
+        email = _make_processed_email()
+        mock_shared = _call_write_embedding(email)
+        call_kwargs = mock_shared.call_args.kwargs
+        assert call_kwargs["canonical_id"] == email.message_id
+
     def test_source_type_is_email(self) -> None:
         """Gmail always uses source_type='email'."""
         email = _make_processed_email()

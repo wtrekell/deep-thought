@@ -35,7 +35,7 @@ rules:
     actions:
       - archive
       - label:Processed
-    save_mode: append # All emails appended to single rule file (options: individual, append, both, none)
+    save_mode: append # All emails appended to single rule file (options: individual, append, both, none, raw)
 
   - name: "receipts"
     query: "subject:receipt OR subject:invoice newer_than:7d"
@@ -53,3 +53,25 @@ rules:
       - label:Forwarded
       - archive
     save_mode: none # Action-only rule — no local file needed
+
+  # 'raw' writes the bare AI-extracted body_text to {rule_name}.txt with
+  # line-level dedup and no frontmatter — intended for piping into another
+  # deep-thought tool (e.g., `web crawl --mode direct --input-file`).
+  - name: "article_hunter"
+    query: "from:noreply@medium.com newer_than:7d"
+    ai_instructions: "Output the article URLs from this digest, one per line, no other text."
+    actions:
+      - archive
+      - label:Processed
+    save_mode: raw
+
+  # 'include_spam_trash: true' surfaces Trash/Spam messages that the Gmail
+  # API otherwise hides. Required for `in:trash` / `in:spam` queries.
+  # Pair with a scoped query and, for 'delete' actions, a throwaway test first.
+  - name: "trash_cleanup"
+    query: "in:trash older_than:2w"
+    ai_instructions: null
+    include_spam_trash: true
+    actions:
+      - delete
+    save_mode: none

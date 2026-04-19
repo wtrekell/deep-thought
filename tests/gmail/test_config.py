@@ -112,11 +112,32 @@ class TestLoadConfig:
 
     def test_save_mode_values_parsed(self, tmp_path: Path) -> None:
         """Each valid save_mode value should be parsed correctly."""
-        for mode in ("individual", "append", "both", "none"):
+        for mode in ("individual", "append", "both", "none", "raw"):
             config_file = tmp_path / f"mode_{mode}.yaml"
             config_file.write_text(f"rules:\n  - name: 'r'\n    query: 'label:test'\n    save_mode: {mode}\n")
             config = load_config(config_file)
             assert config.rules[0].save_mode == mode
+
+    def test_include_spam_trash_defaults_to_false(self, tmp_path: Path) -> None:
+        """A rule without include_spam_trash should default to False."""
+        config_file = tmp_path / "no_include_spam_trash.yaml"
+        config_file.write_text("rules:\n  - name: 'r'\n    query: 'label:test'\n")
+        config = load_config(config_file)
+        assert config.rules[0].include_spam_trash is False
+
+    def test_include_spam_trash_true_parsed(self, tmp_path: Path) -> None:
+        """A rule with include_spam_trash: true should parse the flag as True."""
+        config_file = tmp_path / "include_spam_trash.yaml"
+        config_file.write_text(
+            "rules:\n"
+            "  - name: 'cleanup'\n"
+            "    query: 'in:trash older_than:2w'\n"
+            "    include_spam_trash: true\n"
+            "    actions:\n"
+            "      - delete\n"
+        )
+        config = load_config(config_file)
+        assert config.rules[0].include_spam_trash is True
 
     def test_old_fields_produce_deprecation_warning(self, tmp_path: Path) -> None:
         """Legacy save_local/append_mode fields should map to save_mode with a DeprecationWarning."""
