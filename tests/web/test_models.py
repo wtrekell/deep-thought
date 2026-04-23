@@ -11,7 +11,6 @@ from deep_thought.web.models import CrawledPageLocal
 
 def _make_page(
     url: str = "https://example.com/post",
-    rule_name: str | None = None,
     title: str | None = "Post Title",
     status_code: int | None = 200,
     word_count: int = 300,
@@ -24,7 +23,6 @@ def _make_page(
     """Build a CrawledPageLocal instance for testing."""
     return CrawledPageLocal(
         url=url,
-        rule_name=rule_name,
         title=title,
         status_code=status_code,
         word_count=word_count,
@@ -55,18 +53,6 @@ class TestCrawledPageLocalToDict:
         page = _make_page(url="https://example.com/article")
         result = page.to_dict()
         assert result["url"] == "https://example.com/article"
-
-    def test_rule_name_none_is_preserved(self) -> None:
-        """to_dict must include rule_name as None when not set."""
-        page = _make_page(rule_name=None)
-        result = page.to_dict()
-        assert result["rule_name"] is None
-
-    def test_rule_name_string_is_preserved(self) -> None:
-        """to_dict must include a non-None rule_name correctly."""
-        page = _make_page(rule_name="my-rule")
-        result = page.to_dict()
-        assert result["rule_name"] == "my-rule"
 
     def test_title_none_is_preserved(self) -> None:
         """to_dict must include title as None when not set."""
@@ -110,7 +96,6 @@ class TestCrawledPageLocalToDict:
         result = page.to_dict()
         expected_keys = {
             "url",
-            "rule_name",
             "title",
             "status_code",
             "word_count",

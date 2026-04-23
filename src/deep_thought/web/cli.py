@@ -287,13 +287,13 @@ def cmd_crawl(args: argparse.Namespace) -> None:
 
             for batch_config_path in batch_config_files:
                 batch_config = load_config(batch_config_path)
-                batch_rule_name = batch_config_path.stem
+                batch_label = batch_config_path.stem
 
                 batch_validation_issues = validate_config(batch_config)
                 if batch_validation_issues:
                     logger.warning(
-                        "Skipping batch rule '%s' due to %d config issue(s): %s",
-                        batch_rule_name,
+                        "Skipping batch '%s' due to %d config issue(s): %s",
+                        batch_label,
                         len(batch_validation_issues),
                         "; ".join(batch_validation_issues),
                     )
@@ -307,14 +307,14 @@ def cmd_crawl(args: argparse.Namespace) -> None:
                         logger.warning(
                             "Could not initialize collection '%s' for batch '%s': %s",
                             batch_config.crawl.qdrant_collection,
-                            batch_rule_name,
+                            batch_label,
                             ensure_err,
                         )
                 batch_input_url: str | None = getattr(batch_config.crawl, "input_url", None)
                 batch_output_root = Path(batch_config.crawl.output_dir)
 
                 if dry_run:
-                    print(f"[dry-run] Would process batch rule: {batch_rule_name}")
+                    print(f"[dry-run] Would process batch: {batch_label}")
 
                 try:
                     crawl_result = process(
@@ -326,7 +326,6 @@ def cmd_crawl(args: argparse.Namespace) -> None:
                         output_root=batch_output_root,
                         dry_run=dry_run,
                         force=force,
-                        rule_name=batch_rule_name,
                         embedding_model=embedding_model,
                         embedding_qdrant_client=embedding_qdrant_client,
                         qdrant_collection=batch_config.crawl.qdrant_collection,
@@ -335,7 +334,7 @@ def cmd_crawl(args: argparse.Namespace) -> None:
                     total_failed += crawl_result.failed
                     total_skipped += crawl_result.skipped
                 except Exception as batch_error:
-                    print(f"  ERROR [{batch_rule_name}]: {batch_error}", file=sys.stderr)
+                    print(f"  ERROR [{batch_label}]: {batch_error}", file=sys.stderr)
                     total_failed += 1
         else:
             crawl_result = process(
@@ -347,7 +346,6 @@ def cmd_crawl(args: argparse.Namespace) -> None:
                 output_root=output_root,
                 dry_run=dry_run,
                 force=force,
-                rule_name=None,
                 embedding_model=embedding_model,
                 embedding_qdrant_client=embedding_qdrant_client,
                 qdrant_collection=config.crawl.qdrant_collection,

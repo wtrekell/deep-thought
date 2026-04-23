@@ -117,7 +117,6 @@ def _process_page(
     page_result: PageResult,
     config: WebConfig,
     output_root: Path,
-    rule_name: str | None,
     dry_run: bool,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
@@ -133,7 +132,6 @@ def _process_page(
         page_result: The fetched page content from the crawler.
         config: The WebConfig controlling output and extraction settings.
         output_root: Root directory for output files.
-        rule_name: The batch rule name that triggered this crawl, or None.
         dry_run: If True, skip writing files to disk.
         embedding_model: Optional MLX embedding model. When provided together
             with ``embedding_qdrant_client``, the page is embedded after writing.
@@ -170,7 +168,6 @@ def _process_page(
         )
         skip_model = CrawledPageLocal(
             url=canonical_page_url,
-            rule_name=rule_name,
             title=html_title,
             status_code=page_result.status_code,
             word_count=word_count,
@@ -193,7 +190,6 @@ def _process_page(
         )
         page_model = CrawledPageLocal(
             url=canonical_page_url,
-            rule_name=rule_name,
             title=html_title,
             status_code=page_result.status_code,
             word_count=word_count,
@@ -224,7 +220,6 @@ def _process_page(
 
     page_model = CrawledPageLocal(
         url=canonical_page_url,
-        rule_name=rule_name,
         title=html_title,
         status_code=page_result.status_code,
         word_count=word_count,
@@ -275,7 +270,6 @@ def _process_page(
 
 def _record_error_page(
     url: str,
-    rule_name: str | None,
     error: Exception,
     conn: sqlite3.Connection,
 ) -> None:
@@ -283,14 +277,12 @@ def _record_error_page(
 
     Args:
         url: The URL that failed to fetch.
-        rule_name: The batch rule name, or None.
         error: The exception that caused the failure.
         conn: An open SQLite connection.
     """
     now_iso = _now_iso()
     error_model = CrawledPageLocal(
         url=canonicalize_url(url),
-        rule_name=rule_name,
         title=None,
         status_code=0,
         word_count=0,
@@ -311,7 +303,6 @@ def _fetch_process_and_record(
     config: WebConfig,
     conn: sqlite3.Connection,
     output_root: Path,
-    rule_name: str | None,
     dry_run: bool,
     embedding_model: Any | None,
     embedding_qdrant_client: Any | None,
@@ -332,7 +323,6 @@ def _fetch_process_and_record(
         config: The WebConfig controlling filtering and output.
         conn: An open SQLite connection.
         output_root: Root directory for output files.
-        rule_name: Optional batch rule name that triggered this crawl.
         dry_run: If True, skip writing files to disk.
         embedding_model: Optional MLX embedding model.
         embedding_qdrant_client: Optional Qdrant client.
@@ -354,7 +344,6 @@ def _fetch_process_and_record(
             page_result=page_result,
             config=config,
             output_root=output_root,
-            rule_name=rule_name,
             dry_run=dry_run,
             embedding_model=embedding_model,
             embedding_qdrant_client=embedding_qdrant_client,
@@ -368,11 +357,11 @@ def _fetch_process_and_record(
         return "success", page_summary, page_result
 
     except (PlaywrightError, ConnectionError) as fetch_error:
-        _record_error_page(page_url, rule_name, fetch_error, conn)
+        _record_error_page(page_url, fetch_error, conn)
         return "failed", None, None
     except Exception as unexpected_error:
         logger.error("Unexpected error processing %s: %s", page_url, unexpected_error)
-        _record_error_page(page_url, rule_name, unexpected_error, conn)
+        _record_error_page(page_url, unexpected_error, conn)
         return "failed", None, None
 
 
@@ -480,7 +469,6 @@ def run_blog_mode(
     output_root: Path,
     dry_run: bool,
     force: bool,
-    rule_name: str | None = None,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
     qdrant_collection: str | None = None,
@@ -500,7 +488,6 @@ def run_blog_mode(
         output_root: Root directory for output files.
         dry_run: If True, skip writing files to disk.
         force: If True, re-crawl URLs that were previously crawled successfully.
-        rule_name: Optional batch rule name that triggered this crawl.
         embedding_model: Optional MLX embedding model. Threaded to ``_process_page``
             so each page is embedded after writing.
         embedding_qdrant_client: Optional Qdrant client. Threaded to
@@ -551,7 +538,6 @@ def run_blog_mode(
             config=config,
             conn=conn,
             output_root=output_root,
-            rule_name=rule_name,
             dry_run=dry_run,
             embedding_model=embedding_model,
             embedding_qdrant_client=embedding_qdrant_client,
@@ -601,7 +587,6 @@ def run_documentation_mode(
     output_root: Path,
     dry_run: bool,
     force: bool,
-    rule_name: str | None = None,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
     qdrant_collection: str | None = None,
@@ -624,7 +609,6 @@ def run_documentation_mode(
         output_root: Root directory for output files.
         dry_run: If True, skip writing files to disk.
         force: If True, re-crawl URLs that were previously crawled successfully.
-        rule_name: Optional batch rule name that triggered this crawl.
         embedding_model: Optional MLX embedding model. Threaded to ``_process_page``
             so each page is embedded after writing.
         embedding_qdrant_client: Optional Qdrant client. Threaded to
@@ -698,7 +682,6 @@ def run_documentation_mode(
                 config=config,
                 conn=conn,
                 output_root=output_root,
-                rule_name=rule_name,
                 dry_run=dry_run,
                 embedding_model=embedding_model,
                 embedding_qdrant_client=embedding_qdrant_client,
@@ -799,7 +782,6 @@ def run_direct_mode(
     output_root: Path,
     dry_run: bool,
     force: bool,
-    rule_name: str | None = None,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
     qdrant_collection: str | None = None,
@@ -817,7 +799,6 @@ def run_direct_mode(
         output_root: Root directory for output files.
         dry_run: If True, skip writing files to disk.
         force: If True, re-crawl URLs that were previously crawled successfully.
-        rule_name: Optional batch rule name that triggered this crawl.
         embedding_model: Optional MLX embedding model. Threaded to ``_process_page``
             so each page is embedded after writing.
         embedding_qdrant_client: Optional Qdrant client. Threaded to
@@ -867,7 +848,6 @@ def run_direct_mode(
             config=config,
             conn=conn,
             output_root=output_root,
-            rule_name=rule_name,
             dry_run=dry_run,
             embedding_model=embedding_model,
             embedding_qdrant_client=embedding_qdrant_client,
@@ -975,7 +955,6 @@ def process(
     output_root: Path,
     dry_run: bool,
     force: bool,
-    rule_name: str | None = None,
     embedding_model: Any | None = None,
     embedding_qdrant_client: Any | None = None,
     qdrant_collection: str | None = None,
@@ -994,7 +973,6 @@ def process(
         output_root: Root directory for output files.
         dry_run: If True, skip writing files to disk.
         force: If True, re-crawl already-visited URLs.
-        rule_name: Optional batch rule name that triggered this crawl.
         embedding_model: Optional MLX embedding model. Passed to the mode runner
             so each page is embedded after writing. When None, embedding is skipped.
         embedding_qdrant_client: Optional Qdrant client. Passed to the mode runner
@@ -1022,7 +1000,6 @@ def process(
                 output_root=output_root,
                 dry_run=dry_run,
                 force=force,
-                rule_name=rule_name,
                 embedding_model=embedding_model,
                 embedding_qdrant_client=embedding_qdrant_client,
                 qdrant_collection=qdrant_collection,
@@ -1038,7 +1015,6 @@ def process(
                 output_root=output_root,
                 dry_run=dry_run,
                 force=force,
-                rule_name=rule_name,
                 embedding_model=embedding_model,
                 embedding_qdrant_client=embedding_qdrant_client,
                 qdrant_collection=qdrant_collection,
@@ -1054,7 +1030,6 @@ def process(
                 output_root=output_root,
                 dry_run=dry_run,
                 force=force,
-                rule_name=rule_name,
                 embedding_model=embedding_model,
                 embedding_qdrant_client=embedding_qdrant_client,
                 qdrant_collection=qdrant_collection,

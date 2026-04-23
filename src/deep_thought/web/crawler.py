@@ -100,7 +100,7 @@ class WebCrawler:
             config: CrawlerConfig specifying rendering, stealth, and retry settings.
         """
         self._config = config
-        self._playwright_cm: Any = sync_playwright()
+        self._playwright_cm: Any = None
         self._playwright_instance: Playwright | None = None
         self._browser: Browser | None = None
 
@@ -110,20 +110,34 @@ class WebCrawler:
         Returns:
             This WebCrawler instance, ready to fetch pages.
         """
+        # Why: sync_playwright() spawns the driver subprocess and an internal
+        # asyncio loop. If chromium.launch() raises (e.g., browser binary
+        # missing), __enter__ exits without __exit__ running, leaving that
+        # loop alive in the process — every subsequent sync_playwright() call
+        # then trips its "Sync API inside the asyncio loop" guard. Tearing
+        # down the cm on any launch failure prevents that cascade.
+        self._playwright_cm = sync_playwright()
         self._playwright_instance = self._playwright_cm.__enter__()
 
-        stealth_args = ["--disable-blink-features=AutomationControlled"] if self._config.stealth else []
-        if self._config.browser_channel is not None:
-            self._browser = self._playwright_instance.chromium.launch(
-                channel=self._config.browser_channel,
-                headless=self._config.headless,
-                args=stealth_args,
-            )
-        else:
-            self._browser = self._playwright_instance.chromium.launch(
-                headless=self._config.headless,
-                args=stealth_args,
-            )
+        try:
+            stealth_args = ["--disable-blink-features=AutomationControlled"] if self._config.stealth else []
+            if self._config.browser_channel is not None:
+                self._browser = self._playwright_instance.chromium.launch(
+                    channel=self._config.browser_channel,
+                    headless=self._config.headless,
+                    args=stealth_args,
+                )
+            else:
+                self._browser = self._playwright_instance.chromium.launch(
+                    headless=self._config.headless,
+                    args=stealth_args,
+                )
+        except BaseException:
+            with contextlib.suppress(Exception):
+                self._playwright_cm.__exit__(None, None, None)
+            self._playwright_cm = None
+            self._playwright_instance = None
+            raise
         return self
 
     def __exit__(
@@ -140,8 +154,13 @@ class WebCrawler:
             exc_tb: Exception traceback, if any.
         """
         if self._browser is not None:
-            self._browser.close()
-        self._playwright_cm.__exit__(exc_type, exc_val, exc_tb)
+            with contextlib.suppress(Exception):
+                self._browser.close()
+            self._browser = None
+        if self._playwright_cm is not None:
+            self._playwright_cm.__exit__(exc_type, exc_val, exc_tb)
+            self._playwright_cm = None
+            self._playwright_instance = None
 
     def fetch_page(self, url: str) -> PageResult:
         """Fetch a web page and return its content.

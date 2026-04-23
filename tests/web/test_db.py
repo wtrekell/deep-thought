@@ -39,12 +39,10 @@ def _page_data(
     url: str = "https://example.com/post-one",
     status: str = "success",
     title: str | None = "Post One",
-    rule_name: str | None = None,
 ) -> dict[str, Any]:
     """Return a sample page_data dict matching all required crawled_pages columns."""
     return {
         "url": url,
-        "rule_name": rule_name,
         "title": title,
         "status_code": 200,
         "word_count": 150,
@@ -107,7 +105,7 @@ class TestInitializeDatabase:
         """The crawled_pages table must contain all required columns."""
         cursor = in_memory_db.execute("PRAGMA table_info(crawled_pages);")
         column_names = {row["name"] for row in cursor.fetchall()}
-        expected_columns = {"url", "rule_name", "title", "status_code", "word_count", "output_path", "status"}
+        expected_columns = {"url", "title", "status_code", "word_count", "output_path", "status"}
         assert expected_columns.issubset(column_names)
 
 

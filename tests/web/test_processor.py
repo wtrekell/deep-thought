@@ -292,7 +292,6 @@ class TestProcessPageQualityGate:
             page_result=page_result,
             config=config,
             output_root=tmp_path,
-            rule_name=None,
             dry_run=True,
         )
 
@@ -311,7 +310,6 @@ class TestProcessPageQualityGate:
             page_result=page_result,
             config=config,
             output_root=tmp_path,
-            rule_name=None,
             dry_run=True,
         )
 
@@ -326,7 +324,6 @@ class TestProcessPageQualityGate:
             page_result=page_result,
             config=config,
             output_root=tmp_path,
-            rule_name=None,
             dry_run=False,
         )
 
@@ -352,7 +349,6 @@ class TestProcessPageWritePath:
             page_result=page_result,
             config=config,
             output_root=tmp_path,
-            rule_name=None,
             dry_run=False,
         )
 
@@ -373,7 +369,6 @@ class TestProcessPageWritePath:
             page_result=page_result,
             config=config,
             output_root=tmp_path,
-            rule_name=None,
             dry_run=False,
         )
 
@@ -391,7 +386,6 @@ class TestProcessPageWritePath:
             page_result=page_result,
             config=config,
             output_root=tmp_path,
-            rule_name=None,
             dry_run=False,
         )
 
@@ -410,28 +404,12 @@ class TestProcessPageWritePath:
             page_result=page_result,
             config=config,
             output_root=tmp_path,
-            rule_name=None,
             dry_run=False,
         )
 
         assert page_summary is not None
         # Frontmatter-stripped content must not start with "---"
         assert not page_summary.content.startswith("---")
-
-    def test_rule_name_stored_in_page_model(self, tmp_path: Path) -> None:
-        """A rule_name passed to _process_page must appear in the returned page model."""
-        page_result = _make_page_result(url="https://example.com/blog/post-one", html=_RICH_ARTICLE_HTML)
-        config = _make_web_config(min_article_words=50)
-
-        page_model, _page_summary = _process_page(
-            page_result=page_result,
-            config=config,
-            output_root=tmp_path,
-            rule_name="my-site",
-            dry_run=False,
-        )
-
-        assert page_model.rule_name == "my-site"
 
 
 # ---------------------------------------------------------------------------
@@ -455,7 +433,6 @@ def _insert_test_page(
         conn,
         {
             "url": url,
-            "rule_name": None,
             "title": title,
             "status_code": 200,
             "word_count": word_count,
@@ -688,7 +665,6 @@ class TestRunBlogMode:
             in_memory_db,
             {
                 "url": already_crawled_url,
-                "rule_name": None,
                 "title": "Post",
                 "status_code": 200,
                 "word_count": 300,

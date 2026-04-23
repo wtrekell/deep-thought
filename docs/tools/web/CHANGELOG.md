@@ -12,6 +12,10 @@
 
 - Extracted a shared `_fetch_process_and_record()` helper that owns the per-URL fetch → convert → upsert → error-map loop previously duplicated across `run_blog_mode`, `run_documentation_mode`, and `run_direct_mode`. Each mode runner remains responsible for building its URL list and for mode-specific follow-up (documentation mode still enqueues BFS children from the returned `PageResult`) (#40 L-06).
 
+### Removed
+
+- Dropped `rule_name` from the `crawled_pages` schema, the `CrawledPageLocal` model, the `upsert_crawled_page` query, the embedding payload, and the `process()` / mode-runner signatures. The field had no consumer (no read path used it for filtering, joins, or output) and was a duplicate of the on-disk `output_dir` per batch config. The batch loop in `cli.py` keeps a local `batch_label` derived from the config filename for log lines only. Existing databases must be wiped and re-crawled with `--batch --force`; the column cannot survive an in-place upgrade.
+
 ### Fixed
 
 - `QdrantClient` created in `cmd_crawl` is now closed explicitly in the `finally` block alongside the SQLite connection, eliminating the `RuntimeWarning: Implicitly cleaning up` that Qdrant's `__del__` emits at interpreter shutdown. Close failures are logged at DEBUG rather than surfaced to the user (#37).

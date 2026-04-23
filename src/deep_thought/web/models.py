@@ -22,7 +22,6 @@ class CrawledPageLocal:
     """
 
     url: str
-    rule_name: str | None
     title: str | None
     status_code: int | None  # None when no HTTP response (e.g. DNS failure, connection refused)
     word_count: int

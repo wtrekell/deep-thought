@@ -15,7 +15,7 @@ conn.rollback() to discard changes on error.
 
 Note: The crawled_pages table and web_schema_version table are created by the
 DB agent via migration files in db/migrations/. The DB agent should create:
-  - crawled_pages table with columns: url (PRIMARY KEY), rule_name, title,
+  - crawled_pages table with columns: url (PRIMARY KEY), title,
     status_code, word_count, output_path, status, child_links, created_at,
     updated_at, synced_at
   - web_schema_version table with columns: key (PRIMARY KEY), value, updated_at
@@ -90,14 +90,13 @@ def upsert_crawled_page(conn: sqlite3.Connection, page_data: dict[str, Any]) -> 
     conn.execute(
         """
         INSERT INTO crawled_pages (
-            url, rule_name, title, status_code, word_count,
+            url, title, status_code, word_count,
             output_path, status, created_at, updated_at, synced_at
         ) VALUES (
-            :url, :rule_name, :title, :status_code, :word_count,
+            :url, :title, :status_code, :word_count,
             :output_path, :status, :created_at, :updated_at, :synced_at
         )
         ON CONFLICT(url) DO UPDATE SET
-            rule_name = excluded.rule_name,
             title = excluded.title,
             status_code = excluded.status_code,
             word_count = excluded.word_count,

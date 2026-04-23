@@ -19,7 +19,6 @@ from deep_thought.web.models import CrawledPageLocal
 
 def _make_crawled_page(
     title: str | None = "An Interesting Article",
-    rule_name: str | None = "tech_blogs",
     status_code: int | None = 200,
     output_path: str = "/data/web/blog/260402-example-com-an-interesting-article.md",
 ) -> CrawledPageLocal:
@@ -27,7 +26,6 @@ def _make_crawled_page(
     now_iso = datetime.now(tz=UTC).isoformat()
     return CrawledPageLocal(
         url="https://example.com/an-interesting-article",
-        rule_name=rule_name,
         title=title,
         status_code=status_code,
         word_count=800,
@@ -81,13 +79,12 @@ class TestWriteEmbeddingCallsSharedFunction:
         assert call_kwargs["payload"]["source_tool"] == "web"
 
     def test_write_embedding_payload_required_fields(self) -> None:
-        """The payload must contain the four fields required by every tool."""
+        """The payload must contain the fields required by every tool."""
         page = _make_crawled_page()
         mock_shared = _call_write_embedding(page)
         payload = mock_shared.call_args.kwargs["payload"]
         assert "source_tool" in payload
         assert "source_type" in payload
-        assert "rule_name" in payload
         assert "collected_date" in payload
 
     def test_write_embedding_output_path_passed(self) -> None:
@@ -168,13 +165,6 @@ class TestWriteEmbeddingCallsSharedFunction:
         mock_shared = _call_write_embedding(page)
         payload = mock_shared.call_args.kwargs["payload"]
         assert payload["domain"] == "example.com"
-
-    def test_rule_name_empty_string_when_none(self) -> None:
-        """When page.rule_name is None, the payload rule_name must be an empty string."""
-        page = _make_crawled_page(rule_name=None)
-        mock_shared = _call_write_embedding(page)
-        payload = mock_shared.call_args.kwargs["payload"]
-        assert payload["rule_name"] == ""
 
     def test_content_passed_through(self) -> None:
         """The content string must be forwarded unchanged to the shared function."""

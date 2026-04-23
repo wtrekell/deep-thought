@@ -65,7 +65,6 @@ def write_embedding(
     page_payload: dict[str, Any] = {
         "source_tool": "web",
         "source_type": source_type,
-        "rule_name": page.rule_name or "",
         "collected_date": collected_timestamp,
         "title": page.title or "",
         "domain": domain,
