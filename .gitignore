@@ -74,7 +74,4 @@ CLAUDE.md
 
 # Credentials and secrets
 files/tools/
-src/config/*google*
-src/config/*gmail*
-src/config/*gcal*
-src/config/*gdrive*
+src/config/
